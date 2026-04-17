@@ -1,0 +1,42 @@
+version: "3.9"
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: comlab-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: comlab_reservation_system
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  backend:
+    build:
+      context: ./backend
+    container_name: comlab-backend
+    depends_on:
+      - mysql
+    environment:
+      PORT: 5000
+      NODE_ENV: production
+      DATABASE_URL: mysql://root:password@mysql:3306/comlab_reservation_system
+      JWT_SECRET: super-secret-jwt-key
+      JWT_EXPIRES_IN: 1d
+      CLIENT_URL: http://localhost:4173
+    ports:
+      - "5000:5000"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: comlab-frontend
+    depends_on:
+      - backend
+    ports:
+      - "4173:80"
+
+volumes:
+  mysql_data:

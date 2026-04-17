@@ -1,0 +1,279 @@
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import toast from "react-hot-toast";
+import { z } from "zod";
+
+import { laboratoryApi, scheduleApi } from "../../api/services";
+import type { Schedule } from "../../types/api";
+import { Button } from "../../components/ui/Button";
+import { Card } from "../../components/ui/Card";
+import { EmptyState } from "../../components/ui/EmptyState";
+import { FormField } from "../../components/ui/FormField";
+import { Input } from "../../components/ui/Input";
+import { Modal } from "../../components/ui/Modal";
+import { PageHeader } from "../../components/ui/PageHeader";
+import { Select } from "../../components/ui/Select";
+import { StatusBadge } from "../../components/ui/StatusBadge";
+import { formatDate, formatTimeRange } from "../../utils/format";
+
+const scheduleSchema = z.object({
+  laboratoryId: z.coerce.number().min(1),
+  date: z.string().min(1),
+  startTime: z.string().min(1),
+  endTime: z.string().min(1),
+  status: z.enum(["AVAILABLE", "BLOCKED", "CLOSED"])
+});
+
+type ScheduleFormValues = z.infer<typeof scheduleSchema>;
+
+export const ScheduleManagementPage = () => {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [selectedSchedule, setSelectedSchedule] = useState<Schedule | null>(null);
+  const [selectedLaboratoryId, setSelectedLaboratoryId] = useState("");
+  const [selectedDate, setSelectedDate] = useState("");
+
+  const { data: laboratories } = useQuery({
+    queryKey: ["laboratories"],
+    queryFn: laboratoryApi.list
+  });
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["schedules", selectedLaboratoryId, selectedDate],
+    queryFn: () =>
+      scheduleApi.list({
+        laboratoryId: selectedLaboratoryId || undefined,
+        date: selectedDate || undefined
+      })
+  });
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting }
+  } = useForm<ScheduleFormValues>({
+    resolver: zodResolver(scheduleSchema),
+    defaultValues: {
+      status: "AVAILABLE"
+    }
+  });
+
+  useEffect(() => {
+    if (selectedSchedule) {
+      reset({
+        laboratoryId: selectedSchedule.laboratoryId,
+        date: selectedSchedule.date.slice(0, 10),
+        startTime: selectedSchedule.startTime,
+        endTime: selectedSchedule.endTime,
+        status: selectedSchedule.status
+      });
+      return;
+    }
+
+    reset({
+      laboratoryId: laboratories?.[0]?.id ?? 1,
+      date: "",
+      startTime: "",
+      endTime: "",
+      status: "AVAILABLE"
+    });
+  }, [laboratories, reset, selectedSchedule]);
+
+  const invalidate = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["schedules"] });
+    await queryClient.invalidateQueries({ queryKey: ["laboratory"] });
+    setOpen(false);
+    setSelectedSchedule(null);
+  };
+
+  const createMutation = useMutation({
+    mutationFn: (values: ScheduleFormValues) => scheduleApi.create(values),
+    onSuccess: async () => {
+      toast.success("Schedule created.");
+      await invalidate();
+    },
+    onError: () => toast.error("Unable to create schedule. Check for overlap conflicts.")
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (values: ScheduleFormValues) =>
+      scheduleApi.update(selectedSchedule!.id, values),
+    onSuccess: async () => {
+      toast.success("Schedule updated.");
+      await invalidate();
+    },
+    onError: () => toast.error("Unable to update schedule.")
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => scheduleApi.remove(id),
+    onSuccess: async () => {
+      toast.success("Schedule deleted.");
+      await queryClient.invalidateQueries({ queryKey: ["schedules"] });
+    },
+    onError: () =>
+      toast.error("Unable to delete this schedule. It may already have reservation history.")
+  });
+
+  const onSubmit = async (values: ScheduleFormValues) => {
+    if (selectedSchedule) {
+      await updateMutation.mutateAsync(values);
+      return;
+    }
+
+    await createMutation.mutateAsync(values);
+  };
+
+  return (
+    <div>
+      <PageHeader
+        title="Schedule Management"
+        description="Publish available room slots for reservation and keep schedule conflicts under control."
+        actions={<Button onClick={() => setOpen(true)}>Add Schedule</Button>}
+      />
+
+      <Card className="mb-6">
+        <div className="grid gap-4 md:grid-cols-3">
+          <FormField label="Filter by Laboratory">
+            <Select value={selectedLaboratoryId} onChange={(event) => setSelectedLaboratoryId(event.target.value)}>
+              <option value="">All Laboratories</option>
+              {laboratories?.map((laboratory) => (
+                <option key={laboratory.id} value={laboratory.id}>
+                  {laboratory.roomCode} - {laboratory.name}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+          <FormField label="Filter by Date">
+            <Input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} />
+          </FormField>
+        </div>
+      </Card>
+
+      <Card>
+        {isLoading ? (
+          <div>Loading schedules...</div>
+        ) : data?.length ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead>
+                <tr className="text-left text-slate-500">
+                  <th className="py-3 pr-4">Laboratory</th>
+                  <th className="py-3 pr-4">Date</th>
+                  <th className="py-3 pr-4">Time</th>
+                  <th className="py-3 pr-4">Status</th>
+                  <th className="py-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {data.map((schedule) => (
+                  <tr key={schedule.id}>
+                    <td className="py-4 pr-4">
+                      <p className="font-semibold text-slate-900">
+                        {schedule.laboratory?.name}
+                      </p>
+                      <p className="mt-1 text-slate-500">{schedule.laboratory?.roomCode}</p>
+                    </td>
+                    <td className="py-4 pr-4">{formatDate(schedule.date)}</td>
+                    <td className="py-4 pr-4">
+                      {formatTimeRange(schedule.startTime, schedule.endTime)}
+                    </td>
+                    <td className="py-4 pr-4">
+                      <StatusBadge status={schedule.status} />
+                    </td>
+                    <td className="py-4">
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setSelectedSchedule(schedule);
+                            setOpen(true);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="danger"
+                          onClick={() => deleteMutation.mutate(schedule.id)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState
+            title="No schedules available"
+            description="Create laboratory schedules so students can begin submitting reservation requests."
+          />
+        )}
+      </Card>
+
+      <Modal
+        open={open}
+        title={selectedSchedule ? "Edit Schedule" : "Add Schedule"}
+        onClose={() => {
+          setOpen(false);
+          setSelectedSchedule(null);
+        }}
+      >
+        <form className="grid gap-5 md:grid-cols-2" onSubmit={handleSubmit(onSubmit)}>
+          <FormField label="Laboratory" error={errors.laboratoryId?.message}>
+            <Select {...register("laboratoryId", { valueAsNumber: true })}>
+              {laboratories?.map((laboratory) => (
+                <option key={laboratory.id} value={laboratory.id}>
+                  {laboratory.roomCode} - {laboratory.name}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+          <FormField label="Date" error={errors.date?.message}>
+            <Input type="date" {...register("date")} />
+          </FormField>
+          <FormField label="Start Time" error={errors.startTime?.message}>
+            <Input type="time" {...register("startTime")} />
+          </FormField>
+          <FormField label="End Time" error={errors.endTime?.message}>
+            <Input type="time" {...register("endTime")} />
+          </FormField>
+          <FormField label="Status" error={errors.status?.message}>
+            <Select {...register("status")}>
+              {["AVAILABLE", "BLOCKED", "CLOSED"].map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+          <div className="md:col-span-2 flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setOpen(false);
+                setSelectedSchedule(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={
+                isSubmitting || createMutation.isPending || updateMutation.isPending
+              }
+            >
+              {selectedSchedule ? "Save Changes" : "Create Schedule"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+    </div>
+  );
+};

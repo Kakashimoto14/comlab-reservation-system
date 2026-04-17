@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  STUDENT
+  LABORATORY_STAFF
+}
+
+enum UserStatus {
+  ACTIVE
+  DEACTIVATED
+}
+
+enum LaboratoryStatus {
+  AVAILABLE
+  UNAVAILABLE
+  MAINTENANCE
+}
+
+enum ScheduleStatus {
+  AVAILABLE
+  BLOCKED
+  CLOSED
+}
+
+enum ReservationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  COMPLETED
+}
+
+model User {
+  id               Int            @id @default(autoincrement())
+  firstName        String
+  lastName         String
+  email            String         @unique
+  passwordHash     String
+  role             UserRole
+  status           UserStatus     @default(ACTIVE)
+  studentNumber    String?        @unique
+  department       String?
+  yearLevel        Int?
+  phone            String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  reservations     Reservation[]  @relation("ReservationStudent")
+  reviewedReservations Reservation[] @relation("ReservationReviewer")
+  createdSchedules Schedule[]     @relation("ScheduleCreator")
+  activityLogs     ActivityLog[]
+
+  @@index([role, status])
+}
+
+model Laboratory {
+  id            Int              @id @default(autoincrement())
+  name          String
+  roomCode      String           @unique
+  building      String
+  capacity      Int
+  computerCount Int
+  description   String
+  status        LaboratoryStatus @default(AVAILABLE)
+  imageUrl      String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  schedules     Schedule[]
+  reservations  Reservation[]
+
+  @@index([status])
+}
+
+model Schedule {
+  id           Int            @id @default(autoincrement())
+  laboratoryId Int
+  date         DateTime
+  startTime    String
+  endTime      String
+  status       ScheduleStatus @default(AVAILABLE)
+  createdById  Int
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  laboratory   Laboratory     @relation(fields: [laboratoryId], references: [id], onDelete: Cascade)
+  createdBy    User           @relation("ScheduleCreator", fields: [createdById], references: [id])
+  reservations Reservation[]
+
+  @@index([laboratoryId, date])
+  @@index([createdById])
+}
+
+model Reservation {
+  id              Int               @id @default(autoincrement())
+  reservationCode String            @unique
+  studentId       Int
+  laboratoryId    Int
+  scheduleId      Int?
+  purpose         String
+  reservationDate DateTime
+  startTime       String
+  endTime         String
+  status          ReservationStatus @default(PENDING)
+  remarks         String?
+  reviewedById    Int?
+  reviewedAt      DateTime?
+  cancelledAt     DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  student         User              @relation("ReservationStudent", fields: [studentId], references: [id])
+  laboratory      Laboratory        @relation(fields: [laboratoryId], references: [id], onDelete: Cascade)
+  schedule        Schedule?         @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  reviewedBy      User?             @relation("ReservationReviewer", fields: [reviewedById], references: [id])
+
+  @@index([studentId, reservationDate])
+  @@index([laboratoryId, reservationDate])
+  @@index([status, reservationDate])
+}
+
+model ActivityLog {
+  id          Int      @id @default(autoincrement())
+  userId      Int?
+  action      String
+  entityType  String
+  entityId    Int?
+  description String
+  createdAt   DateTime @default(now())
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}

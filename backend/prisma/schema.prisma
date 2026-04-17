@@ -69,7 +69,7 @@ model Laboratory {
   computerCount Int
   description   String
   status        LaboratoryStatus @default(AVAILABLE)
-  imageUrl      String?
+  imageUrl      String?          @db.LongText
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
   schedules     Schedule[]

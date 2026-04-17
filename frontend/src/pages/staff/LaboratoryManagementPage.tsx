@@ -1,5 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
+import type { ChangeEvent } from "react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import toast from "react-hot-toast";
@@ -18,6 +20,8 @@ import { Select } from "../../components/ui/Select";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { Textarea } from "../../components/ui/Textarea";
 
+const imagePattern = /^(https?:\/\/.+|data:image\/(png|jpe?g|webp|gif);base64,.+)$/i;
+
 const laboratorySchema = z.object({
   name: z.string().min(3),
   roomCode: z.string().min(3),
@@ -26,10 +30,34 @@ const laboratorySchema = z.object({
   computerCount: z.coerce.number().min(1),
   description: z.string().min(10),
   status: z.enum(["AVAILABLE", "UNAVAILABLE", "MAINTENANCE"]),
-  imageUrl: z.string().optional()
+  imageUrl: z
+    .string()
+    .optional()
+    .refine((value) => !value || imagePattern.test(value), {
+      message: "Provide a valid image URL or upload a PNG, JPG, WEBP, or GIF image."
+    })
 });
 
 type LaboratoryFormValues = z.infer<typeof laboratorySchema>;
+
+const getErrorMessage = (error: unknown, fallbackMessage: string) => {
+  if (error instanceof AxiosError) {
+    return (
+      (error.response?.data as { message?: string } | undefined)?.message ?? fallbackMessage
+    );
+  }
+
+  return fallbackMessage;
+};
+
+const sanitizeLaboratoryPayload = (values: LaboratoryFormValues) => ({
+  ...values,
+  name: values.name.trim(),
+  roomCode: values.roomCode.trim(),
+  building: values.building.trim(),
+  description: values.description.trim(),
+  imageUrl: values.imageUrl?.trim() || undefined
+});
 
 export const LaboratoryManagementPage = () => {
   const queryClient = useQueryClient();
@@ -44,6 +72,8 @@ export const LaboratoryManagementPage = () => {
     register,
     handleSubmit,
     reset,
+    setValue,
+    watch,
     formState: { errors, isSubmitting }
   } = useForm<LaboratoryFormValues>({
     resolver: zodResolver(laboratorySchema),
@@ -51,6 +81,8 @@ export const LaboratoryManagementPage = () => {
       status: "AVAILABLE"
     }
   });
+
+  const imageValue = watch("imageUrl");
 
   useEffect(() => {
     if (selectedLaboratory) {
@@ -91,7 +123,7 @@ export const LaboratoryManagementPage = () => {
       toast.success("Laboratory created.");
       await invalidate();
     },
-    onError: () => toast.error("Unable to create laboratory.")
+    onError: (error) => toast.error(getErrorMessage(error, "Unable to create laboratory."))
   });
 
   const updateMutation = useMutation({
@@ -101,7 +133,7 @@ export const LaboratoryManagementPage = () => {
       toast.success("Laboratory updated.");
       await invalidate();
     },
-    onError: () => toast.error("Unable to update laboratory.")
+    onError: (error) => toast.error(getErrorMessage(error, "Unable to update laboratory."))
   });
 
   const deleteMutation = useMutation({
@@ -110,17 +142,55 @@ export const LaboratoryManagementPage = () => {
       toast.success("Laboratory deleted.");
       await queryClient.invalidateQueries({ queryKey: ["laboratories"] });
     },
-    onError: () =>
-      toast.error("Unable to delete this laboratory. It may already have reservation history.")
+    onError: (error) =>
+      toast.error(
+        getErrorMessage(
+          error,
+          "Unable to delete this laboratory. It may already have reservation history."
+        )
+      )
   });
 
-  const onSubmit = async (values: LaboratoryFormValues) => {
-    if (selectedLaboratory) {
-      await updateMutation.mutateAsync(values);
+  const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
       return;
     }
 
-    await createMutation.mutateAsync(values);
+    if (!["image/png", "image/jpeg", "image/webp", "image/gif"].includes(file.type)) {
+      toast.error("Upload a PNG, JPG, WEBP, or GIF image.");
+      event.target.value = "";
+      return;
+    }
+
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error("Unable to read the selected image."));
+      reader.readAsDataURL(file);
+    }).catch(() => "");
+
+    if (!dataUrl) {
+      toast.error("Unable to process the selected image.");
+      event.target.value = "";
+      return;
+    }
+
+    setValue("imageUrl", dataUrl, { shouldDirty: true, shouldValidate: true });
+    toast.success("Image selected.");
+    event.target.value = "";
+  };
+
+  const onSubmit = async (values: LaboratoryFormValues) => {
+    const payload = sanitizeLaboratoryPayload(values);
+
+    if (selectedLaboratory) {
+      await updateMutation.mutateAsync(payload);
+      return;
+    }
+
+    await createMutation.mutateAsync(payload);
   };
 
   return (
@@ -150,8 +220,25 @@ export const LaboratoryManagementPage = () => {
                 {data.map((laboratory) => (
                   <tr key={laboratory.id}>
                     <td className="py-4 pr-4">
-                      <p className="font-semibold text-slate-900">{laboratory.name}</p>
-                      <p className="mt-1 text-slate-500">{laboratory.roomCode}</p>
+                      <div className="flex items-center gap-3">
+                        {laboratory.imageUrl ? (
+                          <img
+                            src={laboratory.imageUrl}
+                            alt={laboratory.name}
+                            className="h-12 w-12 rounded-2xl border border-slate-200 object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-400">
+                            No
+                            <br />
+                            image
+                          </div>
+                        )}
+                        <div>
+                          <p className="font-semibold text-slate-900">{laboratory.name}</p>
+                          <p className="mt-1 text-slate-500">{laboratory.roomCode}</p>
+                        </div>
+                      </div>
                     </td>
                     <td className="py-4 pr-4">{laboratory.building}</td>
                     <td className="py-4 pr-4">
@@ -227,7 +314,29 @@ export const LaboratoryManagementPage = () => {
           </FormField>
           <div className="md:col-span-2">
             <FormField label="Image URL (Optional)" error={errors.imageUrl?.message}>
-              <Input {...register("imageUrl")} />
+              <div className="space-y-3">
+                <Input
+                  placeholder="Paste a direct image link or use the upload field below."
+                  {...register("imageUrl")}
+                />
+                <Input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  onChange={handleImageUpload}
+                />
+                <p className="text-xs text-slate-500">
+                  Upload PNG, JPG, WEBP, or GIF images, or paste a direct image URL.
+                </p>
+                {imageValue ? (
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                    <img
+                      src={imageValue}
+                      alt="Laboratory preview"
+                      className="h-40 w-full object-cover"
+                    />
+                  </div>
+                ) : null}
+              </div>
             </FormField>
           </div>
           <div className="md:col-span-2">

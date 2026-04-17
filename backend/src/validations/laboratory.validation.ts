@@ -1,6 +1,22 @@
 import { LaboratoryStatus } from "@prisma/client";
 import { z } from "zod";
 
+const imageValueSchema = z
+  .string()
+  .trim()
+  .refine(
+    (value) =>
+      value.startsWith("http://") ||
+      value.startsWith("https://") ||
+      /^data:image\/(png|jpe?g|webp|gif);base64,/i.test(value),
+    "Provide a valid image link or upload a PNG, JPG, WEBP, or GIF image."
+  );
+
+const optionalImageSchema = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+  imageValueSchema.optional()
+);
+
 export const laboratoryBodySchema = z.object({
   name: z.string().min(3),
   roomCode: z.string().min(3),
@@ -9,7 +25,7 @@ export const laboratoryBodySchema = z.object({
   computerCount: z.coerce.number().int().positive(),
   description: z.string().min(10),
   status: z.nativeEnum(LaboratoryStatus),
-  imageUrl: z.string().url().optional().or(z.literal(""))
+  imageUrl: optionalImageSchema
 });
 
 export const createLaboratorySchema = z.object({

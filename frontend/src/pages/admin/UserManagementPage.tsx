@@ -2,6 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { AxiosError } from "axios";
 import toast from "react-hot-toast";
 import { z } from "zod";
 
@@ -30,6 +31,51 @@ const userSchema = z.object({
 });
 
 type UserFormValues = z.infer<typeof userSchema>;
+
+const getErrorMessage = (error: unknown, fallbackMessage: string) => {
+  if (error instanceof AxiosError) {
+    return (
+      (error.response?.data as { message?: string } | undefined)?.message ?? fallbackMessage
+    );
+  }
+
+  return fallbackMessage;
+};
+
+const sanitizeUserPayload = (values: UserFormValues, isEditing: boolean) => {
+  const payload: Record<string, unknown> = {
+    firstName: values.firstName.trim(),
+    lastName: values.lastName.trim(),
+    email: values.email.trim(),
+    role: values.role
+  };
+
+  if (values.department?.trim()) {
+    payload.department = values.department.trim();
+  }
+
+  if (values.phone?.trim()) {
+    payload.phone = values.phone.trim();
+  }
+
+  if (values.role === "STUDENT") {
+    if (values.studentNumber?.trim()) {
+      payload.studentNumber = values.studentNumber.trim();
+    }
+
+    if (typeof values.yearLevel === "number" && !Number.isNaN(values.yearLevel)) {
+      payload.yearLevel = values.yearLevel;
+    }
+  }
+
+  if (values.password?.trim()) {
+    payload.password = values.password.trim();
+  } else if (!isEditing) {
+    payload.password = "";
+  }
+
+  return payload;
+};
 
 export const UserManagementPage = () => {
   const queryClient = useQueryClient();
@@ -96,7 +142,7 @@ export const UserManagementPage = () => {
       toast.success("User account created.");
       await invalidate();
     },
-    onError: () => toast.error("Unable to create user account.")
+    onError: (error) => toast.error(getErrorMessage(error, "Unable to create user account."))
   });
 
   const updateMutation = useMutation({
@@ -105,7 +151,7 @@ export const UserManagementPage = () => {
       toast.success("User account updated.");
       await invalidate();
     },
-    onError: () => toast.error("Unable to update user account.")
+    onError: (error) => toast.error(getErrorMessage(error, "Unable to update user account."))
   });
 
   const statusMutation = useMutation({
@@ -115,21 +161,23 @@ export const UserManagementPage = () => {
       toast.success("User status updated.");
       await queryClient.invalidateQueries({ queryKey: ["users"] });
     },
-    onError: () => toast.error("Unable to update user status.")
+    onError: (error) => toast.error(getErrorMessage(error, "Unable to update user status."))
   });
 
   const onSubmit = async (values: UserFormValues) => {
+    const payload = sanitizeUserPayload(values, Boolean(selectedUser));
+
     if (selectedUser) {
-      await updateMutation.mutateAsync(values);
+      await updateMutation.mutateAsync(payload as UserFormValues);
       return;
     }
 
-    if (!values.password) {
+    if (!payload.password) {
       toast.error("Password is required for new users.");
       return;
     }
 
-    await createMutation.mutateAsync(values as UserFormValues & { password: string });
+    await createMutation.mutateAsync(payload as UserFormValues & { password: string });
   };
 
   return (

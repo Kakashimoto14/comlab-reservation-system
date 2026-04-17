@@ -30,6 +30,7 @@ This project is designed to be:
 - JWT-based authentication and role-based route protection
 - Admin user management with activation and deactivation controls
 - Laboratory CRUD management
+- Laboratory image support through direct image links or PNG/JPG/WEBP/GIF upload
 - Schedule management with overlap prevention
 - Student laboratory browsing and reservation requests
 - Reservation approval, rejection, cancellation, and completion workflow
@@ -117,6 +118,8 @@ npm run prisma:generate
 npm run prisma:migrate
 npm run seed
 ```
+
+If you are updating an existing copy of the project, run the migration step again after pulling the latest changes so the laboratory image storage update is applied.
 
 ## Running the Application
 
@@ -251,12 +254,12 @@ Services:
 
 ## Notes on Scope
 
-- Image upload is implemented as a clean image URL field to keep the one-month student scope realistic.
+- Laboratory images now support either a direct image URL or an uploaded PNG/JPG/WEBP/GIF image stored in the database for a smoother live demo workflow.
 - The project prioritizes working reservation flows, clean architecture, and defense-ready UX over enterprise-scale complexity.
 
 ## Future Improvements
 
-- Full file upload for laboratory images
+- Cloud object storage for laboratory images instead of database-backed demo storage
 - PDF export for reports
 - Email notifications for approval updates
 - Calendar-style schedule board

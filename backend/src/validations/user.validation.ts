@@ -1,7 +1,24 @@
 import { UserRole, UserStatus } from "@prisma/client";
 import { z } from "zod";
 
-const optionalPassword = z.string().min(8).optional();
+const optionalTrimmedString = (schema: z.ZodTypeAny) =>
+  z.preprocess((value) => {
+    if (typeof value !== "string") {
+      return value;
+    }
+
+    const trimmedValue = value.trim();
+    return trimmedValue === "" ? undefined : trimmedValue;
+  }, schema.optional());
+
+const optionalPassword = optionalTrimmedString(z.string().min(8));
+const optionalStudentNumber = optionalTrimmedString(z.string().min(6));
+const optionalDepartment = optionalTrimmedString(z.string().min(2));
+const optionalPhone = optionalTrimmedString(z.string().min(7));
+const optionalYearLevel = z.preprocess(
+  (value) => (value === "" || value === null ? undefined : value),
+  z.coerce.number().min(1).max(6).optional()
+);
 
 export const createUserSchema = z.object({
   body: z.object({
@@ -10,10 +27,10 @@ export const createUserSchema = z.object({
     email: z.string().email(),
     password: z.string().min(8),
     role: z.nativeEnum(UserRole),
-    studentNumber: z.string().min(6).optional(),
-    department: z.string().min(2).optional(),
-    yearLevel: z.coerce.number().min(1).max(6).optional(),
-    phone: z.string().min(7).optional()
+    studentNumber: optionalStudentNumber,
+    department: optionalDepartment,
+    yearLevel: optionalYearLevel,
+    phone: optionalPhone
   }),
   params: z.object({}).default({}),
   query: z.object({}).default({})
@@ -26,10 +43,10 @@ export const updateUserSchema = z.object({
     email: z.string().email().optional(),
     password: optionalPassword,
     role: z.nativeEnum(UserRole).optional(),
-    studentNumber: z.string().min(6).optional(),
-    department: z.string().min(2).optional(),
-    yearLevel: z.coerce.number().min(1).max(6).optional(),
-    phone: z.string().min(7).optional(),
+    studentNumber: optionalStudentNumber,
+    department: optionalDepartment,
+    yearLevel: optionalYearLevel,
+    phone: optionalPhone,
     status: z.nativeEnum(UserStatus).optional()
   }),
   params: z.object({
@@ -52,9 +69,9 @@ export const updateProfileSchema = z.object({
   body: z.object({
     firstName: z.string().min(2),
     lastName: z.string().min(2),
-    department: z.string().min(2).optional(),
-    yearLevel: z.coerce.number().min(1).max(6).optional(),
-    phone: z.string().min(7).optional()
+    department: optionalDepartment,
+    yearLevel: optionalYearLevel,
+    phone: optionalPhone
   }),
   params: z.object({}).default({}),
   query: z.object({}).default({})

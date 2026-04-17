@@ -2,7 +2,28 @@ import axios from "axios";
 
 import { readStoredAuth } from "../utils/authStorage";
 
-const baseURL = import.meta.env.VITE_API_URL ?? "http://localhost:5000/api";
+const normalizeApiUrl = (value: string) => {
+  let normalized = value.trim();
+
+  if (!/^https?:\/\//i.test(normalized)) {
+    normalized = `https://${normalized}`;
+  }
+
+  normalized = normalized.replace(/\/+$/, "");
+
+  if (!normalized.endsWith("/api")) {
+    normalized = `${normalized}/api`;
+  }
+
+  return normalized;
+};
+
+const configuredApiUrl = import.meta.env.VITE_API_URL?.trim();
+const fallbackApiUrl = import.meta.env.DEV
+  ? "http://localhost:5000/api"
+  : "https://comlab-reservation-system-production.up.railway.app/api";
+
+const baseURL = normalizeApiUrl(configuredApiUrl || fallbackApiUrl);
 
 export const apiClient = axios.create({
   baseURL,

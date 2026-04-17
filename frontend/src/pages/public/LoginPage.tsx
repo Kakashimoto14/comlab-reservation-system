@@ -1,5 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { AxiosError } from "axios";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import toast from "react-hot-toast";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -21,7 +22,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
+  const { login, logout, user } = useAuth();
   const {
     register,
     handleSubmit,
@@ -29,6 +30,16 @@ export const LoginPage = () => {
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema)
   });
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    navigate(user.role === "STUDENT" ? "/student/dashboard" : "/dashboard", {
+      replace: true
+    });
+  }, [navigate, user]);
 
   const onSubmit = async (values: LoginFormValues) => {
     try {
@@ -44,6 +55,12 @@ export const LoginPage = () => {
         "Login failed. Please check your credentials.";
       toast.error(message);
     }
+  };
+
+  const resetSession = () => {
+    logout();
+    toast.success("Saved session cleared. You can log in again.");
+    navigate("/login", { replace: true });
   };
 
   return (
@@ -78,6 +95,12 @@ export const LoginPage = () => {
         <p className="font-semibold text-slate-700">Demo quick access</p>
         <p className="mt-2">Admin: `admin@comlab.edu` / `Password123!`</p>
         <p>Staff: `staff@comlab.edu` / `Password123!`</p>
+      </div>
+
+      <div className="mt-4">
+        <Button type="button" variant="secondary" fullWidth onClick={resetSession}>
+          Reset Saved Session
+        </Button>
       </div>
 
       <p className="mt-6 text-sm text-slate-500">

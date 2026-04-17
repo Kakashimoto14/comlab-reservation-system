@@ -1,4 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import toast from "react-hot-toast";
 import { Link, useNavigate } from "react-router-dom";
@@ -25,7 +26,7 @@ type RegisterFormValues = z.infer<typeof registerSchema>;
 
 export const RegisterPage = () => {
   const navigate = useNavigate();
-  const { register: registerUser } = useAuth();
+  const { register: registerUser, user } = useAuth();
   const {
     register,
     handleSubmit,
@@ -37,6 +38,16 @@ export const RegisterPage = () => {
       yearLevel: 2
     }
   });
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    navigate(user.role === "STUDENT" ? "/student/dashboard" : "/dashboard", {
+      replace: true
+    });
+  }, [navigate, user]);
 
   const onSubmit = async (values: RegisterFormValues) => {
     try {

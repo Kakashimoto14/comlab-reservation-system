@@ -109,7 +109,7 @@ export class ReservationService {
     if (schedule.startTime > input.startTime || schedule.endTime < input.endTime) {
       throw new ApiError(
         StatusCodes.BAD_REQUEST,
-        "The requested time is outside the available laboratory schedule."
+        `Your reservation must stay within the published schedule on ${schedule.date.toISOString().slice(0, 10)} from ${schedule.startTime} to ${schedule.endTime}.`
       );
     }
 
@@ -385,7 +385,7 @@ export class ReservationService {
       }
     });
 
-    const hasConflict = conflictingReservations.some((existingReservation) =>
+    const conflictingReservation = conflictingReservations.find((existingReservation) =>
       timeRangesOverlap(
         existingReservation.startTime,
         existingReservation.endTime,
@@ -394,10 +394,10 @@ export class ReservationService {
       )
     );
 
-    if (hasConflict) {
+    if (conflictingReservation) {
       throw new ApiError(
         StatusCodes.CONFLICT,
-        "The selected reservation time conflicts with an existing reservation."
+        `This laboratory already has reservation ${conflictingReservation.reservationCode} from ${conflictingReservation.startTime} to ${conflictingReservation.endTime} on ${toDateOnly(reservationDate).toISOString().slice(0, 10)}. Choose another open time slot.`
       );
     }
   }

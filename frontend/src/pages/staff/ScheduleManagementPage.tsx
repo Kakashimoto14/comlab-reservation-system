@@ -9,6 +9,7 @@ import { laboratoryApi, scheduleApi } from "../../api/services";
 import type { Schedule } from "../../types/api";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
+import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { FormField } from "../../components/ui/FormField";
 import { Input } from "../../components/ui/Input";
@@ -32,6 +33,7 @@ export const ScheduleManagementPage = () => {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState<Schedule | null>(null);
+  const [scheduleToDelete, setScheduleToDelete] = useState<Schedule | null>(null);
   const [selectedLaboratoryId, setSelectedLaboratoryId] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
 
@@ -110,10 +112,6 @@ export const ScheduleManagementPage = () => {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => scheduleApi.remove(id),
-    onSuccess: async () => {
-      toast.success("Schedule deleted.");
-      await queryClient.invalidateQueries({ queryKey: ["schedules"] });
-    },
     onError: () =>
       toast.error("Unable to delete this schedule. It may already have reservation history.")
   });
@@ -197,7 +195,7 @@ export const ScheduleManagementPage = () => {
                         </Button>
                         <Button
                           variant="danger"
-                          onClick={() => deleteMutation.mutate(schedule.id)}
+                          onClick={() => setScheduleToDelete(schedule)}
                         >
                           Delete
                         </Button>
@@ -274,6 +272,33 @@ export const ScheduleManagementPage = () => {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={Boolean(scheduleToDelete)}
+        title="Delete Schedule"
+        description={
+          scheduleToDelete
+            ? `Delete the ${formatDate(scheduleToDelete.date)} ${formatTimeRange(
+                scheduleToDelete.startTime,
+                scheduleToDelete.endTime
+              )} schedule for ${scheduleToDelete.laboratory?.roomCode ?? "this laboratory"}?`
+            : ""
+        }
+        confirmLabel="Delete Schedule"
+        isPending={deleteMutation.isPending}
+        onClose={() => setScheduleToDelete(null)}
+        onConfirm={() =>
+          scheduleToDelete
+            ? deleteMutation.mutate(scheduleToDelete.id, {
+                onSuccess: async () => {
+                  toast.success("Schedule deleted.");
+                  setScheduleToDelete(null);
+                  await queryClient.invalidateQueries({ queryKey: ["schedules"] });
+                }
+              })
+            : undefined
+        }
+      />
     </div>
   );
 };

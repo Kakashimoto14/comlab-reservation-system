@@ -1,11 +1,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
+import { AxiosError } from "axios";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import toast from "react-hot-toast";
 import { z } from "zod";
 
-import { userApi } from "../api/services";
+import { authApi, userApi } from "../api/services";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { FormField } from "../components/ui/FormField";
@@ -22,7 +23,29 @@ const profileSchema = z.object({
   phone: z.string().optional()
 });
 
+const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(8, "Current password must be at least 8 characters."),
+    newPassword: z.string().min(8, "New password must be at least 8 characters."),
+    confirmPassword: z.string().min(8, "Confirm your new password.")
+  })
+  .refine((values) => values.newPassword === values.confirmPassword, {
+    path: ["confirmPassword"],
+    message: "Passwords do not match."
+  });
+
 type ProfileFormValues = z.infer<typeof profileSchema>;
+type ChangePasswordFormValues = z.infer<typeof changePasswordSchema>;
+
+const getErrorMessage = (error: unknown, fallbackMessage: string) => {
+  if (error instanceof AxiosError) {
+    return (
+      (error.response?.data as { message?: string } | undefined)?.message ?? fallbackMessage
+    );
+  }
+
+  return fallbackMessage;
+};
 
 export const ProfilePage = () => {
   const { user, setCurrentUser } = useAuth();
@@ -33,6 +56,18 @@ export const ProfilePage = () => {
     formState: { errors, isSubmitting }
   } = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema)
+  });
+
+  const {
+    register: registerPassword,
+    handleSubmit: handlePasswordSubmit,
+    reset: resetPasswordForm,
+    formState: {
+      errors: passwordErrors,
+      isSubmitting: isChangingPassword
+    }
+  } = useForm<ChangePasswordFormValues>({
+    resolver: zodResolver(changePasswordSchema)
   });
 
   useEffect(() => {
@@ -47,24 +82,46 @@ export const ProfilePage = () => {
     }
   }, [reset, user]);
 
-  const mutation = useMutation({
+  const profileMutation = useMutation({
     mutationFn: (values: ProfileFormValues) => userApi.updateProfile(values),
     onSuccess: (updatedUser) => {
       setCurrentUser(updatedUser);
       toast.success("Profile updated successfully.");
     },
-    onError: () => toast.error("Unable to update profile.")
+    onError: (error) => toast.error(getErrorMessage(error, "Unable to update profile."))
+  });
+
+  const changePasswordMutation = useMutation({
+    mutationFn: (values: ChangePasswordFormValues) =>
+      authApi.changePassword({
+        currentPassword: values.currentPassword,
+        newPassword: values.newPassword
+      }),
+    onSuccess: (response) => {
+      resetPasswordForm({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: ""
+      });
+      toast.success(response.message);
+    },
+    onError: (error) =>
+      toast.error(getErrorMessage(error, "Unable to change password right now."))
   });
 
   const onSubmit = async (values: ProfileFormValues) => {
-    await mutation.mutateAsync(values);
+    await profileMutation.mutateAsync(values);
+  };
+
+  const onPasswordSubmit = async (values: ChangePasswordFormValues) => {
+    await changePasswordMutation.mutateAsync(values);
   };
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
         title="Profile Settings"
-        description="Keep your account information updated for reservation requests and approvals."
+        description="Keep your account details updated and manage your login credentials securely."
       />
 
       <div className="grid gap-6 lg:grid-cols-[0.75fr_1.25fr]">
@@ -100,12 +157,43 @@ export const ProfilePage = () => {
             <FormField label="Phone Number" error={errors.phone?.message}>
               <Input {...register("phone")} />
             </FormField>
-            <Button type="submit" disabled={isSubmitting || mutation.isPending}>
-              {isSubmitting || mutation.isPending ? "Saving..." : "Save Changes"}
+            <Button type="submit" disabled={isSubmitting || profileMutation.isPending}>
+              {isSubmitting || profileMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>
           </form>
         </Card>
       </div>
+
+      <Card>
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold text-slate-900">Change Password</h2>
+          <p className="mt-2 text-sm text-slate-500">
+            Update your password regularly to keep your account secure.
+          </p>
+        </div>
+
+        <form className="grid gap-5 md:grid-cols-3" onSubmit={handlePasswordSubmit(onPasswordSubmit)}>
+          <FormField label="Current Password" error={passwordErrors.currentPassword?.message}>
+            <Input type="password" {...registerPassword("currentPassword")} />
+          </FormField>
+          <FormField label="New Password" error={passwordErrors.newPassword?.message}>
+            <Input type="password" {...registerPassword("newPassword")} />
+          </FormField>
+          <FormField label="Confirm Password" error={passwordErrors.confirmPassword?.message}>
+            <Input type="password" {...registerPassword("confirmPassword")} />
+          </FormField>
+          <div className="md:col-span-3">
+            <Button
+              type="submit"
+              disabled={isChangingPassword || changePasswordMutation.isPending}
+            >
+              {isChangingPassword || changePasswordMutation.isPending
+                ? "Updating password..."
+                : "Change Password"}
+            </Button>
+          </div>
+        </form>
+      </Card>
     </div>
   );
 };

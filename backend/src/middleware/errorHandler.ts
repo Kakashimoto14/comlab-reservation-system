@@ -29,6 +29,21 @@ export const errorHandler = (
     });
   }
 
+  if (error instanceof SyntaxError && "body" in error) {
+    return res.status(StatusCodes.BAD_REQUEST).json({
+      message: "Request body contains invalid JSON."
+    });
+  }
+
+  if (error instanceof Error && error.message === "CORS blocked for this origin.") {
+    return res.status(StatusCodes.FORBIDDEN).json({
+      message:
+        "This request origin is not allowed to access the ComLab Reservation System API."
+    });
+  }
+
+  console.error("Unhandled server error", error);
+
   return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
     message: "An unexpected server error occurred."
   });

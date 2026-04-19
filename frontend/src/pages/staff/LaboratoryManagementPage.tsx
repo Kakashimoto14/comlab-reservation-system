@@ -11,6 +11,7 @@ import { laboratoryApi } from "../../api/services";
 import type { Laboratory } from "../../types/api";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
+import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { FormField } from "../../components/ui/FormField";
 import { Input } from "../../components/ui/Input";
@@ -63,6 +64,7 @@ export const LaboratoryManagementPage = () => {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [selectedLaboratory, setSelectedLaboratory] = useState<Laboratory | null>(null);
+  const [laboratoryToDelete, setLaboratoryToDelete] = useState<Laboratory | null>(null);
   const { data, isLoading } = useQuery({
     queryKey: ["laboratories"],
     queryFn: laboratoryApi.list
@@ -138,10 +140,6 @@ export const LaboratoryManagementPage = () => {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => laboratoryApi.remove(id),
-    onSuccess: async () => {
-      toast.success("Laboratory deleted.");
-      await queryClient.invalidateQueries({ queryKey: ["laboratories"] });
-    },
     onError: (error) =>
       toast.error(
         getErrorMessage(
@@ -260,7 +258,7 @@ export const LaboratoryManagementPage = () => {
                         </Button>
                         <Button
                           variant="danger"
-                          onClick={() => deleteMutation.mutate(laboratory.id)}
+                          onClick={() => setLaboratoryToDelete(laboratory)}
                         >
                           Delete
                         </Button>
@@ -366,6 +364,30 @@ export const LaboratoryManagementPage = () => {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={Boolean(laboratoryToDelete)}
+        title="Delete Laboratory"
+        description={
+          laboratoryToDelete
+            ? `Delete ${laboratoryToDelete.name} (${laboratoryToDelete.roomCode}) from the laboratory catalog? Existing schedules or reservation history may block this action.`
+            : ""
+        }
+        confirmLabel="Delete Laboratory"
+        isPending={deleteMutation.isPending}
+        onClose={() => setLaboratoryToDelete(null)}
+        onConfirm={() =>
+          laboratoryToDelete
+            ? deleteMutation.mutate(laboratoryToDelete.id, {
+                onSuccess: async () => {
+                  toast.success("Laboratory deleted.");
+                  setLaboratoryToDelete(null);
+                  await queryClient.invalidateQueries({ queryKey: ["laboratories"] });
+                }
+              })
+            : undefined
+        }
+      />
     </div>
   );
 };

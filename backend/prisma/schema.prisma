@@ -56,6 +56,7 @@ model User {
   reviewedReservations Reservation[] @relation("ReservationReviewer")
   createdSchedules Schedule[]     @relation("ScheduleCreator")
   activityLogs     ActivityLog[]
+  passwordResetTokens PasswordResetToken[]
 
   @@index([role, status])
 }
@@ -136,4 +137,16 @@ model ActivityLog {
   @@index([action])
   @@index([entityType, entityId])
   @@index([createdAt])
+}
+
+model PasswordResetToken {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
 }

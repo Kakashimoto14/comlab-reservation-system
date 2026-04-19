@@ -2,6 +2,7 @@ import type {
   AuthResponse,
   DashboardResponse,
   Laboratory,
+  PasswordActionResponse,
   Reservation,
   ReservationSlot,
   Schedule,
@@ -16,6 +17,27 @@ export const authApi = {
   },
   login: async (payload: Record<string, unknown>) => {
     const { data } = await apiClient.post<AuthResponse>("/auth/login", payload);
+    return data;
+  },
+  forgotPassword: async (payload: Record<string, unknown>) => {
+    const { data } = await apiClient.post<PasswordActionResponse>(
+      "/auth/forgot-password",
+      payload
+    );
+    return data;
+  },
+  resetPassword: async (payload: Record<string, unknown>) => {
+    const { data } = await apiClient.post<PasswordActionResponse>(
+      "/auth/reset-password",
+      payload
+    );
+    return data;
+  },
+  changePassword: async (payload: Record<string, unknown>) => {
+    const { data } = await apiClient.post<PasswordActionResponse>(
+      "/auth/change-password",
+      payload
+    );
     return data;
   },
   me: async () => {

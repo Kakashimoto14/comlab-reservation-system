@@ -19,6 +19,24 @@ export class AuthController {
     res.status(StatusCodes.OK).json(result);
   }
 
+  static async forgotPassword(req: Request, res: Response) {
+    const result = await authService.forgotPassword(req.body);
+
+    res.status(StatusCodes.OK).json(result);
+  }
+
+  static async resetPassword(req: Request, res: Response) {
+    const result = await authService.resetPassword(req.body);
+
+    res.status(StatusCodes.OK).json(result);
+  }
+
+  static async changePassword(req: Request, res: Response) {
+    const result = await authService.changePassword(req.authUser!.id, req.body);
+
+    res.status(StatusCodes.OK).json(result);
+  }
+
   static async me(req: Request, res: Response) {
     const profile = await authService.getProfile(req.authUser!.id);
 

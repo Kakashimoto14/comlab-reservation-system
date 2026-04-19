@@ -30,6 +30,7 @@ describe("ReservationService", () => {
     db.reservation.findMany.mockResolvedValue([
       {
         id: 1,
+        reservationCode: "RSV-2026-0001",
         laboratoryId: 3,
         reservationDate: new Date("2026-05-12"),
         startTime: "09:00",
@@ -42,10 +43,10 @@ describe("ReservationService", () => {
 
     await expect(
       service.ensureNoReservationConflict(3, "2026-05-12", "10:00", "11:30")
-    ).rejects.toMatchObject({
-      statusCode: StatusCodes.CONFLICT,
-      message: "The selected reservation time conflicts with an existing reservation."
-    });
+    ).rejects.toHaveProperty("statusCode", StatusCodes.CONFLICT);
+    await expect(
+      service.ensureNoReservationConflict(3, "2026-05-12", "10:00", "11:30")
+    ).rejects.toThrow(/RSV-2026-0001 from 09:00 to 11:00/);
   });
 
   it("approves a pending reservation during the review flow", async () => {

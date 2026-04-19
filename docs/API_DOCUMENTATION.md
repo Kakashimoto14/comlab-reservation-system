@@ -25,6 +25,45 @@ Request body:
 
 ### `POST /auth/login`
 - Logs in any active user role and returns a JWT.
+- Rate limited to reduce brute-force attempts.
+
+### `POST /auth/forgot-password`
+- Prepares a password reset token for an active account.
+- Returns a generic success message even if the email does not exist.
+- Can optionally return a preview reset link when `RESET_TOKEN_PREVIEW=true`.
+
+Request body:
+
+```json
+{
+  "email": "admin@comlab.edu"
+}
+```
+
+### `POST /auth/reset-password`
+- Validates a reset token and stores the new password.
+
+Request body:
+
+```json
+{
+  "token": "raw-reset-token",
+  "password": "NewPassword123!"
+}
+```
+
+### `POST /auth/change-password`
+- Changes the password for the authenticated account.
+- Requires `Authorization: Bearer <token>`.
+
+Request body:
+
+```json
+{
+  "currentPassword": "Password123!",
+  "newPassword": "NewPassword123!"
+}
+```
 
 ### `GET /auth/me`
 - Returns the authenticated user profile.
@@ -71,7 +110,7 @@ Request body:
 - Returns all laboratories for authenticated admin/staff.
 
 ### `GET /laboratories/:id`
-- Returns a laboratory and its schedules.
+- Returns a laboratory, its schedules, and active reservation occupancy so the frontend can render availability views.
 
 ### `POST /laboratories`
 - Creates a laboratory.
@@ -127,9 +166,9 @@ Request body:
 
 ```json
 {
+  "scheduleId": 12,
   "laboratoryId": 1,
   "purpose": "Database laboratory activity for BSIT 2A students.",
-  "reservationDate": "2026-05-20",
   "startTime": "09:00",
   "endTime": "10:30"
 }
@@ -175,6 +214,22 @@ Request body:
   - recent activity
   - reservation trend data
 
+## Health
+
+### `GET /health`
+- Returns API availability metadata for deployment monitoring.
+
+Example response:
+
+```json
+{
+  "status": "ok",
+  "message": "ComLab Reservation System API is running.",
+  "timestamp": "2026-04-18T10:30:00.000Z",
+  "uptimeSeconds": 1234
+}
+```
+
 ## Common Error Format
 
 ```json
@@ -184,3 +239,4 @@ Request body:
 ```
 
 Validation errors may also include an `errors` object from Zod.
+Rate-limited endpoints return HTTP `429` with a human-readable retry message.

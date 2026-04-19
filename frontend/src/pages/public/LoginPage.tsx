@@ -109,6 +109,12 @@ export const LoginPage = () => {
           Register as a student
         </Link>
       </p>
+      <p className="mt-3 text-sm text-slate-500">
+        Forgot your password?{" "}
+        <Link className="font-semibold text-brand-700" to="/forgot-password">
+          Reset it here
+        </Link>
+      </p>
     </Card>
   );
 };

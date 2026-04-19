@@ -12,6 +12,7 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { FormField } from "../../components/ui/FormField";
+import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { Input } from "../../components/ui/Input";
 import { Modal } from "../../components/ui/Modal";
 import { PageHeader } from "../../components/ui/PageHeader";
@@ -81,6 +82,7 @@ export const UserManagementPage = () => {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [statusTargetUser, setStatusTargetUser] = useState<User | null>(null);
   const { data, isLoading } = useQuery({
     queryKey: ["users"],
     queryFn: userApi.list
@@ -157,10 +159,6 @@ export const UserManagementPage = () => {
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: "ACTIVE" | "DEACTIVATED" }) =>
       userApi.updateStatus(id, status),
-    onSuccess: async () => {
-      toast.success("User status updated.");
-      await queryClient.invalidateQueries({ queryKey: ["users"] });
-    },
     onError: (error) => toast.error(getErrorMessage(error, "Unable to update user status."))
   });
 
@@ -235,13 +233,7 @@ export const UserManagementPage = () => {
                         </Button>
                         <Button
                           variant={user.status === "ACTIVE" ? "danger" : "secondary"}
-                          onClick={() =>
-                            statusMutation.mutate({
-                              id: user.id,
-                              status:
-                                user.status === "ACTIVE" ? "DEACTIVATED" : "ACTIVE"
-                            })
-                          }
+                          onClick={() => setStatusTargetUser(user)}
                         >
                           {user.status === "ACTIVE" ? "Deactivate" : "Activate"}
                         </Button>
@@ -332,6 +324,39 @@ export const UserManagementPage = () => {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={Boolean(statusTargetUser)}
+        title={statusTargetUser?.status === "ACTIVE" ? "Deactivate User" : "Activate User"}
+        description={
+          statusTargetUser
+            ? `${
+                statusTargetUser.status === "ACTIVE" ? "Deactivate" : "Activate"
+              } ${statusTargetUser.firstName} ${statusTargetUser.lastName}'s account?`
+            : ""
+        }
+        confirmLabel={statusTargetUser?.status === "ACTIVE" ? "Deactivate" : "Activate"}
+        tone={statusTargetUser?.status === "ACTIVE" ? "danger" : "primary"}
+        isPending={statusMutation.isPending}
+        onClose={() => setStatusTargetUser(null)}
+        onConfirm={() =>
+          statusTargetUser
+            ? statusMutation.mutate(
+                {
+                  id: statusTargetUser.id,
+                  status: statusTargetUser.status === "ACTIVE" ? "DEACTIVATED" : "ACTIVE"
+                },
+                {
+                  onSuccess: async () => {
+                    toast.success("User status updated.");
+                    setStatusTargetUser(null);
+                    await queryClient.invalidateQueries({ queryKey: ["users"] });
+                  }
+                }
+              )
+            : undefined
+        }
+      />
     </div>
   );
 };

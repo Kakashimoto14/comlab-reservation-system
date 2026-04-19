@@ -95,6 +95,11 @@ export type AuthResponse = {
   user: User;
 };
 
+export type PasswordActionResponse = {
+  message: string;
+  previewResetUrl?: string;
+};
+
 export type DashboardResponse = {
   scope: "admin" | "staff" | "student";
   totals: Record<string, number>;

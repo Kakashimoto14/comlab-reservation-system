@@ -1,6 +1,6 @@
 # Web-Based Computer Laboratory Reservation System
 
-A polished full-stack BSIT college project for reserving computer laboratory rooms. The system supports student registration, JWT authentication, role-based dashboards, laboratory and schedule management, reservation approval workflows, reporting, seed data, and automated tests.
+A polished full-stack BSIT college project for reserving computer laboratory rooms and individual PCs. The system supports student registration, JWT authentication, role-based dashboards, staff-to-laboratory assignment, laboratory and schedule management, reservation approval workflows, calendar management, activity logging, seed data, and automated tests.
 
 ## Project Overview
 
@@ -30,13 +30,19 @@ This project is designed to be:
 - Forgot password, reset password, and in-app change password flows
 - JWT-based authentication and role-based route protection
 - Admin user management with activation and deactivation controls
-- Laboratory CRUD management
+- Laboratory CRUD management with custodian assignment
 - Laboratory image support through direct image links or PNG/JPG/WEBP/GIF upload
+- Staff-scoped management so laboratory staff can fully manage only their assigned lab
+- Public cross-lab availability view for staff referrals when their assigned lab is full
 - Schedule management with overlap prevention
 - Weekly laboratory availability view for faster reservation planning
 - Student laboratory browsing and reservation requests
+- Student reservation mode for either the whole laboratory or a specific PC
+- PC inventory generation and status management per laboratory
 - Clearer reservation history with status summaries, filters, and review remarks
 - Reservation approval, rejection, cancellation, and completion workflow
+- Admin master calendar with maintenance blocks, holidays, schedules, and reservations
+- Expanded activity logging for login/logout, reservation actions, schedule changes, user changes, and staff actions
 - Admin/staff dashboards with trend reporting, CSV exports, and recent activity
 - Reservation management filters by student, status, laboratory, and date
 - Production-oriented health check, rate limiting, and configurable deployment startup
@@ -142,8 +148,15 @@ npm run prisma:migrate
 npm run seed
 ```
 
-If you are updating an existing copy of the project, run the migration step again after pulling the latest changes so the laboratory image storage update is applied.
-The latest version also adds password reset token storage, so pull and run migrations before deploying updated code.
+If you are updating an existing copy of the project, pull the latest changes and rerun Prisma migrations.
+Recent migrations now cover:
+
+- password reset token storage
+- laboratory image storage improvements
+- laboratory custodian assignment
+- PC reservation support
+- master calendar events
+- richer activity logging fields
 
 ## Running the Application
 
@@ -191,8 +204,14 @@ After seeding:
 - Admin
   - Email: `admin@comlab.edu`
   - Password: `Password123!`
-- Laboratory Staff
-  - Email: `staff@comlab.edu`
+- Laboratory Staff A
+  - Email: `staff.a@comlab.edu`
+  - Password: `Password123!`
+- Laboratory Staff B
+  - Email: `staff.b@comlab.edu`
+  - Password: `Password123!`
+- Laboratory Staff C
+  - Email: `staff.c@comlab.edu`
   - Password: `Password123!`
 - Students
   - Example: `alyssa.cruz@student.edu`
@@ -206,6 +225,8 @@ After seeding:
 - Schedules
 - Reservations
 - Dashboard
+- Staff
+- Calendar
 
 Detailed endpoint notes are available in [docs/API_DOCUMENTATION.md](./docs/API_DOCUMENTATION.md).
 
@@ -215,6 +236,21 @@ Additional authentication flows:
 - `POST /api/auth/reset-password`
 - `POST /api/auth/change-password`
 - `GET /api/health`
+
+Notable new route groups:
+
+- `GET /api/staff/my-lab`
+- `GET /api/staff/my-lab/reservations`
+- `GET /api/staff/my-lab/schedules`
+- `GET /api/staff/my-lab/logs`
+- `GET /api/staff/my-lab/pcs`
+- `GET /api/staff/labs/availability`
+- `GET /api/staff/labs/schedules/public`
+- `PUT /api/staff/my-lab/reservation/:id`
+- `PUT /api/staff/my-lab/schedule/:id`
+- `GET /api/calendar`
+- `POST /api/calendar`
+- `PUT /api/laboratories/:id/custodian`
 
 ## ERD
 
@@ -256,6 +292,9 @@ The backend intentionally demonstrates the 4 pillars of OOP:
 - Reservation must fall inside the selected available schedule block
 - Overlapping schedules are blocked
 - Double booking is blocked
+- A whole-lab reservation blocks all PC reservations in the same time slot
+- A PC reservation blocks only the selected PC unless a whole-lab reservation already exists
+- Staff can edit schedules and review reservations only for their assigned lab
 - Only pending reservations may be cancelled by students
 - Only pending reservations may be approved or rejected
 - Only approved reservations may be completed
@@ -264,11 +303,13 @@ The backend intentionally demonstrates the 4 pillars of OOP:
 ## Seed Data Included
 
 - 1 admin
-- 1 laboratory staff account
+- 3 laboratory staff accounts
 - 5 student accounts
 - 3 laboratories
+- generated PC inventory for each laboratory
 - multiple schedules
-- multiple reservations with different statuses
+- multiple whole-lab and PC reservations with different statuses
+- calendar maintenance and holiday records
 
 ## Optional Docker Setup
 
@@ -288,6 +329,8 @@ Services:
 
 - Laboratory images now support either a direct image URL or an uploaded PNG/JPG/WEBP/GIF image stored in the database for a smoother live demo workflow.
 - Reservation pages now include a weekly schedule/timetable view for clearer student booking decisions.
+- Staff management routes now enforce assigned-laboratory authorization instead of global staff access.
+- The admin area now includes a dedicated Assign Staff panel and master calendar page.
 - Admin reporting now includes filtered table views, summary cards, and CSV export for defense-ready reporting.
 - The project prioritizes working reservation flows, clean architecture, and defense-ready UX over enterprise-scale complexity.
 

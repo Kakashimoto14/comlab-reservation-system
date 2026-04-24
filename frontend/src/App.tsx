@@ -21,6 +21,8 @@ import { MyReservationsPage } from "./pages/student/MyReservationsPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { StaffDashboardPage } from "./pages/staff/StaffDashboardPage";
 import { UserManagementPage } from "./pages/admin/UserManagementPage";
+import { LaboratoryStaffAssignmentPage } from "./pages/admin/LaboratoryStaffAssignmentPage";
+import { ManagementCalendarPage } from "./pages/admin/ManagementCalendarPage";
 import { LaboratoryManagementPage } from "./pages/staff/LaboratoryManagementPage";
 import { ScheduleManagementPage } from "./pages/staff/ScheduleManagementPage";
 import { ReservationManagementPage } from "./pages/staff/ReservationManagementPage";
@@ -80,6 +82,11 @@ export const App = () => (
           <Route element={<ProtectedRoute allowedRoles={["ADMIN"]} />}>
             <Route element={<DashboardLayout />}>
               <Route path="/management/users" element={<UserManagementPage />} />
+              <Route
+                path="/management/laboratories/assign-staff"
+                element={<LaboratoryStaffAssignmentPage />}
+              />
+              <Route path="/management/calendar" element={<ManagementCalendarPage />} />
             </Route>
           </Route>
 

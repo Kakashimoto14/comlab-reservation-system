@@ -1,8 +1,12 @@
 import type {
+  ActivityLog,
   AuthResponse,
+  CalendarResponse,
   DashboardResponse,
   Laboratory,
+  LaboratoryAvailability,
   PasswordActionResponse,
+  PC,
   Reservation,
   ReservationSlot,
   Schedule,
@@ -38,6 +42,10 @@ export const authApi = {
       "/auth/change-password",
       payload
     );
+    return data;
+  },
+  logout: async () => {
+    const { data } = await apiClient.post<PasswordActionResponse>("/auth/logout");
     return data;
   },
   me: async () => {
@@ -76,10 +84,8 @@ export const laboratoryApi = {
   },
   getById: async (id: number) => {
     const { data } = await apiClient.get<
-      Laboratory & { schedules: Schedule[]; reservations: ReservationSlot[] }
-    >(
-      `/laboratories/${id}`
-    );
+      Laboratory & { schedules: Schedule[]; reservations: ReservationSlot[]; pcs: PC[] }
+    >(`/laboratories/${id}`);
     return data;
   },
   create: async (payload: Record<string, unknown>) => {
@@ -92,6 +98,27 @@ export const laboratoryApi = {
   },
   remove: async (id: number) => {
     const { data } = await apiClient.delete<{ message: string }>(`/laboratories/${id}`);
+    return data;
+  },
+  listAssignments: async (params?: Record<string, unknown>) => {
+    const { data } = await apiClient.get<Laboratory[]>("/laboratories/assignments", { params });
+    return data;
+  },
+  listStaffOptions: async () => {
+    const { data } = await apiClient.get<User[]>("/laboratories/staff-options");
+    return data;
+  },
+  assignStaff: async (id: number, custodianId: number | null) => {
+    const { data } = await apiClient.put<Laboratory>(`/laboratories/${id}/custodian`, {
+      custodianId
+    });
+    return data;
+  },
+  updatePcStatus: async (labId: number, pcId: number, status: string) => {
+    const { data } = await apiClient.put<PC>(
+      `/laboratories/${labId}/pcs/${pcId}/status`,
+      { status }
+    );
     return data;
   }
 };
@@ -142,6 +169,78 @@ export const reservationApi = {
     const { data } = await apiClient.patch<Reservation>(`/reservations/${id}/complete`, {
       remarks
     });
+    return data;
+  }
+};
+
+export const staffApi = {
+  getMyLab: async () => {
+    const { data } = await apiClient.get<Laboratory>("/staff/my-lab");
+    return data;
+  },
+  getMyLabReservations: async () => {
+    const { data } = await apiClient.get<Reservation[]>("/staff/my-lab/reservations");
+    return data;
+  },
+  getMyLabSchedules: async () => {
+    const { data } = await apiClient.get<Schedule[]>("/staff/my-lab/schedules");
+    return data;
+  },
+  getMyLabLogs: async () => {
+    const { data } = await apiClient.get<ActivityLog[]>("/staff/my-lab/logs");
+    return data;
+  },
+  getMyLabPcs: async () => {
+    const { data } = await apiClient.get<PC[]>("/staff/my-lab/pcs");
+    return data;
+  },
+  listAvailability: async (params?: Record<string, unknown>) => {
+    const { data } = await apiClient.get<LaboratoryAvailability[]>(
+      "/staff/labs/availability",
+      { params }
+    );
+    return data;
+  },
+  listPublicSchedules: async (params?: Record<string, unknown>) => {
+    const { data } = await apiClient.get<Schedule[]>("/staff/labs/schedules/public", {
+      params
+    });
+    return data;
+  },
+  updateMyLabReservation: async (
+    id: number,
+    payload: { status: "APPROVED" | "REJECTED"; remarks?: string }
+  ) => {
+    const { data } = await apiClient.put<Reservation>(`/staff/my-lab/reservation/${id}`, payload);
+    return data;
+  },
+  updateMyLabSchedule: async (id: number, payload: Record<string, unknown>) => {
+    const { data } = await apiClient.put<Schedule>(`/staff/my-lab/schedule/${id}`, payload);
+    return data;
+  },
+  updateMyLabPcStatus: async (id: number, status: string) => {
+    const { data } = await apiClient.put<PC>(`/staff/my-lab/pcs/${id}/status`, {
+      status
+    });
+    return data;
+  }
+};
+
+export const calendarApi = {
+  list: async (params?: Record<string, unknown>) => {
+    const { data } = await apiClient.get<CalendarResponse>("/calendar", { params });
+    return data;
+  },
+  create: async (payload: Record<string, unknown>) => {
+    const { data } = await apiClient.post("/calendar", payload);
+    return data;
+  },
+  update: async (id: number, payload: Record<string, unknown>) => {
+    const { data } = await apiClient.put(`/calendar/${id}`, payload);
+    return data;
+  },
+  remove: async (id: number) => {
+    const { data } = await apiClient.delete<{ message: string }>(`/calendar/${id}`);
     return data;
   }
 };

@@ -20,7 +20,7 @@ export const LaboratoriesPage = () => {
 
   const filteredLaboratories = useMemo(() => {
     return (data ?? []).filter((laboratory) =>
-      `${laboratory.name} ${laboratory.roomCode} ${laboratory.building}`
+      `${laboratory.name} ${laboratory.roomCode} ${laboratory.building} ${laboratory.location ?? ""}`
         .toLowerCase()
         .includes(search.toLowerCase())
     );
@@ -67,6 +67,11 @@ export const LaboratoriesPage = () => {
                     <p className="mt-1 text-sm text-slate-500">
                       {laboratory.roomCode} | {laboratory.building}
                     </p>
+                    {laboratory.custodian ? (
+                      <p className="mt-1 text-xs text-slate-400">
+                        Custodian: {laboratory.custodian.firstName} {laboratory.custodian.lastName}
+                      </p>
+                    ) : null}
                   </div>
                   <StatusBadge status={laboratory.status} />
                 </div>

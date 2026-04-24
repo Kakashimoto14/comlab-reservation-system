@@ -4,6 +4,7 @@ import {
   Building2,
   CalendarClock,
   ClipboardList,
+  CalendarRange,
   LayoutDashboard,
   LineChart,
   UserCog,
@@ -44,6 +45,16 @@ export const useRoleRoutes = () => {
         label: "Users",
         to: "/management/users",
         icon: UserCog
+      });
+      items.splice(3, 0, {
+        label: "Assign Staff",
+        to: "/management/laboratories/assign-staff",
+        icon: UserCog
+      });
+      items.splice(6, 0, {
+        label: "Calendar",
+        to: "/management/calendar",
+        icon: CalendarRange
       });
     }
 

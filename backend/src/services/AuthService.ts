@@ -288,6 +288,28 @@ export class AuthService {
     return this.toSafeUser(user);
   }
 
+  async logout(userId: number) {
+    const user = await this.db.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      throw new ApiError(StatusCodes.NOT_FOUND, "User account not found.");
+    }
+
+    await this.activityLogService.logActivity({
+      userId,
+      action: "LOGOUT",
+      entityType: "USER",
+      entityId: userId,
+      description: `${user.firstName} ${user.lastName} signed out.`
+    });
+
+    return {
+      message: "Logged out successfully."
+    };
+  }
+
   private async buildAuthResponse(id: number, email: string, role: UserRole) {
     const user = await this.getProfile(id);
 

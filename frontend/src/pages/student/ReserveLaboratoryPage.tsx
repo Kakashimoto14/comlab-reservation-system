@@ -23,17 +23,27 @@ import {
   buildFreeWindows,
   buildTimeOptions,
   groupReservationsByScheduleId,
-  mergeTimeWindows
+  mergeTimeWindows,
+  toMinutes
 } from "../../utils/schedule";
 
 const reservationSchema = z.object({
   purpose: z.string().min(10, "Please provide a clear reservation purpose."),
+  reservationType: z.enum(["LAB", "PC"]),
   selectedScheduleId: z.string().min(1, "Choose an available schedule."),
   startTime: z.string().min(1, "Choose a start time."),
-  endTime: z.string().min(1, "Choose an end time.")
+  endTime: z.string().min(1, "Choose an end time."),
+  pcId: z.string().optional()
 });
 
 type ReservationFormValues = z.infer<typeof reservationSchema>;
+
+const overlaps = (
+  leftStart: string,
+  leftEnd: string,
+  rightStart: string,
+  rightEnd: string
+) => toMinutes(leftStart) < toMinutes(rightEnd) && toMinutes(leftEnd) > toMinutes(rightStart);
 
 export const ReserveLaboratoryPage = () => {
   const navigate = useNavigate();
@@ -55,9 +65,11 @@ export const ReserveLaboratoryPage = () => {
   } = useForm<ReservationFormValues>({
     resolver: zodResolver(reservationSchema),
     defaultValues: {
+      reservationType: "LAB",
       selectedScheduleId: "",
       startTime: "",
-      endTime: ""
+      endTime: "",
+      pcId: ""
     }
   });
 
@@ -84,12 +96,24 @@ export const ReserveLaboratoryPage = () => {
     [data?.reservations]
   );
 
+  const reservationType = watch("reservationType");
   const selectedScheduleId = watch("selectedScheduleId");
   const startTime = watch("startTime");
+  const endTime = watch("endTime");
 
   const selectedSchedule = useMemo(
     () => allAvailableSchedules.find((schedule) => schedule.id === Number(selectedScheduleId)),
     [allAvailableSchedules, selectedScheduleId]
+  );
+
+  const scheduleReservations = useMemo(
+    () => (selectedSchedule ? reservationsByScheduleId.get(selectedSchedule.id) ?? [] : []),
+    [reservationsByScheduleId, selectedSchedule]
+  );
+
+  const wholeLabReservations = useMemo(
+    () => scheduleReservations.filter((reservation) => reservation.reservationType === "LAB"),
+    [scheduleReservations]
   );
 
   const occupiedWindows = useMemo(() => {
@@ -98,22 +122,24 @@ export const ReserveLaboratoryPage = () => {
     }
 
     return mergeTimeWindows(
-      (reservationsByScheduleId.get(selectedSchedule.id) ?? []).map((reservation) => ({
-        startTime: reservation.startTime,
-        endTime: reservation.endTime
-      }))
+      (reservationType === "LAB" ? scheduleReservations : wholeLabReservations).map(
+        (reservation) => ({
+          startTime: reservation.startTime,
+          endTime: reservation.endTime
+        })
+      )
     );
-  }, [reservationsByScheduleId, selectedSchedule]);
+  }, [reservationType, scheduleReservations, selectedSchedule, wholeLabReservations]);
 
   const freeWindows = useMemo(
     () =>
       selectedSchedule
         ? buildFreeWindows(
             selectedSchedule,
-            reservationsByScheduleId.get(selectedSchedule.id) ?? []
+            reservationType === "LAB" ? scheduleReservations : wholeLabReservations
           )
         : [],
-    [reservationsByScheduleId, selectedSchedule]
+    [reservationType, scheduleReservations, selectedSchedule, wholeLabReservations]
   );
 
   const startTimeOptions = useMemo(
@@ -142,6 +168,36 @@ export const ReserveLaboratoryPage = () => {
     );
   }, [freeWindows, startTime]);
 
+  const availablePcs = useMemo(() => {
+    if (!selectedSchedule || reservationType !== "PC") {
+      return [];
+    }
+
+    return (data?.pcs ?? []).filter((pc) => {
+      if (pc.status !== "AVAILABLE") {
+        return false;
+      }
+
+      if (!startTime || !endTime) {
+        return true;
+      }
+
+      const hasBlockingReservation = scheduleReservations.some((reservation) => {
+        if (!overlaps(reservation.startTime, reservation.endTime, startTime, endTime)) {
+          return false;
+        }
+
+        if (reservation.reservationType === "LAB") {
+          return true;
+        }
+
+        return reservation.pcId === pc.id;
+      });
+
+      return !hasBlockingReservation;
+    });
+  }, [data?.pcs, endTime, reservationType, scheduleReservations, selectedSchedule, startTime]);
+
   useEffect(() => {
     if (
       selectedSchedule &&
@@ -155,13 +211,16 @@ export const ReserveLaboratoryPage = () => {
   useEffect(() => {
     setValue("startTime", "");
     setValue("endTime", "");
-  }, [selectedScheduleId, setValue]);
+    setValue("pcId", "");
+  }, [reservationType, selectedScheduleId, setValue]);
 
   const createReservationMutation = useMutation({
     mutationFn: (values: ReservationFormValues) =>
       reservationApi.create({
         scheduleId: Number(values.selectedScheduleId),
         laboratoryId: Number(id),
+        reservationType: values.reservationType,
+        pcId: values.reservationType === "PC" && values.pcId ? Number(values.pcId) : null,
         purpose: values.purpose,
         startTime: values.startTime,
         endTime: values.endTime
@@ -183,6 +242,11 @@ export const ReserveLaboratoryPage = () => {
       toast.error(
         "Choose one published schedule first, then select your reservation time inside the open slot."
       );
+      return;
+    }
+
+    if (values.reservationType === "PC" && !values.pcId) {
+      toast.error("Select an available PC for a PC reservation.");
       return;
     }
 
@@ -218,7 +282,7 @@ export const ReserveLaboratoryPage = () => {
     <div className="space-y-6">
       <PageHeader
         title="Reserve Laboratory"
-        description="Choose a date, review the weekly timetable, and book only inside the open windows for the selected schedule block."
+        description="Choose a date, select a schedule, and reserve either the whole laboratory or a specific PC."
       />
 
       <div className="grid gap-6 xl:grid-cols-[0.7fr_1fr_0.9fr]">
@@ -232,19 +296,39 @@ export const ReserveLaboratoryPage = () => {
           </div>
 
           {data.imageUrl ? (
-            <img
-              src={data.imageUrl}
-              alt={data.name}
-              className="h-44 w-full rounded-2xl object-cover"
-            />
+            <img src={data.imageUrl} alt={data.name} className="h-44 w-full rounded-2xl object-cover" />
           ) : null}
 
           <p className="text-sm leading-7 text-slate-500">{data.description}</p>
-          <StatusBadge status={data.status} />
+          <div className="flex flex-wrap gap-2">
+            <StatusBadge status={data.status} />
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+              {data.pcs.length} PCs
+            </span>
+          </div>
         </Card>
 
         <Card>
           <form className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
+            <div className="grid gap-5 md:grid-cols-2">
+              <FormField label="Reservation Type" error={errors.reservationType?.message}>
+                <Select {...register("reservationType")}>
+                  <option value="LAB">Whole Laboratory</option>
+                  <option value="PC">Specific PC</option>
+                </Select>
+              </FormField>
+              <FormField label="Schedule Block" error={errors.selectedScheduleId?.message}>
+                <Select {...register("selectedScheduleId")}>
+                  <option value="">Select a schedule</option>
+                  {availableSchedules.map((schedule) => (
+                    <option key={schedule.id} value={schedule.id}>
+                      {formatDate(schedule.date)} | {formatTimeRange(schedule.startTime, schedule.endTime)}
+                    </option>
+                  ))}
+                </Select>
+              </FormField>
+            </div>
+
             <FormField label="Reservation Purpose" error={errors.purpose?.message}>
               <Textarea
                 placeholder="Example: Database laboratory activity for BSIT 2A students."
@@ -253,17 +337,6 @@ export const ReserveLaboratoryPage = () => {
             </FormField>
 
             <div className="grid gap-5 md:grid-cols-3">
-              <FormField label="Schedule Block" error={errors.selectedScheduleId?.message}>
-                <Select {...register("selectedScheduleId")}>
-                  <option value="">Select a schedule</option>
-                  {availableSchedules.map((schedule) => (
-                    <option key={schedule.id} value={schedule.id}>
-                      {formatDate(schedule.date)} |{" "}
-                      {formatTimeRange(schedule.startTime, schedule.endTime)}
-                    </option>
-                  ))}
-                </Select>
-              </FormField>
               <FormField label="Start Time" error={errors.startTime?.message}>
                 <Select {...register("startTime")} disabled={!selectedSchedule}>
                   <option value="">Select start time</option>
@@ -284,17 +357,32 @@ export const ReserveLaboratoryPage = () => {
                   ))}
                 </Select>
               </FormField>
+              <FormField
+                label="Specific PC"
+                error={reservationType === "PC" ? errors.pcId?.message : undefined}
+              >
+                <Select {...register("pcId")} disabled={reservationType !== "PC" || !selectedSchedule}>
+                  <option value="">Select a PC</option>
+                  {availablePcs.map((pc) => (
+                    <option key={pc.id} value={pc.id}>
+                      {pc.pcNumber}
+                    </option>
+                  ))}
+                </Select>
+              </FormField>
             </div>
 
             {selectedSchedule ? (
               <div className="space-y-3 rounded-2xl bg-brand-50 p-4 text-sm text-brand-800">
                 <p>
-                  You selected {formatDate(selectedSchedule.date)} with availability from{" "}
+                  You selected {formatDate(selectedSchedule.date)} with published availability from{" "}
                   {formatTimeRange(selectedSchedule.startTime, selectedSchedule.endTime)}.
                 </p>
                 {occupiedWindows.length ? (
                   <div className="rounded-2xl bg-white/80 p-3 text-slate-700">
-                    <p className="font-medium text-slate-900">Already occupied</p>
+                    <p className="font-medium text-slate-900">
+                      {reservationType === "LAB" ? "Occupied windows" : "Whole-lab blocking windows"}
+                    </p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {occupiedWindows.map((window) => (
                         <span
@@ -323,9 +411,30 @@ export const ReserveLaboratoryPage = () => {
                   </div>
                 ) : (
                   <div className="rounded-2xl bg-amber-50 p-3 text-amber-800">
-                    This schedule block is fully occupied. Choose another day or schedule.
+                    This schedule block has no remaining availability for the selected reservation type.
                   </div>
                 )}
+                {reservationType === "PC" && startTime && endTime ? (
+                  <div className="rounded-2xl bg-white/80 p-3 text-slate-700">
+                    <p className="font-medium text-slate-900">Available PCs</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {availablePcs.length ? (
+                        availablePcs.map((pc) => (
+                          <span
+                            key={pc.id}
+                            className="rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700"
+                          >
+                            {pc.pcNumber}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-sm text-rose-700">
+                          No PCs are available for the selected time.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
@@ -339,7 +448,8 @@ export const ReserveLaboratoryPage = () => {
                 isSubmitting ||
                 createReservationMutation.isPending ||
                 !selectedSchedule ||
-                freeWindows.length === 0
+                freeWindows.length === 0 ||
+                (reservationType === "PC" && (!startTime || !endTime || availablePcs.length === 0))
               }
             >
               {isSubmitting || createReservationMutation.isPending
@@ -369,9 +479,11 @@ export const ReserveLaboratoryPage = () => {
           {availableSchedules.length ? (
             <div className="space-y-3">
               {availableSchedules.map((schedule) => {
-                const scheduleFreeWindows = buildFreeWindows(
+                const scheduleEntries = reservationsByScheduleId.get(schedule.id) ?? [];
+                const labFreeWindows = buildFreeWindows(schedule, scheduleEntries);
+                const pcFreeWindows = buildFreeWindows(
                   schedule,
-                  reservationsByScheduleId.get(schedule.id) ?? []
+                  scheduleEntries.filter((reservation) => reservation.reservationType === "LAB")
                 );
 
                 return (
@@ -384,7 +496,11 @@ export const ReserveLaboratoryPage = () => {
                         : "border-slate-200 hover:border-brand-300 hover:bg-brand-50"
                     }`}
                     onClick={() => setValue("selectedScheduleId", String(schedule.id))}
-                    disabled={scheduleFreeWindows.length === 0}
+                    disabled={
+                      reservationType === "LAB"
+                        ? labFreeWindows.length === 0
+                        : pcFreeWindows.length === 0
+                    }
                   >
                     <div className="flex items-center justify-between gap-3">
                       <p className="font-medium text-slate-900">{formatDate(schedule.date)}</p>
@@ -393,18 +509,22 @@ export const ReserveLaboratoryPage = () => {
                     <p className="mt-2 text-sm text-slate-500">
                       {formatTimeRange(schedule.startTime, schedule.endTime)}
                     </p>
-                    {scheduleFreeWindows.length ? (
-                      <p className="mt-2 text-xs text-emerald-700">
-                        Open:{" "}
-                        {scheduleFreeWindows
-                          .map((window) => formatTimeRange(window.startTime, window.endTime))
-                          .join(" | ")}
-                      </p>
-                    ) : (
-                      <p className="mt-2 text-xs text-rose-700">
-                        Fully occupied by existing reservations
-                      </p>
-                    )}
+                    <p className="mt-2 text-xs text-slate-600">
+                      Whole lab:{" "}
+                      {labFreeWindows.length
+                        ? labFreeWindows
+                            .map((window) => formatTimeRange(window.startTime, window.endTime))
+                            .join(" | ")
+                        : "Fully booked"}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-600">
+                      PC booking:{" "}
+                      {pcFreeWindows.length
+                        ? pcFreeWindows
+                            .map((window) => formatTimeRange(window.startTime, window.endTime))
+                            .join(" | ")
+                        : "Blocked by whole-lab reservations"}
+                    </p>
                   </button>
                 );
               })}

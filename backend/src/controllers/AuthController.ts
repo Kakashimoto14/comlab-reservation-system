@@ -44,8 +44,8 @@ export class AuthController {
   }
 
   static async logout(_req: Request, res: Response) {
-    res.status(StatusCodes.OK).json({
-      message: "Logged out successfully."
-    });
+    const result = await authService.logout(_req.authUser!.id);
+
+    res.status(StatusCodes.OK).json(result);
   }
 }

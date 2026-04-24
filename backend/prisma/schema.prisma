@@ -38,24 +38,42 @@ enum ReservationStatus {
   COMPLETED
 }
 
+enum ReservationType {
+  LAB
+  PC
+}
+
+enum PCStatus {
+  AVAILABLE
+  OCCUPIED
+  MAINTENANCE
+}
+
+enum CalendarEventType {
+  MAINTENANCE
+  HOLIDAY
+}
+
 model User {
-  id               Int            @id @default(autoincrement())
-  firstName        String
-  lastName         String
-  email            String         @unique
-  passwordHash     String
-  role             UserRole
-  status           UserStatus     @default(ACTIVE)
-  studentNumber    String?        @unique
-  department       String?
-  yearLevel        Int?
-  phone            String?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  reservations     Reservation[]  @relation("ReservationStudent")
-  reviewedReservations Reservation[] @relation("ReservationReviewer")
-  createdSchedules Schedule[]     @relation("ScheduleCreator")
-  activityLogs     ActivityLog[]
+  id                   Int             @id @default(autoincrement())
+  firstName            String
+  lastName             String
+  email                String          @unique
+  passwordHash         String
+  role                 UserRole
+  status               UserStatus      @default(ACTIVE)
+  studentNumber        String?         @unique
+  department           String?
+  yearLevel            Int?
+  phone                String?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  reservations         Reservation[]   @relation("ReservationStudent")
+  reviewedReservations Reservation[]   @relation("ReservationReviewer")
+  createdSchedules     Schedule[]      @relation("ScheduleCreator")
+  createdCalendarEvents CalendarEvent[] @relation("CalendarEventCreator")
+  assignedLaboratories Laboratory[]    @relation("LaboratoryCustodian")
+  activityLogs         ActivityLog[]
   passwordResetTokens PasswordResetToken[]
 
   @@index([role, status])
@@ -66,17 +84,25 @@ model Laboratory {
   name          String
   roomCode      String           @unique
   building      String
+  location      String?
   capacity      Int
   computerCount Int
   description   String
   status        LaboratoryStatus @default(AVAILABLE)
   imageUrl      String?          @db.LongText
+  custodianId   Int?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
   schedules     Schedule[]
   reservations  Reservation[]
+  custodian     User?            @relation("LaboratoryCustodian", fields: [custodianId], references: [id], onDelete: SetNull)
+  pcs           PC[]
+  activityLogs  ActivityLog[]
+  calendarEvents CalendarEvent[]
 
   @@index([status])
+  @@index([custodianId])
+  @@index([building, status])
 }
 
 model Schedule {
@@ -103,6 +129,8 @@ model Reservation {
   studentId       Int
   laboratoryId    Int
   scheduleId      Int?
+  pcId            Int?
+  reservationType ReservationType   @default(LAB)
   purpose         String
   reservationDate DateTime
   startTime       String
@@ -118,25 +146,52 @@ model Reservation {
   laboratory      Laboratory        @relation(fields: [laboratoryId], references: [id], onDelete: Cascade)
   schedule        Schedule?         @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
   reviewedBy      User?             @relation("ReservationReviewer", fields: [reviewedById], references: [id])
+  pc              PC?               @relation(fields: [pcId], references: [id], onDelete: SetNull)
 
   @@index([studentId, reservationDate])
   @@index([laboratoryId, reservationDate])
   @@index([status, reservationDate])
+  @@index([pcId, reservationDate])
+}
+
+model PC {
+  id           Int          @id @default(autoincrement())
+  laboratoryId Int
+  pcNumber     String
+  status       PCStatus     @default(AVAILABLE)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  laboratory   Laboratory   @relation(fields: [laboratoryId], references: [id], onDelete: Cascade)
+  reservations Reservation[]
+  activityLogs ActivityLog[]
+  calendarEvents CalendarEvent[]
+
+  @@unique([laboratoryId, pcNumber])
+  @@index([laboratoryId, status])
 }
 
 model ActivityLog {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   userId      Int?
+  labId       Int?
+  pcId        Int?
   action      String
   entityType  String
   entityId    Int?
   description String
-  createdAt   DateTime @default(now())
-  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  metadata    Json?
+  timestamp   DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  laboratory  Laboratory? @relation(fields: [labId], references: [id], onDelete: SetNull)
+  pc          PC?       @relation(fields: [pcId], references: [id], onDelete: SetNull)
 
   @@index([action])
   @@index([entityType, entityId])
   @@index([createdAt])
+  @@index([labId, timestamp])
+  @@index([pcId, timestamp])
+  @@index([timestamp])
 }
 
 model PasswordResetToken {
@@ -149,4 +204,26 @@ model PasswordResetToken {
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
+}
+
+model CalendarEvent {
+  id           Int               @id @default(autoincrement())
+  title        String
+  type         CalendarEventType
+  laboratoryId Int?
+  pcId         Int?
+  date         DateTime
+  startTime    String?
+  endTime      String?
+  description  String?
+  createdById  Int
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  laboratory   Laboratory?       @relation(fields: [laboratoryId], references: [id], onDelete: SetNull)
+  pc           PC?               @relation(fields: [pcId], references: [id], onDelete: SetNull)
+  createdBy    User              @relation("CalendarEventCreator", fields: [createdById], references: [id])
+
+  @@index([date, type])
+  @@index([laboratoryId, date])
+  @@index([createdById])
 }

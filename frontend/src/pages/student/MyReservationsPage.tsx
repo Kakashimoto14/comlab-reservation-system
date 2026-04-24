@@ -191,6 +191,15 @@ export const MyReservationsPage = () => {
                   </div>
                   <div className="rounded-2xl bg-slate-50 p-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      Reservation Type
+                    </p>
+                    <p className="mt-2 font-semibold text-slate-900">{reservation.reservationType}</p>
+                    <p className="mt-1 text-slate-500">
+                      {reservation.pc?.pcNumber ?? "Whole laboratory"}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                       Schedule
                     </p>
                     <p className="mt-2 font-semibold text-slate-900">

@@ -7,18 +7,26 @@ export class ActivityLogService {
 
   async logActivity(input: {
     userId?: number | null;
+    labId?: number | null;
+    pcId?: number | null;
     action: string;
-    entityType: string;
+    entityType?: string;
     entityId?: number | null;
     description: string;
+    metadata?: PrismaNamespace.InputJsonValue;
+    timestamp?: Date;
   }) {
     return this.db.activityLog.create({
       data: {
         userId: input.userId ?? null,
+        labId: input.labId ?? null,
+        pcId: input.pcId ?? null,
         action: input.action,
-        entityType: input.entityType,
+        entityType: input.entityType ?? "SYSTEM",
         entityId: input.entityId ?? null,
-        description: input.description
+        description: input.description,
+        metadata: input.metadata,
+        ...(input.timestamp ? { timestamp: input.timestamp } : {})
       }
     });
   }

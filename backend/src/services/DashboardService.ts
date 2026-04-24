@@ -1,9 +1,14 @@
 import type { PrismaClient, UserRole } from "@prisma/client";
 
 import { UserFactory } from "../domain/UserFactory.js";
+import { StaffAccessService } from "./StaffAccessService.js";
 
 export class DashboardService {
-  constructor(private readonly db: PrismaClient) {}
+  private readonly staffAccessService: StaffAccessService;
+
+  constructor(private readonly db: PrismaClient) {
+    this.staffAccessService = new StaffAccessService(db);
+  }
 
   async getDashboardData(currentUser: { id: number; role: UserRole }) {
     const user = await this.db.user.findUnique({
@@ -20,7 +25,7 @@ export class DashboardService {
       case "student":
         return this.getStudentDashboard(currentUser.id);
       case "staff":
-        return this.getStaffDashboard();
+        return this.getStaffDashboard(currentUser.id);
       default:
         return this.getAdminDashboard();
     }
@@ -40,13 +45,18 @@ export class DashboardService {
         }),
         this.db.activityLog.findMany({
           take: 8,
-          orderBy: { createdAt: "desc" },
+          orderBy: { timestamp: "desc" },
           include: {
             user: {
               select: {
                 firstName: true,
                 lastName: true,
                 role: true
+              }
+            },
+            laboratory: {
+              select: {
+                roomCode: true
               }
             }
           }
@@ -71,22 +81,48 @@ export class DashboardService {
     };
   }
 
-  private async getStaffDashboard() {
-    const [reservationCount, reservationsByStatus, recentActivity] = await Promise.all([
-      this.db.reservation.count(),
-      this.db.reservation.groupBy({
-        by: ["status"],
-        _count: {
-          status: true
-        }
-      }),
-      this.db.activityLog.findMany({
-        take: 8,
-        orderBy: { createdAt: "desc" }
-      })
-    ]);
+  private async getStaffDashboard(staffId: number) {
+    const assignedLabIds = await this.staffAccessService.getAssignedLabIds(staffId);
 
-    const trends = await this.buildReservationTrend();
+    const [reservationCount, reservationsByStatus, recentActivity, laboratoryCount] =
+      await Promise.all([
+        this.db.reservation.count({
+          where: {
+            laboratoryId: {
+              in: assignedLabIds
+            }
+          }
+        }),
+        this.db.reservation.groupBy({
+          by: ["status"],
+          where: {
+            laboratoryId: {
+              in: assignedLabIds
+            }
+          },
+          _count: {
+            status: true
+          }
+        }),
+        this.db.activityLog.findMany({
+          take: 8,
+          where: {
+            labId: {
+              in: assignedLabIds
+            }
+          },
+          orderBy: { timestamp: "desc" }
+        }),
+        this.db.laboratory.count({
+          where: {
+            id: {
+              in: assignedLabIds
+            }
+          }
+        })
+      ]);
+
+    const trends = await this.buildReservationTrend(assignedLabIds);
 
     return {
       scope: "staff",
@@ -95,7 +131,8 @@ export class DashboardService {
         pending: this.countStatus(reservationsByStatus, "PENDING"),
         approved: this.countStatus(reservationsByStatus, "APPROVED"),
         rejected: this.countStatus(reservationsByStatus, "REJECTED"),
-        completed: this.countStatus(reservationsByStatus, "COMPLETED")
+        completed: this.countStatus(reservationsByStatus, "COMPLETED"),
+        laboratories: laboratoryCount
       },
       reservationsByStatus,
       trends,
@@ -117,7 +154,8 @@ export class DashboardService {
         take: 5,
         orderBy: [{ reservationDate: "desc" }, { startTime: "desc" }],
         include: {
-          laboratory: true
+          laboratory: true,
+          pc: true
         }
       }),
       this.db.laboratory.count({
@@ -140,12 +178,19 @@ export class DashboardService {
     };
   }
 
-  private async buildReservationTrend() {
+  private async buildReservationTrend(laboratoryIds?: number[]) {
     const recentReservations = await this.db.reservation.findMany({
       where: {
         createdAt: {
           gte: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7)
-        }
+        },
+        ...(laboratoryIds
+          ? {
+              laboratoryId: {
+                in: laboratoryIds
+              }
+            }
+          : {})
       },
       select: {
         createdAt: true

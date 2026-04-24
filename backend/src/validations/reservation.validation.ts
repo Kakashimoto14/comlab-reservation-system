@@ -4,6 +4,8 @@ export const createReservationSchema = z.object({
   body: z.object({
     scheduleId: z.coerce.number().int().positive(),
     laboratoryId: z.coerce.number().int().positive(),
+    reservationType: z.enum(["LAB", "PC"]).default("LAB"),
+    pcId: z.coerce.number().int().positive().nullable().optional(),
     purpose: z.string().min(10),
     startTime: z.string().regex(/^\d{2}:\d{2}$/),
     endTime: z.string().regex(/^\d{2}:\d{2}$/)

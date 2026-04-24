@@ -42,4 +42,39 @@ export class LaboratoryController {
       message: "Laboratory deleted successfully."
     });
   }
+
+  static async listAssignments(req: Request, res: Response) {
+    const laboratories = await laboratoryService.listLaboratoryAssignments({
+      building: req.query.building ? String(req.query.building) : undefined,
+      department: req.query.department ? String(req.query.department) : undefined
+    });
+
+    res.status(StatusCodes.OK).json(laboratories);
+  }
+
+  static async listStaffOptions(_req: Request, res: Response) {
+    const staff = await laboratoryService.listAssignableStaff();
+    res.status(StatusCodes.OK).json(staff);
+  }
+
+  static async assignStaff(req: Request, res: Response) {
+    const laboratory = await laboratoryService.assignStaffToLaboratory(
+      Number(req.params.id),
+      req.body.custodianId ?? null,
+      req.authUser!.id
+    );
+
+    res.status(StatusCodes.OK).json(laboratory);
+  }
+
+  static async updatePcStatus(req: Request, res: Response) {
+    const pc = await laboratoryService.updatePcStatus(
+      Number(req.params.id),
+      Number(req.params.pcId),
+      req.body,
+      req.authUser!.id
+    );
+
+    res.status(StatusCodes.OK).json(pc);
+  }
 }

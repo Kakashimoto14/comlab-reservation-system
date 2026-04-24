@@ -23,6 +23,16 @@ export const updateScheduleSchema = z.object({
   query: z.object({}).default({})
 });
 
+export const updateMyLabScheduleSchema = z.object({
+  body: scheduleBodySchema.omit({
+    laboratoryId: true
+  }),
+  params: z.object({
+    id: z.coerce.number().int().positive()
+  }),
+  query: z.object({}).default({})
+});
+
 export const listScheduleSchema = z.object({
   body: z.object({}).default({}),
   params: z.object({}).default({}),

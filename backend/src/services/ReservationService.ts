@@ -1,6 +1,7 @@
 import type {
   PrismaClient,
   ReservationStatus,
+  ReservationType,
   UserRole
 } from "@prisma/client";
 import { StatusCodes } from "http-status-codes";
@@ -17,10 +18,13 @@ import {
 import { ActivityLogService } from "./ActivityLogService.js";
 import { LaboratoryService } from "./LaboratoryService.js";
 import { ScheduleService } from "./ScheduleService.js";
+import { StaffAccessService } from "./StaffAccessService.js";
 
 type CreateReservationInput = {
   scheduleId: number;
   laboratoryId: number;
+  reservationType?: ReservationType;
+  pcId?: number | null;
   purpose: string;
   startTime: string;
   endTime: string;
@@ -31,22 +35,63 @@ type ReviewReservationInput = {
   remarks?: string;
 };
 
+type CurrentUser = {
+  id: number;
+  role: UserRole;
+};
+
+type ConflictCheckInput = {
+  laboratoryId: number;
+  reservationDate: string | Date;
+  startTime: string;
+  endTime: string;
+  reservationType: ReservationType;
+  pcId?: number | null;
+  excludeReservationId?: number;
+};
+
+const activeReservationStatuses: ReservationStatus[] = ["PENDING", "APPROVED", "COMPLETED"];
+
 export class ReservationService {
   private readonly laboratoryService: LaboratoryService;
   private readonly scheduleService: ScheduleService;
   private readonly activityLogService: ActivityLogService;
+  private readonly staffAccessService: StaffAccessService;
 
   constructor(private readonly db: PrismaClient) {
     this.laboratoryService = new LaboratoryService(db);
     this.scheduleService = new ScheduleService(db);
     this.activityLogService = new ActivityLogService(db);
+    this.staffAccessService = new StaffAccessService(db);
   }
 
-  async listReservations(currentUser: { id: number; role: UserRole }) {
+  async listReservations(currentUser: CurrentUser) {
+    const where =
+      currentUser.role === "STUDENT"
+        ? { studentId: currentUser.id }
+        : currentUser.role === "LABORATORY_STAFF"
+          ? {
+              laboratoryId: {
+                in: await this.staffAccessService.getAssignedLabIds(currentUser.id)
+              }
+            }
+          : undefined;
+
     return this.db.reservation.findMany({
-      where: currentUser.role === "STUDENT" ? { studentId: currentUser.id } : undefined,
+      where,
       include: {
-        laboratory: true,
+        laboratory: {
+          include: {
+            custodian: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true
+              }
+            }
+          }
+        },
+        pc: true,
         student: {
           select: {
             id: true,
@@ -89,6 +134,7 @@ export class ReservationService {
 
     await this.laboratoryService.ensureLaboratoryIsAvailable(input.laboratoryId);
     this.validateTimeRange(input.startTime, input.endTime);
+
     const schedule = await this.db.schedule.findUnique({
       where: { id: input.scheduleId }
     });
@@ -113,12 +159,17 @@ export class ReservationService {
       );
     }
 
-    await this.ensureNoReservationConflict(
-      input.laboratoryId,
-      schedule.date,
-      input.startTime,
-      input.endTime
-    );
+    const reservationType = input.reservationType ?? "LAB";
+    const pc = await this.resolveReservationPc(input.laboratoryId, reservationType, input.pcId);
+
+    await this.ensureNoReservationConflict({
+      laboratoryId: input.laboratoryId,
+      reservationDate: schedule.date,
+      startTime: input.startTime,
+      endTime: input.endTime,
+      reservationType,
+      pcId: pc?.id
+    });
 
     const createdReservation = await this.db.$transaction(async (tx) => {
       const reservation = await tx.reservation.create({
@@ -127,6 +178,8 @@ export class ReservationService {
           studentId,
           laboratoryId: input.laboratoryId,
           scheduleId: schedule.id,
+          pcId: pc?.id ?? null,
+          reservationType,
           purpose: input.purpose,
           reservationDate: toDateOnly(schedule.date),
           startTime: input.startTime,
@@ -143,6 +196,7 @@ export class ReservationService {
         },
         include: {
           laboratory: true,
+          pc: true,
           student: {
             select: {
               id: true,
@@ -158,10 +212,16 @@ export class ReservationService {
 
     await this.activityLogService.logActivity({
       userId: studentId,
+      labId: createdReservation.laboratoryId,
+      pcId: createdReservation.pcId,
       action: "CREATE_RESERVATION",
       entityType: "RESERVATION",
       entityId: createdReservation.id,
-      description: `Submitted reservation ${createdReservation.reservationCode}.`
+      description: `Submitted ${createdReservation.reservationType === "PC" ? "PC" : "laboratory"} reservation ${createdReservation.reservationCode}.`,
+      metadata: {
+        reservationType: createdReservation.reservationType,
+        pcId: createdReservation.pcId
+      }
     });
 
     return createdReservation;
@@ -202,6 +262,8 @@ export class ReservationService {
 
     await this.activityLogService.logActivity({
       userId: studentId,
+      labId: updatedReservation.laboratoryId,
+      pcId: updatedReservation.pcId,
       action: "CANCEL_RESERVATION",
       entityType: "RESERVATION",
       entityId: updatedReservation.id,
@@ -214,14 +276,15 @@ export class ReservationService {
   async reviewReservation(
     reservationId: number,
     input: ReviewReservationInput,
-    reviewerId: number
+    currentUser: CurrentUser
   ) {
     const [reviewer, reservationRecord] = await Promise.all([
-      this.db.user.findUnique({ where: { id: reviewerId } }),
+      this.db.user.findUnique({ where: { id: currentUser.id } }),
       this.db.reservation.findUnique({
         where: { id: reservationId },
         include: {
-          laboratory: true
+          laboratory: true,
+          pc: true
         }
       })
     ]);
@@ -243,6 +306,8 @@ export class ReservationService {
       );
     }
 
+    await this.staffAccessService.ensureCanManageLab(currentUser, reservationRecord.laboratoryId);
+
     const reservation = new Reservation(reservationRecord);
 
     if (!reservation.isPending()) {
@@ -253,13 +318,15 @@ export class ReservationService {
     }
 
     if (input.status === "APPROVED") {
-      await this.ensureNoReservationConflict(
-        reservationRecord.laboratoryId,
-        reservationRecord.reservationDate,
-        reservationRecord.startTime,
-        reservationRecord.endTime,
-        reservationRecord.id
-      );
+      await this.ensureNoReservationConflict({
+        laboratoryId: reservationRecord.laboratoryId,
+        reservationDate: reservationRecord.reservationDate,
+        startTime: reservationRecord.startTime,
+        endTime: reservationRecord.endTime,
+        reservationType: reservationRecord.reservationType,
+        pcId: reservationRecord.pcId,
+        excludeReservationId: reservationRecord.id
+      });
     }
 
     const updatedReservation = await this.db.reservation.update({
@@ -267,11 +334,12 @@ export class ReservationService {
       data: {
         status: input.status,
         remarks: input.remarks ?? null,
-        reviewedById: reviewerId,
+        reviewedById: currentUser.id,
         reviewedAt: new Date()
       },
       include: {
         laboratory: true,
+        pc: true,
         student: {
           select: {
             id: true,
@@ -293,19 +361,24 @@ export class ReservationService {
     });
 
     await this.activityLogService.logActivity({
-      userId: reviewerId,
+      userId: currentUser.id,
+      labId: updatedReservation.laboratoryId,
+      pcId: updatedReservation.pcId,
       action: input.status === "APPROVED" ? "APPROVE_RESERVATION" : "REJECT_RESERVATION",
       entityType: "RESERVATION",
       entityId: updatedReservation.id,
-      description: `${input.status === "APPROVED" ? "Approved" : "Rejected"} reservation ${updatedReservation.reservationCode}.`
+      description: `${input.status === "APPROVED" ? "Approved" : "Rejected"} reservation ${updatedReservation.reservationCode}.`,
+      metadata: {
+        reservationType: updatedReservation.reservationType
+      }
     });
 
     return updatedReservation;
   }
 
-  async completeReservation(reservationId: number, reviewerId: number, remarks?: string) {
+  async completeReservation(reservationId: number, currentUser: CurrentUser, remarks?: string) {
     const [reviewer, reservationRecord] = await Promise.all([
-      this.db.user.findUnique({ where: { id: reviewerId } }),
+      this.db.user.findUnique({ where: { id: currentUser.id } }),
       this.db.reservation.findUnique({
         where: { id: reservationId }
       })
@@ -328,6 +401,8 @@ export class ReservationService {
       );
     }
 
+    await this.staffAccessService.ensureCanManageLab(currentUser, reservationRecord.laboratoryId);
+
     const reservation = new Reservation(reservationRecord);
 
     if (!reservation.canBeCompleted()) {
@@ -342,13 +417,15 @@ export class ReservationService {
       data: {
         status: "COMPLETED",
         remarks: remarks ?? reservationRecord.remarks,
-        reviewedById: reviewerId,
+        reviewedById: currentUser.id,
         reviewedAt: new Date()
       }
     });
 
     await this.activityLogService.logActivity({
-      userId: reviewerId,
+      userId: currentUser.id,
+      labId: updatedReservation.laboratoryId,
+      pcId: updatedReservation.pcId,
       action: "COMPLETE_RESERVATION",
       entityType: "RESERVATION",
       entityId: updatedReservation.id,
@@ -367,38 +444,97 @@ export class ReservationService {
     }
   }
 
-  async ensureNoReservationConflict(
-    laboratoryId: number,
-    reservationDate: string | Date,
-    startTime: string,
-    endTime: string,
-    excludeReservationId?: number
-  ) {
+  async ensureNoReservationConflict(input: ConflictCheckInput) {
     const conflictingReservations = await this.db.reservation.findMany({
       where: {
-        laboratoryId,
-        reservationDate: toDateOnly(reservationDate),
+        laboratoryId: input.laboratoryId,
+        reservationDate: toDateOnly(input.reservationDate),
         status: {
-          in: ["PENDING", "APPROVED", "COMPLETED"] as ReservationStatus[]
+          in: activeReservationStatuses
         },
-        ...(excludeReservationId ? { id: { not: excludeReservationId } } : {})
+        ...(input.excludeReservationId ? { id: { not: input.excludeReservationId } } : {})
       }
     });
 
-    const conflictingReservation = conflictingReservations.find((existingReservation) =>
+    const overlappingReservations = conflictingReservations.filter((existingReservation) =>
       timeRangesOverlap(
         existingReservation.startTime,
         existingReservation.endTime,
-        startTime,
-        endTime
+        input.startTime,
+        input.endTime
       )
     );
 
-    if (conflictingReservation) {
+    if (input.reservationType === "LAB") {
+      const blockingReservation = overlappingReservations[0];
+
+      if (blockingReservation) {
+        throw new ApiError(
+          StatusCodes.CONFLICT,
+          `This laboratory already has reservation ${blockingReservation.reservationCode} from ${blockingReservation.startTime} to ${blockingReservation.endTime} on ${toDateOnly(input.reservationDate).toISOString().slice(0, 10)}. Choose another open time slot.`
+        );
+      }
+
+      return;
+    }
+
+    const wholeLabReservation = overlappingReservations.find(
+      (reservation) => reservation.reservationType === "LAB"
+    );
+
+    if (wholeLabReservation) {
       throw new ApiError(
         StatusCodes.CONFLICT,
-        `This laboratory already has reservation ${conflictingReservation.reservationCode} from ${conflictingReservation.startTime} to ${conflictingReservation.endTime} on ${toDateOnly(reservationDate).toISOString().slice(0, 10)}. Choose another open time slot.`
+        `The entire laboratory is already reserved under ${wholeLabReservation.reservationCode} from ${wholeLabReservation.startTime} to ${wholeLabReservation.endTime}.`
       );
     }
+
+    const pcConflict = overlappingReservations.find(
+      (reservation) => reservation.pcId === input.pcId
+    );
+
+    if (pcConflict) {
+      throw new ApiError(
+        StatusCodes.CONFLICT,
+        `This PC is already reserved under ${pcConflict.reservationCode} from ${pcConflict.startTime} to ${pcConflict.endTime}.`
+      );
+    }
+  }
+
+  private async resolveReservationPc(
+    laboratoryId: number,
+    reservationType: ReservationType,
+    pcId?: number | null
+  ) {
+    if (reservationType === "LAB") {
+      return null;
+    }
+
+    if (!pcId) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        "Select a PC when creating a PC reservation."
+      );
+    }
+
+    const pc = await this.db.pC.findFirst({
+      where: {
+        id: pcId,
+        laboratoryId
+      }
+    });
+
+    if (!pc) {
+      throw new ApiError(StatusCodes.NOT_FOUND, "The selected PC does not belong to this laboratory.");
+    }
+
+    if (pc.status !== "AVAILABLE") {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        "The selected PC is not currently available for reservations."
+      );
+    }
+
+    return pc;
   }
 }

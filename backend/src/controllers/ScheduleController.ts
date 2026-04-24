@@ -13,13 +13,13 @@ export class ScheduleController {
         ? Number(req.query.laboratoryId)
         : undefined,
       date: req.query.date ? String(req.query.date) : undefined
-    });
+    }, req.authUser);
 
     res.status(StatusCodes.OK).json(schedules);
   }
 
   static async create(req: Request, res: Response) {
-    const schedule = await scheduleService.createSchedule(req.body, req.authUser!.id);
+    const schedule = await scheduleService.createSchedule(req.body, req.authUser!);
     res.status(StatusCodes.CREATED).json(schedule);
   }
 
@@ -27,14 +27,14 @@ export class ScheduleController {
     const schedule = await scheduleService.updateSchedule(
       Number(req.params.id),
       req.body,
-      req.authUser!.id
+      req.authUser!
     );
 
     res.status(StatusCodes.OK).json(schedule);
   }
 
   static async remove(req: Request, res: Response) {
-    await scheduleService.deleteSchedule(Number(req.params.id), req.authUser!.id);
+    await scheduleService.deleteSchedule(Number(req.params.id), req.authUser!);
     res.status(StatusCodes.OK).json({
       message: "Schedule deleted successfully."
     });

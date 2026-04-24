@@ -74,6 +74,7 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
       login: (payload) => handleAuthResponse(() => authApi.login(payload)),
       register: (payload) => handleAuthResponse(() => authApi.register(payload)),
       logout: () => {
+        void authApi.logout().catch(() => undefined);
         clearStoredAuth();
         setUser(null);
         setToken(null);

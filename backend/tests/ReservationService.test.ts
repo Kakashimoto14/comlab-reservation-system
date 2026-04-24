@@ -8,6 +8,7 @@ const createMockDb = () =>
       findUnique: vi.fn()
     },
     laboratory: {
+      findFirst: vi.fn(),
       findUnique: vi.fn()
     },
     schedule: {
@@ -42,10 +43,22 @@ describe("ReservationService", () => {
     const service = new ReservationService(db);
 
     await expect(
-      service.ensureNoReservationConflict(3, "2026-05-12", "10:00", "11:30")
+      service.ensureNoReservationConflict({
+        laboratoryId: 3,
+        reservationDate: "2026-05-12",
+        startTime: "10:00",
+        endTime: "11:30",
+        reservationType: "LAB"
+      })
     ).rejects.toHaveProperty("statusCode", StatusCodes.CONFLICT);
     await expect(
-      service.ensureNoReservationConflict(3, "2026-05-12", "10:00", "11:30")
+      service.ensureNoReservationConflict({
+        laboratoryId: 3,
+        reservationDate: "2026-05-12",
+        startTime: "10:00",
+        endTime: "11:30",
+        reservationType: "LAB"
+      })
     ).rejects.toThrow(/RSV-2026-0001 from 09:00 to 11:00/);
   });
 
@@ -65,6 +78,9 @@ describe("ReservationService", () => {
       phone: null,
       createdAt: new Date(),
       updatedAt: new Date()
+    });
+    db.laboratory.findFirst.mockResolvedValue({
+      id: 1
     });
     db.reservation.findUnique.mockResolvedValue({
       id: 9,
@@ -123,7 +139,10 @@ describe("ReservationService", () => {
         status: "APPROVED",
         remarks: "Approved for scheduled laboratory use."
       },
-      2
+      {
+        id: 2,
+        role: "LABORATORY_STAFF"
+      }
     );
 
     expect(result.status).toBe("APPROVED");

@@ -11,8 +11,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 
-import { reservationApi } from "../../api/services";
-import type { Reservation } from "../../types/api";
+import { reservationApi, staffApi } from "../../api/services";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { EmptyState } from "../../components/ui/EmptyState";
@@ -23,6 +22,8 @@ import { Select } from "../../components/ui/Select";
 import { StatCard } from "../../components/ui/StatCard";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { Textarea } from "../../components/ui/Textarea";
+import { useAuth } from "../../store/AuthContext";
+import type { Reservation } from "../../types/api";
 import { downloadCsv } from "../../utils/csv";
 import { formatDate, formatDateTime, formatTimeRange, fullName } from "../../utils/format";
 
@@ -39,6 +40,8 @@ const getErrorMessage = (error: unknown, fallbackMessage: string) => {
 };
 
 export const ReservationManagementPage = () => {
+  const { user } = useAuth();
+  const isStaff = user?.role === "LABORATORY_STAFF";
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState("");
   const [laboratoryFilter, setLaboratoryFilter] = useState("");
@@ -50,8 +53,8 @@ export const ReservationManagementPage = () => {
   const [remarks, setRemarks] = useState("");
 
   const { data, isLoading } = useQuery({
-    queryKey: ["reservations"],
-    queryFn: reservationApi.list
+    queryKey: [isStaff ? "staff-reservations" : "reservations"],
+    queryFn: () => (isStaff ? staffApi.getMyLabReservations() : reservationApi.list())
   });
 
   const reservations = data ?? [];
@@ -91,7 +94,8 @@ export const ReservationManagementPage = () => {
             reservation.student?.firstName,
             reservation.student?.lastName,
             reservation.student?.studentNumber,
-            reservation.reservationCode
+            reservation.reservationCode,
+            reservation.pc?.pcNumber
           ]
             .filter(Boolean)
             .some((value) => value?.toLowerCase().includes(normalizedStudent))
@@ -135,7 +139,7 @@ export const ReservationManagementPage = () => {
   }, [currentPage, filteredReservations]);
 
   const refreshReservations = async () => {
-    await queryClient.invalidateQueries({ queryKey: ["reservations"] });
+    await queryClient.invalidateQueries({ queryKey: [isStaff ? "staff-reservations" : "reservations"] });
     await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     setSelectedReservation(null);
     setRemarks("");
@@ -150,7 +154,10 @@ export const ReservationManagementPage = () => {
       id: number;
       status: "APPROVED" | "REJECTED";
       remarks?: string;
-    }) => reservationApi.review(id, { status, remarks: message }),
+    }) =>
+      isStaff
+        ? staffApi.updateMyLabReservation(id, { status, remarks: message })
+        : reservationApi.review(id, { status, remarks: message }),
     onSuccess: async (_data, variables) => {
       toast.success(
         `Reservation ${variables.status === "APPROVED" ? "approved" : "rejected"}.`
@@ -175,6 +182,8 @@ export const ReservationManagementPage = () => {
       "reservation-management-report.csv",
       [
         "Reservation Code",
+        "Type",
+        "PC",
         "Student",
         "Student Number",
         "Laboratory",
@@ -185,6 +194,8 @@ export const ReservationManagementPage = () => {
       ],
       filteredReservations.map((reservation) => [
         reservation.reservationCode,
+        reservation.reservationType,
+        reservation.pc?.pcNumber ?? "",
         fullName(reservation.student?.firstName, reservation.student?.lastName),
         reservation.student?.studentNumber ?? "",
         `${reservation.laboratory?.roomCode ?? ""} ${reservation.laboratory?.name ?? ""}`.trim(),
@@ -201,7 +212,11 @@ export const ReservationManagementPage = () => {
     <div className="space-y-6">
       <PageHeader
         title="Reservation Management"
-        description="Review incoming requests, filter large reservation datasets, and move bookings through the approval workflow."
+        description={
+          isStaff
+            ? "Review reservations for the assigned laboratory while keeping visibility of reservation type and PC allocation."
+            : "Review incoming requests, filter large reservation datasets, and move bookings through the approval workflow."
+        }
         actions={
           <Button variant="secondary" onClick={exportCurrentView}>
             <Download className="mr-2 h-4 w-4" />
@@ -250,7 +265,7 @@ export const ReservationManagementPage = () => {
                   setStudentFilter(event.target.value);
                   setCurrentPage(1);
                 }}
-                placeholder="Search by student or reservation code"
+                placeholder="Search by student, reservation code, or PC"
               />
             </div>
           </div>
@@ -283,6 +298,7 @@ export const ReservationManagementPage = () => {
                 setLaboratoryFilter(event.target.value);
                 setCurrentPage(1);
               }}
+              disabled={isStaff}
             >
               <option value="">All laboratories</option>
               {laboratories.map((laboratory) => (
@@ -340,6 +356,7 @@ export const ReservationManagementPage = () => {
                     <th className="py-3 pr-4">Student</th>
                     <th className="py-3 pr-4">Laboratory</th>
                     <th className="py-3 pr-4">Schedule</th>
+                    <th className="py-3 pr-4">Type</th>
                     <th className="py-3 pr-4">Status</th>
                     <th className="py-3">Actions</th>
                   </tr>
@@ -363,6 +380,12 @@ export const ReservationManagementPage = () => {
                         <p>{formatDate(reservation.reservationDate)}</p>
                         <p className="mt-1 text-slate-500">
                           {formatTimeRange(reservation.startTime, reservation.endTime)}
+                        </p>
+                      </td>
+                      <td className="py-4 pr-4 align-top">
+                        <p className="font-medium text-slate-900">{reservation.reservationType}</p>
+                        <p className="mt-1 text-slate-500">
+                          {reservation.pc?.pcNumber ?? "Whole laboratory"}
                         </p>
                       </td>
                       <td className="py-4 pr-4 align-top">
@@ -431,11 +454,13 @@ export const ReservationManagementPage = () => {
           </>
         ) : (
           <EmptyState
-            title={reservations.length ? "No reservations match the current filters" : "No reservations found"}
+            title={
+              reservations.length ? "No reservations match the current filters" : "No reservations found"
+            }
             description={
               reservations.length
-                ? "Adjust the date, laboratory, status, or student search to broaden the result set."
-                : "Reservation requests will appear here once students begin booking laboratory slots."
+                ? "Adjust the date, laboratory, status, or search filters to broaden the result set."
+                : "Reservation requests will appear here once students begin booking laboratory or PC slots."
             }
           />
         )}
@@ -455,9 +480,7 @@ export const ReservationManagementPage = () => {
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Reservation
               </p>
-              <p className="mt-2 font-semibold text-slate-900">
-                {selectedReservation?.reservationCode}
-              </p>
+              <p className="mt-2 font-semibold text-slate-900">{selectedReservation?.reservationCode}</p>
               <p className="mt-1 text-slate-500">{selectedReservation?.purpose}</p>
             </div>
             <div className="rounded-2xl bg-slate-50 p-4">
@@ -465,10 +488,7 @@ export const ReservationManagementPage = () => {
                 Student
               </p>
               <p className="mt-2 font-semibold text-slate-900">
-                {fullName(
-                  selectedReservation?.student?.firstName,
-                  selectedReservation?.student?.lastName
-                )}
+                {fullName(selectedReservation?.student?.firstName, selectedReservation?.student?.lastName)}
               </p>
               <p className="mt-1 text-slate-500">{selectedReservation?.student?.studentNumber}</p>
             </div>
@@ -476,10 +496,19 @@ export const ReservationManagementPage = () => {
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Laboratory
               </p>
-              <p className="mt-2 font-semibold text-slate-900">
-                {selectedReservation?.laboratory?.name}
-              </p>
+              <p className="mt-2 font-semibold text-slate-900">{selectedReservation?.laboratory?.name}</p>
               <p className="mt-1 text-slate-500">{selectedReservation?.laboratory?.roomCode}</p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Reservation Type
+              </p>
+              <p className="mt-2 font-semibold text-slate-900">
+                {selectedReservation?.reservationType}
+              </p>
+              <p className="mt-1 text-slate-500">
+                {selectedReservation?.pc?.pcNumber ?? "Whole laboratory"}
+              </p>
             </div>
             <div className="rounded-2xl bg-slate-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -490,10 +519,7 @@ export const ReservationManagementPage = () => {
               </p>
               <p className="mt-1 text-slate-500">
                 {selectedReservation
-                  ? formatTimeRange(
-                      selectedReservation.startTime,
-                      selectedReservation.endTime
-                    )
+                  ? formatTimeRange(selectedReservation.startTime, selectedReservation.endTime)
                   : ""}
               </p>
             </div>

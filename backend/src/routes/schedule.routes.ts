@@ -2,6 +2,7 @@ import { Router } from "express";
 
 import { ScheduleController } from "../controllers/ScheduleController.js";
 import { authenticate, optionalAuthenticate } from "../middleware/auth.js";
+import { requireAssignedLabManager } from "../middleware/labAccess.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { validate } from "../middleware/validate.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -25,6 +26,7 @@ router.post(
   authenticate,
   requireRole("ADMIN", "LABORATORY_STAFF"),
   validate(createScheduleSchema),
+  requireAssignedLabManager("laboratoryId"),
   asyncHandler(ScheduleController.create)
 );
 router.put(
@@ -32,6 +34,7 @@ router.put(
   authenticate,
   requireRole("ADMIN", "LABORATORY_STAFF"),
   validate(updateScheduleSchema),
+  requireAssignedLabManager("laboratoryId"),
   asyncHandler(ScheduleController.update)
 );
 router.delete(

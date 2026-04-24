@@ -34,7 +34,7 @@ export class ReservationController {
     const reservation = await reservationService.reviewReservation(
       Number(req.params.id),
       req.body,
-      req.authUser!.id
+      req.authUser!
     );
 
     res.status(StatusCodes.OK).json(reservation);
@@ -43,7 +43,7 @@ export class ReservationController {
   static async complete(req: Request, res: Response) {
     const reservation = await reservationService.completeReservation(
       Number(req.params.id),
-      req.authUser!.id,
+      req.authUser!,
       req.body.remarks
     );
 

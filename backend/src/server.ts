@@ -1,9 +1,13 @@
 import { prisma } from "./config/prisma.js";
 import { env } from "./config/env.js";
+import { NotificationService } from "./services/NotificationService.js";
+import { ReservationReminderService } from "./services/ReservationReminderService.js";
 import { SystemBootstrapService } from "./services/SystemBootstrapService.js";
 import { app } from "./app.js";
 
 const systemBootstrapService = new SystemBootstrapService(prisma);
+const notificationService = new NotificationService(prisma);
+const reservationReminderService = new ReservationReminderService(prisma);
 
 async function startServer() {
   await prisma.$connect();
@@ -16,6 +20,10 @@ async function startServer() {
     console.info("[startup] Demo account bootstrap skipped.");
   }
 
+  notificationService.register();
+  reservationReminderService.start();
+  console.info("[startup] Notification handlers and reminder worker started.");
+
   const server = app.listen(env.PORT, () => {
     console.info(`[startup] Backend server running on port ${env.PORT}.`);
     console.info(`[startup] Environment: ${env.NODE_ENV}.`);
@@ -25,6 +33,8 @@ async function startServer() {
 
   const shutdown = async (signal: string) => {
     console.info(`[shutdown] Received ${signal}. Closing backend server.`);
+    reservationReminderService.stop();
+    notificationService.unregister();
 
     server.close(async () => {
       await prisma.$disconnect();

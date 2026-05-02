@@ -2,8 +2,9 @@ import { StatusCodes } from "http-status-codes";
 
 import { ReservationService } from "../src/services/ReservationService.js";
 
-const createMockDb = () =>
-  ({
+const createMockDb = () => {
+  const db = {
+    $queryRaw: vi.fn(),
     user: {
       findUnique: vi.fn()
     },
@@ -16,29 +17,33 @@ const createMockDb = () =>
       findUnique: vi.fn()
     },
     reservation: {
-      findMany: vi.fn(),
+      create: vi.fn(),
+      findFirst: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn()
     },
     activityLog: {
       create: vi.fn()
     }
-  }) as any;
+  } as any;
+
+  db.$transaction = vi.fn(async (callback: (tx: typeof db) => Promise<unknown>) => callback(db));
+
+  return db;
+};
 
 describe("ReservationService", () => {
   it("prevents conflicting reservations for the same laboratory and time range", async () => {
     const db = createMockDb();
-    db.reservation.findMany.mockResolvedValue([
-      {
-        id: 1,
-        reservationCode: "RSV-2026-0001",
-        laboratoryId: 3,
-        reservationDate: new Date("2026-05-12"),
-        startTime: "09:00",
-        endTime: "11:00",
-        status: "APPROVED"
-      }
-    ]);
+    db.reservation.findFirst.mockResolvedValue({
+      id: 1,
+      reservationCode: "RSV-2026-0001",
+      laboratoryId: 3,
+      reservationDate: new Date("2026-05-12"),
+      startTime: "09:00",
+      endTime: "11:00",
+      status: "APPROVED"
+    });
 
     const service = new ReservationService(db);
 
@@ -64,6 +69,7 @@ describe("ReservationService", () => {
 
   it("approves a pending reservation during the review flow", async () => {
     const db = createMockDb();
+    db.$queryRaw.mockResolvedValue([{ id: 1 }]);
     db.user.findUnique.mockResolvedValue({
       id: 2,
       firstName: "Daniel",
@@ -105,7 +111,7 @@ describe("ReservationService", () => {
         roomCode: "CL-301"
       }
     });
-    db.reservation.findMany.mockResolvedValue([]);
+    db.reservation.findFirst.mockResolvedValue(null);
     db.reservation.update.mockResolvedValue({
       id: 9,
       reservationCode: "RSV-2026-0009",
@@ -146,6 +152,7 @@ describe("ReservationService", () => {
     );
 
     expect(result.status).toBe("APPROVED");
+    expect(db.$queryRaw).toHaveBeenCalled();
     expect(db.reservation.update).toHaveBeenCalled();
     expect(db.activityLog.create).toHaveBeenCalled();
   });

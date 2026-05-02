@@ -3,7 +3,7 @@ import { Router } from "express";
 import { StaffController } from "../controllers/StaffController.js";
 import { authenticate } from "../middleware/auth.js";
 import { allowReadOtherLabAvailability } from "../middleware/labAccess.js";
-import { requireRole } from "../middleware/requireRole.js";
+import { authorizeRoles } from "../middleware/requireRole.js";
 import { validate } from "../middleware/validate.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { updateMyLabPcStatusSchema } from "../validations/laboratory.validation.js";
@@ -13,7 +13,7 @@ import { listScheduleSchema, updateMyLabScheduleSchema } from "../validations/sc
 const router = Router();
 
 router.use(authenticate);
-router.use(requireRole("LABORATORY_STAFF", "ADMIN"));
+router.use(authorizeRoles("CUSTODIAN", "ADMIN"));
 
 router.get("/my-lab", asyncHandler(StaffController.getMyLab));
 router.get("/my-lab/reservations", asyncHandler(StaffController.getMyLabReservations));

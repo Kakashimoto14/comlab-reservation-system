@@ -334,6 +334,10 @@ Services:
 - Admin reporting now includes filtered table views, summary cards, and CSV export for defense-ready reporting.
 - The project prioritizes working reservation flows, clean architecture, and defense-ready UX over enterprise-scale complexity.
 
+## Changelog / Known Fixed Issues
+
+- Admin "Create User" could fail before any API request when frontend validation kept hidden student-only fields registered after switching roles. The form now uses role-aware validation, unregisters hidden student fields, surfaces validation failures clearly, and supports ADMIN, LABORATORY_STAFF, and STUDENT user creation as expected.
+
 ## Future Improvements
 
 - Cloud object storage for laboratory images instead of database-backed demo storage

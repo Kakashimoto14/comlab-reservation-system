@@ -37,6 +37,32 @@ export class UserService {
     this.activityLogService = new ActivityLogService(db);
   }
 
+  private normalizeCreateInput(input: CreateUserInput) {
+    if (input.role === "STUDENT") {
+      return input;
+    }
+
+    return {
+      ...input,
+      studentNumber: undefined,
+      yearLevel: undefined
+    };
+  }
+
+  private getRoleAwareUpdateData(input: UpdateUserInput) {
+    if (input.role && input.role !== "STUDENT") {
+      return {
+        studentNumber: null,
+        yearLevel: null
+      };
+    }
+
+    return {
+      studentNumber: input.studentNumber,
+      yearLevel: input.yearLevel
+    };
+  }
+
   async listUsers() {
     const users = await this.db.user.findMany({
       orderBy: [{ role: "asc" }, { lastName: "asc" }]
@@ -46,11 +72,14 @@ export class UserService {
   }
 
   async createUser(input: CreateUserInput, actorId: number) {
+    const normalizedInput = this.normalizeCreateInput(input);
     const existingUser = await this.db.user.findFirst({
       where: {
         OR: [
-          { email: input.email },
-          ...(input.studentNumber ? [{ studentNumber: input.studentNumber }] : [])
+          { email: normalizedInput.email },
+          ...(normalizedInput.studentNumber
+            ? [{ studentNumber: normalizedInput.studentNumber }]
+            : [])
         ]
       }
     });
@@ -62,8 +91,8 @@ export class UserService {
       );
     }
 
-    const passwordHash = await bcrypt.hash(input.password, 10);
-    const { password: _password, ...userData } = input;
+    const passwordHash = await bcrypt.hash(normalizedInput.password, 10);
+    const { password: _password, ...userData } = normalizedInput;
 
     const user = await this.db.user.create({
       data: {
@@ -86,6 +115,7 @@ export class UserService {
 
   async updateUser(userId: number, input: UpdateUserInput, actorId: number) {
     const user = await this.db.user.findUnique({ where: { id: userId } });
+    const roleAwareUpdateData = this.getRoleAwareUpdateData(input);
 
     if (!user) {
       throw new ApiError(StatusCodes.NOT_FOUND, "User account not found.");
@@ -96,7 +126,9 @@ export class UserService {
         id: { not: userId },
         OR: [
           ...(input.email ? [{ email: input.email }] : []),
-          ...(input.studentNumber ? [{ studentNumber: input.studentNumber }] : [])
+          ...(roleAwareUpdateData.studentNumber
+            ? [{ studentNumber: roleAwareUpdateData.studentNumber }]
+            : [])
         ]
       }
     });
@@ -115,9 +147,8 @@ export class UserService {
         lastName: input.lastName,
         email: input.email,
         role: input.role,
-        studentNumber: input.studentNumber,
+        ...roleAwareUpdateData,
         department: input.department,
-        yearLevel: input.yearLevel,
         phone: input.phone,
         status: input.status,
         ...(input.password ? { passwordHash: await bcrypt.hash(input.password, 10) } : {})

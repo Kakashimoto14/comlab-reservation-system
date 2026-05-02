@@ -2,7 +2,7 @@ import { Router } from "express";
 
 import { ReservationController } from "../controllers/ReservationController.js";
 import { authenticate } from "../middleware/auth.js";
-import { requireRole } from "../middleware/requireRole.js";
+import { authorizeRoles } from "../middleware/requireRole.js";
 import { validate } from "../middleware/validate.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
@@ -15,28 +15,28 @@ import {
 const router = Router();
 
 router.use(authenticate);
-router.get("/", asyncHandler(ReservationController.list));
+router.get("/", authorizeRoles("STUDENT", "CUSTODIAN", "ADMIN"), asyncHandler(ReservationController.list));
 router.post(
   "/",
-  requireRole("STUDENT"),
+  authorizeRoles("STUDENT"),
   validate(createReservationSchema),
   asyncHandler(ReservationController.create)
 );
 router.patch(
   "/:id/cancel",
-  requireRole("STUDENT"),
+  authorizeRoles("STUDENT"),
   validate(reservationIdSchema),
   asyncHandler(ReservationController.cancel)
 );
 router.patch(
   "/:id/review",
-  requireRole("ADMIN", "LABORATORY_STAFF"),
+  authorizeRoles("ADMIN", "CUSTODIAN"),
   validate(reviewReservationSchema),
   asyncHandler(ReservationController.review)
 );
 router.patch(
   "/:id/complete",
-  requireRole("ADMIN", "LABORATORY_STAFF"),
+  authorizeRoles("ADMIN", "CUSTODIAN"),
   validate(completeReservationSchema),
   asyncHandler(ReservationController.complete)
 );

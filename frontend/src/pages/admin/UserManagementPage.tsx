@@ -1,6 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import type { SubmitErrorHandler } from "react-hook-form";
 import { useForm } from "react-hook-form";
 import { AxiosError } from "axios";
 import toast from "react-hot-toast";
@@ -19,17 +20,66 @@ import { PageHeader } from "../../components/ui/PageHeader";
 import { Select } from "../../components/ui/Select";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 
-const userSchema = z.object({
-  firstName: z.string().min(2),
-  lastName: z.string().min(2),
-  email: z.string().email(),
-  password: z.string().min(8).optional().or(z.literal("")),
-  role: z.enum(["ADMIN", "STUDENT", "LABORATORY_STAFF"]),
-  studentNumber: z.string().optional(),
-  department: z.string().optional(),
-  yearLevel: z.coerce.number().optional(),
-  phone: z.string().optional()
-});
+const requiredStudentMessage = "Student number is required for student accounts.";
+const requiredYearLevelMessage = "Year level is required for student accounts.";
+const invalidUserFormMessage =
+  "Please correct the highlighted fields before submitting the user form.";
+
+const optionalTextField = z.preprocess((value) => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const trimmedValue = value.trim();
+  return trimmedValue === "" ? undefined : trimmedValue;
+}, z.string().optional());
+
+const optionalYearLevelField = z.preprocess((value) => {
+  if (
+    value === "" ||
+    value === null ||
+    typeof value === "undefined" ||
+    (typeof value === "number" && Number.isNaN(value))
+  ) {
+    return undefined;
+  }
+
+  return value;
+}, z.coerce.number().int().min(1).max(6).optional());
+
+const userSchema = z
+  .object({
+    firstName: z.string().trim().min(2),
+    lastName: z.string().trim().min(2),
+    email: z.string().email(),
+    password: z.string().trim().min(8).optional().or(z.literal("")),
+    role: z.enum(["ADMIN", "STUDENT", "LABORATORY_STAFF"]),
+    studentNumber: optionalTextField,
+    department: optionalTextField,
+    yearLevel: optionalYearLevelField,
+    phone: optionalTextField
+  })
+  .superRefine((values, context) => {
+    if (values.role !== "STUDENT") {
+      return;
+    }
+
+    if (!values.studentNumber) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: requiredStudentMessage,
+        path: ["studentNumber"]
+      });
+    }
+
+    if (typeof values.yearLevel !== "number" || Number.isNaN(values.yearLevel)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: requiredYearLevelMessage,
+        path: ["yearLevel"]
+      });
+    }
+  });
 
 type UserFormValues = z.infer<typeof userSchema>;
 
@@ -83,6 +133,7 @@ export const UserManagementPage = () => {
   const [open, setOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [statusTargetUser, setStatusTargetUser] = useState<User | null>(null);
+  const [formErrorMessage, setFormErrorMessage] = useState<string | null>(null);
   const { data, isLoading } = useQuery({
     queryKey: ["users"],
     queryFn: userApi.list
@@ -92,10 +143,12 @@ export const UserManagementPage = () => {
     register,
     handleSubmit,
     reset,
+    setError,
     watch,
     formState: { errors, isSubmitting }
   } = useForm<UserFormValues>({
     resolver: zodResolver(userSchema),
+    shouldUnregister: true,
     defaultValues: {
       role: "STUDENT"
     }
@@ -104,6 +157,8 @@ export const UserManagementPage = () => {
   const role = watch("role");
 
   useEffect(() => {
+    setFormErrorMessage(null);
+
     if (selectedUser) {
       reset({
         firstName: selectedUser.firstName,
@@ -163,6 +218,7 @@ export const UserManagementPage = () => {
   });
 
   const onSubmit = async (values: UserFormValues) => {
+    setFormErrorMessage(null);
     const payload = sanitizeUserPayload(values, Boolean(selectedUser));
 
     if (selectedUser) {
@@ -171,11 +227,23 @@ export const UserManagementPage = () => {
     }
 
     if (!payload.password) {
-      toast.error("Password is required for new users.");
+      const passwordMessage = "Password is required for new users.";
+      setError("password", { type: "manual", message: passwordMessage });
+      setFormErrorMessage(passwordMessage);
+      toast.error(passwordMessage);
       return;
     }
 
     await createMutation.mutateAsync(payload as UserFormValues & { password: string });
+  };
+
+  const onInvalidSubmit: SubmitErrorHandler<UserFormValues> = (formErrors) => {
+    const firstErrorMessage = Object.values(formErrors).find(
+      (error): error is { message?: string } => Boolean(error?.message)
+    )?.message;
+
+    setFormErrorMessage(firstErrorMessage ?? invalidUserFormMessage);
+    toast.error(firstErrorMessage ?? invalidUserFormMessage);
   };
 
   return (
@@ -258,9 +326,13 @@ export const UserManagementPage = () => {
         onClose={() => {
           setOpen(false);
           setSelectedUser(null);
+          setFormErrorMessage(null);
         }}
       >
-        <form className="grid gap-5 md:grid-cols-2" onSubmit={handleSubmit(onSubmit)}>
+        <form
+          className="grid gap-5 md:grid-cols-2"
+          onSubmit={handleSubmit(onSubmit, onInvalidSubmit)}
+        >
           <FormField label="First Name" error={errors.firstName?.message}>
             <Input {...register("firstName")} />
           </FormField>
@@ -302,6 +374,14 @@ export const UserManagementPage = () => {
           <FormField label="Phone Number" error={errors.phone?.message}>
             <Input {...register("phone")} />
           </FormField>
+          {formErrorMessage ? (
+            <div
+              className="md:col-span-2 rounded-2xl border border-danger/20 bg-red-50 px-4 py-3 text-sm text-danger"
+              role="alert"
+            >
+              {formErrorMessage}
+            </div>
+          ) : null}
           <div className="md:col-span-2 flex justify-end gap-3">
             <Button
               variant="secondary"
@@ -309,6 +389,7 @@ export const UserManagementPage = () => {
               onClick={() => {
                 setOpen(false);
                 setSelectedUser(null);
+                setFormErrorMessage(null);
               }}
             >
               Cancel
@@ -319,7 +400,13 @@ export const UserManagementPage = () => {
                 isSubmitting || createMutation.isPending || updateMutation.isPending
               }
             >
-              {selectedUser ? "Save Changes" : "Create User"}
+              {selectedUser
+                ? updateMutation.isPending
+                  ? "Saving..."
+                  : "Save Changes"
+                : createMutation.isPending
+                  ? "Creating..."
+                  : "Create User"}
             </Button>
           </div>
         </form>

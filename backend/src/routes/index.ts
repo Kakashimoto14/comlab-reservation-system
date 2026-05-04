@@ -4,6 +4,7 @@ import authRoutes from "./auth.routes.js";
 import calendarRoutes from "./calendar.routes.js";
 import dashboardRoutes from "./dashboard.routes.js";
 import laboratoryRoutes from "./laboratory.routes.js";
+import notificationRoutes from "./notification.routes.js";
 import reservationRoutes from "./reservation.routes.js";
 import scheduleRoutes from "./schedule.routes.js";
 import staffRoutes from "./staff.routes.js";
@@ -23,6 +24,7 @@ router.get("/health", (_req, res) => {
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
 router.use("/laboratories", laboratoryRoutes);
+router.use("/notifications", notificationRoutes);
 router.use("/schedules", scheduleRoutes);
 router.use("/reservations", reservationRoutes);
 router.use("/dashboard", dashboardRoutes);

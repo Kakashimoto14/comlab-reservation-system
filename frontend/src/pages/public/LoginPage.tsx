@@ -59,7 +59,7 @@ export const LoginPage = () => {
 
   const resetSession = () => {
     logout();
-    toast.success("Saved session cleared. You can log in again.");
+    toast.success("Current session cleared. You can log in again.");
     navigate("/login", { replace: true });
   };
 
@@ -73,7 +73,7 @@ export const LoginPage = () => {
           Access your reservation portal
         </h2>
         <p className="mt-2 text-sm text-slate-500">
-          Use your registered account or demo credentials to continue.
+          Use your registered account to continue securely.
         </p>
       </div>
 
@@ -91,15 +91,9 @@ export const LoginPage = () => {
         </Button>
       </form>
 
-      <div className="mt-6 rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
-        <p className="font-semibold text-slate-700">Demo quick access</p>
-        <p className="mt-2">Admin: `admin@comlab.edu` / `Password123!`</p>
-        <p>Staff: `staff@comlab.edu` / `Password123!`</p>
-      </div>
-
       <div className="mt-4">
         <Button type="button" variant="secondary" fullWidth onClick={resetSession}>
-          Reset Saved Session
+          Clear Active Session
         </Button>
       </div>
 

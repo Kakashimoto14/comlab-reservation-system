@@ -1,5 +1,6 @@
 import type {
   NotificationChannel,
+  Notification,
   NotificationType,
   Prisma,
   PrismaClient
@@ -8,6 +9,7 @@ import type {
 import { notificationEventBus, type NotificationEventBus, type NotificationEventPayload } from "../notifications/NotificationEventBus.js";
 import { combineDateAndTime } from "../utils/time.js";
 import { EmailService } from "./EmailService.js";
+import { notificationRealtimeService } from "./NotificationRealtimeService.js";
 
 type ReservationNotificationContext = Prisma.ReservationGetPayload<{
   include: {
@@ -264,7 +266,7 @@ export class NotificationService {
     );
 
     if (!inAppAlreadySent) {
-      await this.db.notification.upsert({
+      const inAppNotification = await this.db.notification.upsert({
         where: {
           userId_reservationId_channel_type: {
             userId: input.recipient.userId,
@@ -292,6 +294,8 @@ export class NotificationService {
           sentAt: new Date()
         }
       });
+
+      this.broadcastInAppNotification(inAppNotification);
     }
   }
 
@@ -317,6 +321,10 @@ export class NotificationService {
     });
 
     return notification?.status === "SENT";
+  }
+
+  private broadcastInAppNotification(notification: Notification) {
+    notificationRealtimeService.publishToUser(notification.userId, notification);
   }
 
   private async loadReservationContext(reservationId: number) {

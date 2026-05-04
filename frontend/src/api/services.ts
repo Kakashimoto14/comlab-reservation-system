@@ -5,6 +5,8 @@ import type {
   DashboardResponse,
   Laboratory,
   LaboratoryAvailability,
+  NotificationListResponse,
+  NotificationRecord,
   PasswordActionResponse,
   PC,
   Reservation,
@@ -248,6 +250,23 @@ export const calendarApi = {
 export const dashboardApi = {
   get: async () => {
     const { data } = await apiClient.get<DashboardResponse>("/dashboard");
+    return data;
+  }
+};
+
+export const notificationApi = {
+  list: async (params?: { unreadOnly?: boolean; limit?: number }) => {
+    const { data } = await apiClient.get<NotificationListResponse>("/notifications", { params });
+    return data;
+  },
+  markAsRead: async (id: number) => {
+    const { data } = await apiClient.patch<NotificationRecord>(`/notifications/${id}/read`);
+    return data;
+  },
+  markAllAsRead: async () => {
+    const { data } = await apiClient.post<{ updatedCount: number }>(
+      "/notifications/mark-all-read"
+    );
     return data;
   }
 };

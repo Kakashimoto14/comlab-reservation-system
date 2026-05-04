@@ -1,3 +1,4 @@
+import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
@@ -15,6 +16,7 @@ const allowedOrigins = env.CLIENT_URL.split(",")
 
 app.use(
   cors({
+    credentials: true,
     origin: (origin, callback) => {
       // Allow server-to-server tools and same-origin requests without an Origin header.
       if (!origin) {
@@ -32,6 +34,7 @@ app.use(
   })
 );
 app.use(helmet());
+app.use(cookieParser());
 app.use(express.json({ limit: "4mb" }));
 app.use(express.urlencoded({ extended: true, limit: "4mb" }));
 app.use(morgan(env.NODE_ENV === "production" ? "combined" : "dev"));

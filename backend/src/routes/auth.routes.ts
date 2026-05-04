@@ -1,7 +1,7 @@
 import { Router } from "express";
 
 import { AuthController } from "../controllers/AuthController.js";
-import { authenticate } from "../middleware/auth.js";
+import { authenticate, optionalAuthenticate } from "../middleware/auth.js";
 import { createRateLimiter } from "../middleware/rateLimit.js";
 import { validate } from "../middleware/validate.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -59,7 +59,7 @@ router.post(
   validate(changePasswordSchema),
   asyncHandler(AuthController.changePassword)
 );
-router.post("/logout", authenticate, asyncHandler(AuthController.logout));
+router.post("/logout", optionalAuthenticate, asyncHandler(AuthController.logout));
 router.get("/me", authenticate, asyncHandler(AuthController.me));
 
 export default router;

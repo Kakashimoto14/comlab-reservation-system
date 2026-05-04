@@ -11,6 +11,13 @@ export type ReservationStatus =
 export type ReservationType = "LAB" | "PC";
 export type PCStatus = "AVAILABLE" | "OCCUPIED" | "MAINTENANCE";
 export type CalendarEventType = "MAINTENANCE" | "HOLIDAY";
+export type NotificationChannel = "EMAIL" | "IN_APP";
+export type NotificationType =
+  | "RESERVATION_CREATED"
+  | "RESERVATION_CONFIRMED"
+  | "RESERVATION_CANCELLED"
+  | "RESERVATION_REMINDER";
+export type NotificationStatus = "PENDING" | "SENT" | "FAILED";
 
 export type User = {
   id: number;
@@ -165,8 +172,28 @@ export type CalendarResponse = {
 };
 
 export type AuthResponse = {
-  token: string;
   user: User;
+};
+
+export type NotificationRecord = {
+  id: number;
+  userId: number;
+  reservationId?: number | null;
+  channel: NotificationChannel;
+  type: NotificationType;
+  status: NotificationStatus;
+  subject: string;
+  message: string;
+  metadata?: Record<string, unknown> | null;
+  readAt?: string | null;
+  sentAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type NotificationListResponse = {
+  items: NotificationRecord[];
+  unreadCount: number;
 };
 
 export type PasswordActionResponse = {

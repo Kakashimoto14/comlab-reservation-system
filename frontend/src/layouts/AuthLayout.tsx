@@ -6,7 +6,7 @@ export const AuthLayout = () => (
       <div className="flex items-center justify-center py-12 lg:py-20">
         <div className="max-w-xl">
           <span className="rounded-full bg-brand-100 px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-brand-700">
-            BSIT Capstone Demo Project
+            BSIT Capstone Project
           </span>
           <h1 className="mt-6 font-display text-5xl font-bold leading-tight text-slate-900">
             Reserve college computer laboratories with clarity, control, and accountability.

@@ -12,6 +12,6 @@ describe("LandingPage", () => {
     );
 
     expect(screen.getByText("Start Student Registration")).toBeInTheDocument();
-    expect(screen.getByText("Use Demo Accounts")).toBeInTheDocument();
+    expect(screen.getByText("Login to Portal")).toBeInTheDocument();
   });
 });

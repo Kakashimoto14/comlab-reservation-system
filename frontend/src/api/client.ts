@@ -1,7 +1,5 @@
 import axios from "axios";
 
-import { readStoredAuth } from "../utils/authStorage";
-
 const normalizeApiUrl = (value: string) => {
   let normalized = value.trim();
 
@@ -45,19 +43,12 @@ if (!configuredApiUrl && !import.meta.env.DEV) {
 
 const baseURL = normalizeApiUrl(configuredApiUrl || fallbackApiUrl);
 
+export const apiBaseUrl = baseURL;
+
 export const apiClient = axios.create({
   baseURL,
+  withCredentials: true,
   headers: {
     "Content-Type": "application/json"
   }
-});
-
-apiClient.interceptors.request.use((config) => {
-  const storedAuth = readStoredAuth();
-
-  if (storedAuth?.token) {
-    config.headers.Authorization = `Bearer ${storedAuth.token}`;
-  }
-
-  return config;
 });

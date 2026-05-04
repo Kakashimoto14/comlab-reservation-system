@@ -31,7 +31,7 @@ export const LandingPage = () => (
             A polished way to manage computer laboratory reservations, approvals, and reports.
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
-            Built for realistic college demonstrations with role-based dashboards, schedule-aware reservation requests, conflict prevention, and ready-to-use demo data.
+            Built for real academic operations with role-based dashboards, schedule-aware reservation requests, conflict prevention, and accountable workflows.
           </p>
           <div className="mt-8 flex flex-wrap gap-4">
             <Link to="/register">
@@ -41,7 +41,7 @@ export const LandingPage = () => (
               </Button>
             </Link>
             <Link to="/login">
-              <Button variant="outline">Use Demo Accounts</Button>
+              <Button variant="outline">Login to Portal</Button>
             </Link>
           </div>
         </div>

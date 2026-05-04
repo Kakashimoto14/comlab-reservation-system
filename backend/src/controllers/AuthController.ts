@@ -3,20 +3,23 @@ import { StatusCodes } from "http-status-codes";
 
 import { prisma } from "../config/prisma.js";
 import { AuthService } from "../services/AuthService.js";
+import { clearAuthCookie, setAuthCookie } from "../utils/authCookie.js";
 
 const authService = new AuthService(prisma);
 
 export class AuthController {
   static async register(req: Request, res: Response) {
-    const result = await authService.registerStudent(req.body);
+    const { token, user } = await authService.registerStudent(req.body);
 
-    res.status(StatusCodes.CREATED).json(result);
+    setAuthCookie(res, token);
+    res.status(StatusCodes.CREATED).json({ user });
   }
 
   static async login(req: Request, res: Response) {
-    const result = await authService.login(req.body);
+    const { token, user } = await authService.login(req.body);
 
-    res.status(StatusCodes.OK).json(result);
+    setAuthCookie(res, token);
+    res.status(StatusCodes.OK).json({ user });
   }
 
   static async forgotPassword(req: Request, res: Response) {
@@ -44,8 +47,13 @@ export class AuthController {
   }
 
   static async logout(_req: Request, res: Response) {
-    const result = await authService.logout(_req.authUser!.id);
+    if (_req.authUser) {
+      await authService.logout(_req.authUser.id);
+    }
 
-    res.status(StatusCodes.OK).json(result);
+    clearAuthCookie(res);
+    res.status(StatusCodes.OK).json({
+      message: "Logged out successfully."
+    });
   }
 }

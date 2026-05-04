@@ -1,22 +1,39 @@
 import { StatusCodes } from "http-status-codes";
 import type { NextFunction, Request, Response } from "express";
 
+import { env } from "../config/env.js";
 import { ApiError } from "../utils/ApiError.js";
 import { verifyToken } from "../utils/jwt.js";
+
+const extractToken = (req: Request) => {
+  const header = req.headers.authorization;
+
+  if (header?.startsWith("Bearer ")) {
+    return header.replace("Bearer ", "");
+  }
+
+  const cookieToken = req.cookies?.[env.AUTH_COOKIE_NAME];
+
+  if (typeof cookieToken === "string" && cookieToken) {
+    return cookieToken;
+  }
+
+  return null;
+};
 
 export const authenticate = (
   req: Request,
   _res: Response,
   next: NextFunction
 ) => {
-  const header = req.headers.authorization;
+  const token = extractToken(req);
 
-  if (!header || !header.startsWith("Bearer ")) {
+  if (!token) {
     return next(new ApiError(StatusCodes.UNAUTHORIZED, "Authentication required."));
   }
 
   try {
-    const payload = verifyToken(header.replace("Bearer ", ""));
+    const payload = verifyToken(token);
 
     req.authUser = {
       id: payload.id,
@@ -35,14 +52,14 @@ export const optionalAuthenticate = (
   _res: Response,
   next: NextFunction
 ) => {
-  const header = req.headers.authorization;
+  const token = extractToken(req);
 
-  if (!header || !header.startsWith("Bearer ")) {
+  if (!token) {
     return next();
   }
 
   try {
-    const payload = verifyToken(header.replace("Bearer ", ""));
+    const payload = verifyToken(token);
 
     req.authUser = {
       id: payload.id,

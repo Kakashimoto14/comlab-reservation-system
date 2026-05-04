@@ -22,6 +22,9 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   JWT_SECRET: z.string().min(10),
   JWT_EXPIRES_IN: z.string().default("1d"),
+  AUTH_COOKIE_NAME: z.string().min(1).default("comlab_access_token"),
+  AUTH_COOKIE_MAX_AGE_MS: z.coerce.number().int().positive().default(86_400_000),
+  AUTH_COOKIE_SAME_SITE: z.enum(["strict", "lax", "none"]).default("lax"),
   CLIENT_URL: clientUrlSchema,
   APP_BASE_URL: z.string().url().default("http://localhost:5173"),
   RESET_TOKEN_TTL_MINUTES: z.coerce.number().int().positive().default(30),
@@ -50,8 +53,7 @@ const parsedEnv = envSchema.parse(process.env);
 export const env = {
   ...parsedEnv,
   RESET_TOKEN_PREVIEW: parsedEnv.RESET_TOKEN_PREVIEW ?? parsedEnv.NODE_ENV !== "production",
-  ENABLE_DEMO_BOOTSTRAP:
-    parsedEnv.ENABLE_DEMO_BOOTSTRAP ?? parsedEnv.NODE_ENV !== "production",
+  ENABLE_DEMO_BOOTSTRAP: parsedEnv.ENABLE_DEMO_BOOTSTRAP ?? false,
   NOTIFICATION_EMAIL_PREVIEW:
     parsedEnv.NOTIFICATION_EMAIL_PREVIEW ??
     (!parsedEnv.SMTP_HOST || parsedEnv.NODE_ENV !== "production")

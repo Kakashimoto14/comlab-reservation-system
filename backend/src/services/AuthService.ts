@@ -6,7 +6,11 @@ import { StatusCodes } from "http-status-codes";
 import { env } from "../config/env.js";
 import { UserFactory } from "../domain/UserFactory.js";
 import { ApiError } from "../utils/ApiError.js";
-import { signToken } from "../utils/jwt.js";
+import {
+  signAccessToken,
+  signRefreshToken,
+  verifyRefreshToken
+} from "../utils/jwt.js";
 import { ActivityLogService } from "./ActivityLogService.js";
 
 type RegisterStudentInput = {
@@ -44,6 +48,17 @@ type PasswordActionResponse = {
   previewResetUrl?: string;
 };
 
+type AuthSessionMeta = {
+  ipAddress?: string | null;
+  userAgent?: string | null;
+};
+
+type AuthResponse = {
+  accessToken: string;
+  refreshToken: string;
+  user: Awaited<ReturnType<AuthService["getProfile"]>>;
+};
+
 export class AuthService {
   private readonly activityLogService: ActivityLogService;
 
@@ -51,7 +66,7 @@ export class AuthService {
     this.activityLogService = new ActivityLogService(db);
   }
 
-  async registerStudent(input: RegisterStudentInput) {
+  async registerStudent(input: RegisterStudentInput, sessionMeta?: AuthSessionMeta) {
     const existingUser = await this.db.user.findFirst({
       where: {
         OR: [{ email: input.email }, { studentNumber: input.studentNumber }]
@@ -85,10 +100,10 @@ export class AuthService {
       description: `${user.firstName} ${user.lastName} created a student account.`
     });
 
-    return this.buildAuthResponse(user.id, user.email, user.role);
+    return this.buildAuthResponse(user.id, user.email, user.role, sessionMeta);
   }
 
-  async login(input: LoginInput) {
+  async login(input: LoginInput, sessionMeta?: AuthSessionMeta) {
     const user = await this.db.user.findUnique({
       where: { email: input.email }
     });
@@ -120,7 +135,7 @@ export class AuthService {
       description: `${user.firstName} ${user.lastName} signed in.`
     });
 
-    return this.buildAuthResponse(user.id, user.email, user.role);
+    return this.buildAuthResponse(user.id, user.email, user.role, sessionMeta);
   }
 
   async forgotPassword(input: ForgotPasswordInput): Promise<PasswordActionResponse> {
@@ -310,13 +325,190 @@ export class AuthService {
     };
   }
 
-  private async buildAuthResponse(id: number, email: string, role: UserRole) {
-    const user = await this.getProfile(id);
+  async refreshSession(refreshToken: string, sessionMeta?: AuthSessionMeta): Promise<AuthResponse> {
+    let payload: { id: number; sid: number };
+
+    try {
+      payload = verifyRefreshToken(refreshToken);
+    } catch (_error) {
+      throw new ApiError(StatusCodes.UNAUTHORIZED, "Session expired. Please log in again.");
+    }
+
+    const session = await this.db.authSession.findUnique({
+      where: { id: payload.sid },
+      include: { user: true }
+    });
+
+    if (!session) {
+      throw new ApiError(StatusCodes.UNAUTHORIZED, "Session not found. Please log in again.");
+    }
+
+    const isValidToken = session.tokenHash === this.hashRefreshToken(refreshToken);
+    const isExpired = session.expiresAt <= new Date();
+    const isRevoked = Boolean(session.revokedAt);
+
+    if (!isValidToken || isExpired || isRevoked || session.userId !== payload.id) {
+      await this.safeRevokeSession(session.id);
+      throw new ApiError(StatusCodes.UNAUTHORIZED, "Session expired. Please log in again.");
+    }
+
+    const rotatedTokens = await this.rotateSession(session.id, session.userId, {
+      email: session.user.email,
+      role: session.user.role,
+      sessionMeta
+    });
+
+    await this.activityLogService.logActivity({
+      userId: session.userId,
+      action: "REFRESH_SESSION",
+      entityType: "AUTH_SESSION",
+      entityId: session.id,
+      description: `${session.user.firstName} ${session.user.lastName} refreshed their session.`
+    });
 
     return {
-      token: signToken({ id, email, role }),
+      ...rotatedTokens,
+      user: this.toSafeUser(session.user)
+    };
+  }
+
+  async logoutSession(userId: number, refreshToken?: string | null) {
+    const user = await this.db.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      throw new ApiError(StatusCodes.NOT_FOUND, "User account not found.");
+    }
+
+    if (refreshToken) {
+      await this.revokeSessionByTokenHash(this.hashRefreshToken(refreshToken));
+    }
+
+    await this.activityLogService.logActivity({
+      userId,
+      action: "LOGOUT",
+      entityType: "USER",
+      entityId: userId,
+      description: `${user.firstName} ${user.lastName} signed out.`
+    });
+
+    return {
+      message: "Logged out successfully."
+    };
+  }
+
+  async logoutByRefreshToken(refreshToken: string) {
+    await this.revokeSessionByTokenHash(this.hashRefreshToken(refreshToken));
+
+    return {
+      message: "Logged out successfully."
+    };
+  }
+
+  private async buildAuthResponse(
+    id: number,
+    email: string,
+    role: UserRole,
+    sessionMeta?: AuthSessionMeta
+  ): Promise<AuthResponse> {
+    const user = await this.getProfile(id);
+    const tokens = await this.createSessionTokens(id, { email, role, sessionMeta });
+
+    return {
+      ...tokens,
       user
     };
+  }
+
+  private async createSessionTokens(
+    userId: number,
+    input: { email: string; role: UserRole; sessionMeta?: AuthSessionMeta }
+  ) {
+    await this.db.authSession.deleteMany({
+      where: {
+        userId,
+        OR: [{ expiresAt: { lt: new Date() } }, { revokedAt: { not: null } }]
+      }
+    });
+
+    const provisionalToken = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + env.REFRESH_COOKIE_MAX_AGE_MS);
+
+    const session = await this.db.authSession.create({
+      data: {
+        userId,
+        tokenHash: this.hashRefreshToken(provisionalToken),
+        ipAddress: input.sessionMeta?.ipAddress ?? null,
+        userAgent: input.sessionMeta?.userAgent ?? null,
+        expiresAt,
+        lastUsedAt: new Date()
+      }
+    });
+
+    const refreshToken = signRefreshToken({
+      id: userId,
+      sid: session.id
+    });
+
+    await this.db.authSession.update({
+      where: { id: session.id },
+      data: {
+        tokenHash: this.hashRefreshToken(refreshToken)
+      }
+    });
+
+    return {
+      accessToken: signAccessToken({
+        id: userId,
+        email: input.email,
+        role: input.role
+      }),
+      refreshToken
+    };
+  }
+
+  private async rotateSession(
+    sessionId: number,
+    userId: number,
+    input: {
+      email: string;
+      role: UserRole;
+      sessionMeta?: AuthSessionMeta;
+    }
+  ) {
+    await this.db.authSession.update({
+      where: { id: sessionId },
+      data: {
+        revokedAt: new Date()
+      }
+    });
+
+    return this.createSessionTokens(userId, input);
+  }
+
+  private async revokeSessionByTokenHash(tokenHash: string) {
+    await this.db.authSession.updateMany({
+      where: {
+        tokenHash,
+        revokedAt: null
+      },
+      data: {
+        revokedAt: new Date()
+      }
+    });
+  }
+
+  private async safeRevokeSession(sessionId: number) {
+    await this.db.authSession.updateMany({
+      where: {
+        id: sessionId,
+        revokedAt: null
+      },
+      data: {
+        revokedAt: new Date()
+      }
+    });
   }
 
   private toSafeUser(user: Awaited<ReturnType<PrismaClient["user"]["findUnique"]>>) {
@@ -329,6 +521,10 @@ export class AuthService {
   }
 
   private hashResetToken(token: string) {
+    return crypto.createHash("sha256").update(token).digest("hex");
+  }
+
+  private hashRefreshToken(token: string) {
     return crypto.createHash("sha256").update(token).digest("hex");
   }
 

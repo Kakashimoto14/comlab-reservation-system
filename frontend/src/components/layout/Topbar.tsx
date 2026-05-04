@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, ShieldCheck } from "lucide-react";
+import { Bell, CalendarDays, LogOut, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 
@@ -21,7 +21,7 @@ const routeMeta = [
 
 export const Topbar = () => {
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { items, unreadCount, isLoading, markAsRead, markAllAsRead, isMarkingAllAsRead } =
     useNotifications(8);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -102,6 +102,14 @@ export const Topbar = () => {
                 }).format(new Date())}
               </p>
             </div>
+            <button
+              type="button"
+              className="hidden items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 xl:inline-flex"
+              onClick={logout}
+            >
+              <LogOut className="h-4 w-4 text-brand-500" />
+              Logout
+            </button>
             <div className="relative">
               <button
                 type="button"

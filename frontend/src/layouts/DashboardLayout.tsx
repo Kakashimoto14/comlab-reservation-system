@@ -11,7 +11,7 @@ export const DashboardLayout = () => {
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 lg:grid lg:grid-cols-[280px_1fr]">
-      <div className="hidden lg:block">
+      <div className="hidden lg:sticky lg:top-0 lg:block lg:h-screen">
         <Sidebar />
       </div>
 
@@ -23,7 +23,7 @@ export const DashboardLayout = () => {
         </div>
       ) : null}
 
-      <main className="px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
+      <main className="min-w-0 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
         <div className="mb-4 flex justify-end lg:hidden">
           <Button variant="secondary" onClick={() => setOpen(true)}>
             <Menu className="mr-2 h-4 w-4" />

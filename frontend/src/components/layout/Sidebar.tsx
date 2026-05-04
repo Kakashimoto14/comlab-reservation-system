@@ -4,7 +4,7 @@ import { NavLink } from "react-router-dom";
 
 import { useRoleRoutes } from "../../hooks/useRoleRoutes";
 import { useAuth } from "../../store/AuthContext";
-import { APP_NAME } from "../../utils/constants";
+import { APP_NAME, roleLabels } from "../../utils/constants";
 import { Button } from "../ui/Button";
 
 export const Sidebar = () => {
@@ -30,7 +30,7 @@ export const Sidebar = () => {
           {user?.firstName} {user?.lastName}
         </p>
         <p className="mt-1 text-xs uppercase tracking-[0.2em] text-brand-200">
-          {user?.role.replace("_", " ")}
+          {user ? roleLabels[user.role] : "User"}
         </p>
       </div>
 
@@ -54,10 +54,12 @@ export const Sidebar = () => {
         ))}
       </nav>
 
-      <Button variant="secondary" className="mt-6 justify-start" onClick={logout}>
-        <LogOut className="mr-2 h-4 w-4" />
-        Logout
-      </Button>
+      <div className="sticky bottom-0 mt-6 bg-slate-950 pb-1 pt-4">
+        <Button variant="secondary" className="w-full justify-start" onClick={logout}>
+          <LogOut className="mr-2 h-4 w-4" />
+          Logout
+        </Button>
+      </div>
     </aside>
   );
 };

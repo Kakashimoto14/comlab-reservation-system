@@ -41,6 +41,7 @@ router.post(
   asyncHandler(AuthController.register)
 );
 router.post("/login", loginRateLimit, validate(loginSchema), asyncHandler(AuthController.login));
+router.post("/refresh", asyncHandler(AuthController.refresh));
 router.post(
   "/forgot-password",
   passwordResetRateLimit,

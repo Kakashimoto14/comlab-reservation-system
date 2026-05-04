@@ -3,7 +3,7 @@ import type { NextFunction, Request, Response } from "express";
 
 import { env } from "../config/env.js";
 import { ApiError } from "../utils/ApiError.js";
-import { verifyToken } from "../utils/jwt.js";
+import { verifyAccessToken } from "../utils/jwt.js";
 
 const extractToken = (req: Request) => {
   const header = req.headers.authorization;
@@ -33,7 +33,7 @@ export const authenticate = (
   }
 
   try {
-    const payload = verifyToken(token);
+    const payload = verifyAccessToken(token);
 
     req.authUser = {
       id: payload.id,
@@ -59,7 +59,7 @@ export const optionalAuthenticate = (
   }
 
   try {
-    const payload = verifyToken(token);
+    const payload = verifyAccessToken(token);
 
     req.authUser = {
       id: payload.id,

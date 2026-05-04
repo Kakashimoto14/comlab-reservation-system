@@ -1,7 +1,6 @@
 import type { ReservationStatus, UserRole } from "../types/api";
 
 export const APP_NAME = "Web-Based Computer Laboratory Reservation System";
-export const STORAGE_KEY = "comlab-auth";
 
 export const roleLabels: Record<UserRole, string> = {
   ADMIN: "Admin",

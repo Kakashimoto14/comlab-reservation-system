@@ -1,24 +1,61 @@
 import type { Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
 
+import { env } from "../config/env.js";
 import { prisma } from "../config/prisma.js";
 import { AuthService } from "../services/AuthService.js";
-import { clearAuthCookie, setAuthCookie } from "../utils/authCookie.js";
+import {
+  clearAuthCookies,
+  setAccessAuthCookie,
+  setRefreshAuthCookie
+} from "../utils/authCookie.js";
 
 const authService = new AuthService(prisma);
 
+const buildSessionMeta = (req: Request) => ({
+  ipAddress: req.ip ?? null,
+  userAgent: req.get("user-agent") ?? null
+});
+
 export class AuthController {
   static async register(req: Request, res: Response) {
-    const { token, user } = await authService.registerStudent(req.body);
+    const { accessToken, refreshToken, user } = await authService.registerStudent(
+      req.body,
+      buildSessionMeta(req)
+    );
 
-    setAuthCookie(res, token);
+    setAccessAuthCookie(res, accessToken);
+    setRefreshAuthCookie(res, refreshToken);
     res.status(StatusCodes.CREATED).json({ user });
   }
 
   static async login(req: Request, res: Response) {
-    const { token, user } = await authService.login(req.body);
+    const { accessToken, refreshToken, user } = await authService.login(
+      req.body,
+      buildSessionMeta(req)
+    );
 
-    setAuthCookie(res, token);
+    setAccessAuthCookie(res, accessToken);
+    setRefreshAuthCookie(res, refreshToken);
+    res.status(StatusCodes.OK).json({ user });
+  }
+
+  static async refresh(req: Request, res: Response) {
+    const refreshToken = req.cookies?.[env.REFRESH_COOKIE_NAME];
+
+    if (!refreshToken) {
+      clearAuthCookies(res);
+      res.status(StatusCodes.UNAUTHORIZED).json({
+        message: "Session expired. Please log in again."
+      });
+      return;
+    }
+
+    const { accessToken, refreshToken: rotatedRefreshToken, user } =
+      await authService.refreshSession(refreshToken, buildSessionMeta(req));
+
+    setAccessAuthCookie(res, accessToken);
+    setRefreshAuthCookie(res, rotatedRefreshToken);
     res.status(StatusCodes.OK).json({ user });
   }
 
@@ -47,11 +84,18 @@ export class AuthController {
   }
 
   static async logout(_req: Request, res: Response) {
+    const refreshToken = _req.cookies?.[env.REFRESH_COOKIE_NAME] ?? null;
+
     if (_req.authUser) {
-      await authService.logout(_req.authUser.id);
+      await authService.logoutSession(
+        _req.authUser.id,
+        refreshToken
+      );
+    } else if (refreshToken) {
+      await authService.logoutByRefreshToken(refreshToken);
     }
 
-    clearAuthCookie(res);
+    clearAuthCookies(res);
     res.status(StatusCodes.OK).json({
       message: "Logged out successfully."
     });

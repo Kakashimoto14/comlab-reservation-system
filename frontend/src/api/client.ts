@@ -1,4 +1,5 @@
 import axios from "axios";
+import type { AxiosError, InternalAxiosRequestConfig } from "axios";
 
 const normalizeApiUrl = (value: string) => {
   let normalized = value.trim();
@@ -52,3 +53,54 @@ export const apiClient = axios.create({
     "Content-Type": "application/json"
   }
 });
+
+let refreshRequest: Promise<void> | null = null;
+
+type RetriableRequestConfig = InternalAxiosRequestConfig & {
+  _retry?: boolean;
+};
+
+const shouldBypassRefresh = (config?: RetriableRequestConfig) => {
+  const url = config?.url ?? "";
+
+  return ["/auth/login", "/auth/register", "/auth/refresh", "/auth/logout"].some((path) =>
+    url.includes(path)
+  );
+};
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const originalRequest = error.config as RetriableRequestConfig | undefined;
+
+    if (
+      error.response?.status !== 401 ||
+      !originalRequest ||
+      originalRequest._retry ||
+      shouldBypassRefresh(originalRequest)
+    ) {
+      return Promise.reject(error);
+    }
+
+    originalRequest._retry = true;
+
+    refreshRequest ??= axios
+      .post(`${baseURL}/auth/refresh`, undefined, {
+        withCredentials: true,
+        headers: {
+          "Content-Type": "application/json"
+        }
+      })
+      .then(() => undefined)
+      .finally(() => {
+        refreshRequest = null;
+      });
+
+    try {
+      await refreshRequest;
+      return apiClient(originalRequest);
+    } catch (refreshError) {
+      return Promise.reject(refreshError);
+    }
+  }
+);

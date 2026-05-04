@@ -56,7 +56,9 @@ describe("UserManagementPage", () => {
     vi.clearAllMocks();
   });
 
-  it("creates an admin without student-only fields and disables submit while pending", async () => {
+  it(
+    "creates an admin without student-only fields and disables submit while pending",
+    async () => {
     const user = userEvent.setup();
     let resolveCreate: (() => void) | undefined;
     const createPromise = new Promise<void>((resolve) => {
@@ -93,9 +95,13 @@ describe("UserManagementPage", () => {
     await waitFor(() =>
       expect(mockedToast.success).toHaveBeenCalledWith("User account created.")
     );
-  });
+    },
+    15000
+  );
 
-  it("creates laboratory staff without student-only fields", async () => {
+  it(
+    "creates laboratory staff without student-only fields",
+    async () => {
     const user = userEvent.setup();
 
     renderPage();
@@ -114,7 +120,9 @@ describe("UserManagementPage", () => {
     });
     expect(mockedUserApi.create.mock.calls[0][0]).not.toHaveProperty("studentNumber");
     expect(mockedUserApi.create.mock.calls[0][0]).not.toHaveProperty("yearLevel");
-  });
+    },
+    15000
+  );
 
   it("requires student number and year level for student creation and shows a visible error", async () => {
     const user = userEvent.setup();

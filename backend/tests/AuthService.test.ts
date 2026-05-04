@@ -17,6 +17,13 @@ const createMockDb = () =>
       findUnique: vi.fn(),
       update: vi.fn()
     },
+    authSession: {
+      deleteMany: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      findUnique: vi.fn()
+    },
     activityLog: {
       create: vi.fn()
     },
@@ -27,6 +34,10 @@ describe("AuthService", () => {
   it("registers a student and returns a token with a safe user object", async () => {
     const db = createMockDb();
     db.user.findFirst.mockResolvedValue(null);
+    db.authSession.create.mockResolvedValue({
+      id: 21
+    });
+    db.authSession.update.mockResolvedValue(undefined);
     db.user.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
       id: 10,
       firstName: data.firstName,
@@ -75,7 +86,8 @@ describe("AuthService", () => {
       phone: "09171234567"
     });
 
-    expect(result.token).toBeTypeOf("string");
+    expect(result.accessToken).toBeTypeOf("string");
+    expect(result.refreshToken).toBeTypeOf("string");
     expect(result.user.email).toBe("alyssa@student.edu");
     expect("passwordHash" in result.user).toBe(false);
     expect(db.activityLog.create).toHaveBeenCalled();

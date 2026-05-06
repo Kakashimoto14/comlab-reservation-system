@@ -127,7 +127,7 @@ export const Topbar = () => {
               </button>
 
               {notificationsOpen ? (
-                <div className="absolute right-0 z-20 mt-3 w-[22rem] rounded-3xl border border-slate-200 bg-white p-4 shadow-soft">
+                <div className="absolute right-0 z-20 mt-3 w-[min(22rem,calc(100vw-2rem))] max-w-[22rem] rounded-3xl border border-slate-200 bg-white p-4 shadow-soft">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">Notifications</p>

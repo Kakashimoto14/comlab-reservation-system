@@ -14,19 +14,10 @@ type Bucket = {
 };
 
 const buckets = new Map<string, Bucket>();
+const MAX_BUCKETS = 10_000;
 
 const getClientIp = (req: Request) => {
-  const forwardedFor = req.headers["x-forwarded-for"];
-
-  if (typeof forwardedFor === "string") {
-    return forwardedFor.split(",")[0]?.trim() || "unknown";
-  }
-
-  if (Array.isArray(forwardedFor) && forwardedFor.length) {
-    return forwardedFor[0]?.trim() || "unknown";
-  }
-
-  return req.ip || "unknown";
+  return req.ip || req.socket.remoteAddress || "unknown";
 };
 
 const cleanupExpiredBuckets = (now: number) => {
@@ -35,6 +26,18 @@ const cleanupExpiredBuckets = (now: number) => {
       buckets.delete(key);
     }
   });
+};
+
+const enforceBucketLimit = () => {
+  if (buckets.size < MAX_BUCKETS) {
+    return;
+  }
+
+  const oldestKey = buckets.entries().next().value?.[0];
+
+  if (oldestKey) {
+    buckets.delete(oldestKey);
+  }
 };
 
 export const createRateLimiter = ({
@@ -51,6 +54,7 @@ export const createRateLimiter = ({
     const currentBucket = buckets.get(key);
 
     if (!currentBucket || currentBucket.resetAt <= now) {
+      enforceBucketLimit();
       buckets.set(key, {
         count: 1,
         resetAt: now + windowMs

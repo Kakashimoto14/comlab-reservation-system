@@ -76,7 +76,15 @@ export class AuthService {
     if (existingUser) {
       throw new ApiError(
         StatusCodes.CONFLICT,
-        "An account with that email or student number already exists."
+        "An account with that email or student number already exists.",
+        {
+          ...(existingUser.email === input.email
+            ? { email: ["An account with that email already exists."] }
+            : {}),
+          ...(existingUser.studentNumber === input.studentNumber
+            ? { studentNumber: ["That student number is already registered."] }
+            : {})
+        }
       );
     }
 
@@ -178,8 +186,6 @@ export class AuthService {
 
     const previewResetUrl = this.buildResetUrl(rawToken);
 
-    console.info(`Password reset link generated for ${user.email}: ${previewResetUrl}`);
-
     await this.activityLogService.logActivity({
       userId: user.id,
       action: "REQUEST_PASSWORD_RESET",
@@ -220,6 +226,15 @@ export class AuthService {
         where: { id: passwordResetToken.userId },
         data: { passwordHash }
       }),
+      this.db.authSession.updateMany({
+        where: {
+          userId: passwordResetToken.userId,
+          revokedAt: null
+        },
+        data: {
+          revokedAt: new Date()
+        }
+      }),
       this.db.passwordResetToken.update({
         where: { id: passwordResetToken.id },
         data: { usedAt: new Date() }
@@ -247,6 +262,7 @@ export class AuthService {
 
   async changePassword(
     userId: number,
+    sessionId: number,
     input: ChangePasswordInput
   ): Promise<PasswordActionResponse> {
     const user = await this.db.user.findUnique({
@@ -272,6 +288,15 @@ export class AuthService {
       this.db.user.update({
         where: { id: userId },
         data: { passwordHash }
+      }),
+      this.db.authSession.updateMany({
+        where: {
+          id: sessionId,
+          revokedAt: null
+        },
+        data: {
+          revokedAt: new Date()
+        }
       }),
       this.db.passwordResetToken.deleteMany({
         where: { userId }
@@ -346,8 +371,9 @@ export class AuthService {
     const isValidToken = session.tokenHash === this.hashRefreshToken(refreshToken);
     const isExpired = session.expiresAt <= new Date();
     const isRevoked = Boolean(session.revokedAt);
+    const isActive = session.user.status === "ACTIVE";
 
-    if (!isValidToken || isExpired || isRevoked || session.userId !== payload.id) {
+    if (!isValidToken || isExpired || isRevoked || !isActive || session.userId !== payload.id) {
       await this.safeRevokeSession(session.id);
       throw new ApiError(StatusCodes.UNAUTHORIZED, "Session expired. Please log in again.");
     }
@@ -461,6 +487,7 @@ export class AuthService {
     return {
       accessToken: signAccessToken({
         id: userId,
+        sid: session.id,
         email: input.email,
         role: input.role
       }),

@@ -130,6 +130,12 @@ export const App = () => (
             <Route element={<ProtectedRoute />}>
               <Route element={<DashboardLayout />}>
                 <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/laboratory-guide" element={<LaboratoriesPage />} />
+              </Route>
+            </Route>
+
+            <Route element={<ProtectedRoute allowedRoles={["STUDENT"]} />}>
+              <Route element={<DashboardLayout />}>
                 <Route path="/student/dashboard" element={<StudentDashboardPage />} />
                 <Route path="/student/laboratories" element={<LaboratoriesPage />} />
                 <Route path="/student/laboratories/:id" element={<LaboratoryDetailsPage />} />

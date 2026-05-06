@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AxiosError } from "axios";
 import {
   CheckCircle2,
@@ -132,6 +132,12 @@ export const ReservationManagementPage = () => {
   }, [dateFilter, laboratoryFilter, reservations, sortBy, statusFilter, studentFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredReservations.length / PAGE_SIZE));
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const paginatedReservations = useMemo(() => {
     const startIndex = (currentPage - 1) * PAGE_SIZE;
@@ -348,7 +354,58 @@ export const ReservationManagementPage = () => {
           </div>
         ) : filteredReservations.length ? (
           <>
-            <div className="overflow-x-auto">
+            <div className="space-y-3 md:hidden">
+              {paginatedReservations.map((reservation) => (
+                <div key={reservation.id} className="rounded-2xl border border-slate-200 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-900">{reservation.reservationCode}</p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {formatDate(reservation.reservationDate)} •{" "}
+                        {formatTimeRange(reservation.startTime, reservation.endTime)}
+                      </p>
+                    </div>
+                    <StatusBadge status={reservation.status} />
+                  </div>
+                  <p className="mt-3 text-sm text-slate-700">
+                    {fullName(reservation.student?.firstName, reservation.student?.lastName)}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {reservation.laboratory?.roomCode} •{" "}
+                    {reservation.pc?.pcNumber ?? reservation.reservationType}
+                  </p>
+                  <p className="mt-2 text-sm text-slate-500">{reservation.purpose}</p>
+                  {reservation.remarks ? (
+                    <p className="mt-2 text-sm text-slate-500">{reservation.remarks}</p>
+                  ) : null}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setSelectedReservation(reservation);
+                        setRemarks(reservation.remarks ?? "");
+                      }}
+                    >
+                      View
+                    </Button>
+                    {reservation.status === "APPROVED" ? (
+                      <Button
+                        onClick={() =>
+                          completeMutation.mutate({
+                            id: reservation.id,
+                            remarks: reservation.remarks ?? undefined
+                          })
+                        }
+                      >
+                        Mark Complete
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
               <table className="min-w-full divide-y divide-slate-200 text-sm">
                 <thead>
                   <tr className="text-left text-slate-500">

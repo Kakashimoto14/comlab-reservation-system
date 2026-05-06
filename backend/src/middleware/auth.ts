@@ -1,6 +1,7 @@
 import { StatusCodes } from "http-status-codes";
 import type { NextFunction, Request, Response } from "express";
 
+import { prisma } from "../config/prisma.js";
 import { env } from "../config/env.js";
 import { ApiError } from "../utils/ApiError.js";
 import { verifyAccessToken } from "../utils/jwt.js";
@@ -21,11 +22,7 @@ const extractToken = (req: Request) => {
   return null;
 };
 
-export const authenticate = (
-  req: Request,
-  _res: Response,
-  next: NextFunction
-) => {
+export const authenticate = async (req: Request, _res: Response, next: NextFunction) => {
   const token = extractToken(req);
 
   if (!token) {
@@ -35,10 +32,37 @@ export const authenticate = (
   try {
     const payload = verifyAccessToken(token);
 
+    if (!Number.isInteger(payload.sid)) {
+      throw new ApiError(StatusCodes.UNAUTHORIZED, "Invalid or expired token.");
+    }
+
+    const session = await prisma.authSession.findUnique({
+      where: { id: payload.sid },
+      include: { user: true }
+    });
+
+    if (
+      !session ||
+      session.userId !== payload.id ||
+      session.revokedAt !== null ||
+      session.expiresAt <= new Date() ||
+      session.user.status !== "ACTIVE"
+    ) {
+      if (session?.revokedAt === null) {
+        await prisma.authSession.updateMany({
+          where: { id: session.id, revokedAt: null },
+          data: { revokedAt: new Date() }
+        });
+      }
+
+      throw new ApiError(StatusCodes.UNAUTHORIZED, "Invalid or expired token.");
+    }
+
     req.authUser = {
-      id: payload.id,
-      email: payload.email,
-      role: payload.role as NonNullable<Request["authUser"]>["role"]
+      id: session.user.id,
+      sessionId: session.id,
+      email: session.user.email,
+      role: session.user.role
     };
 
     return next();
@@ -47,11 +71,7 @@ export const authenticate = (
   }
 };
 
-export const optionalAuthenticate = (
-  req: Request,
-  _res: Response,
-  next: NextFunction
-) => {
+export const optionalAuthenticate = async (req: Request, _res: Response, next: NextFunction) => {
   const token = extractToken(req);
 
   if (!token) {
@@ -61,11 +81,36 @@ export const optionalAuthenticate = (
   try {
     const payload = verifyAccessToken(token);
 
-    req.authUser = {
-      id: payload.id,
-      email: payload.email,
-      role: payload.role as NonNullable<Request["authUser"]>["role"]
-    };
+    if (!Number.isInteger(payload.sid)) {
+      req.authUser = undefined;
+      return next();
+    }
+
+    const session = await prisma.authSession.findUnique({
+      where: { id: payload.sid },
+      include: { user: true }
+    });
+
+    if (
+      session &&
+      session.userId === payload.id &&
+      session.revokedAt === null &&
+      session.expiresAt > new Date() &&
+      session.user.status === "ACTIVE"
+    ) {
+      req.authUser = {
+        id: session.user.id,
+        sessionId: session.id,
+        email: session.user.email,
+        role: session.user.role
+      };
+    } else if (session?.revokedAt === null) {
+      await prisma.authSession.updateMany({
+        where: { id: session.id, revokedAt: null },
+        data: { revokedAt: new Date() }
+      });
+      req.authUser = undefined;
+    }
   } catch (_error) {
     req.authUser = undefined;
   }

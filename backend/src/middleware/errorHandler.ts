@@ -18,14 +18,26 @@ export const errorHandler = (
 ) => {
   if (error instanceof ApiError) {
     return res.status(error.statusCode).json({
-      message: error.message
+      message: error.message,
+      ...(error.errors ? { errors: error.errors } : {})
     });
   }
 
   if (error instanceof ZodError) {
+    const errors = error.issues.reduce<Record<string, string[]>>((accumulator, issue) => {
+      const path = issue.path.filter(
+        (segment) => segment !== "body" && segment !== "params" && segment !== "query"
+      );
+      const key = path.length ? path.join(".") : "form";
+
+      accumulator[key] ??= [];
+      accumulator[key].push(issue.message);
+      return accumulator;
+    }, {});
+
     return res.status(StatusCodes.BAD_REQUEST).json({
       message: "Validation failed.",
-      errors: error.flatten()
+      errors
     });
   }
 

@@ -5,6 +5,7 @@ declare global {
     interface Request {
       authUser?: {
         id: number;
+        sessionId: number;
         email: string;
         role: UserRole;
       };

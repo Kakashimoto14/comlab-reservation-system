@@ -1,4 +1,4 @@
-import type { PrismaClient, UserRole, UserStatus } from "@prisma/client";
+import type { Prisma, PrismaClient, UserRole, UserStatus } from "@prisma/client";
 import bcrypt from "bcrypt";
 import { StatusCodes } from "http-status-codes";
 
@@ -29,6 +29,8 @@ type UpdateProfileInput = {
   yearLevel?: number;
   phone?: string;
 };
+
+type DbClient = PrismaClient | Prisma.TransactionClient;
 
 export class UserService {
   private readonly activityLogService: ActivityLogService;
@@ -87,7 +89,17 @@ export class UserService {
     if (existingUser) {
       throw new ApiError(
         StatusCodes.CONFLICT,
-        "A user with the same email or student number already exists."
+        "A user with the same email or student number already exists.",
+        {
+          ...(existingUser.email === normalizedInput.email
+            ? { email: ["An account with that email already exists."] }
+            : {}),
+          ...(existingUser.studentNumber &&
+          normalizedInput.studentNumber &&
+          existingUser.studentNumber === normalizedInput.studentNumber
+            ? { studentNumber: ["That student number is already registered."] }
+            : {})
+        }
       );
     }
 
@@ -136,23 +148,46 @@ export class UserService {
     if (duplicateUser) {
       throw new ApiError(
         StatusCodes.CONFLICT,
-        "Another user already uses that email or student number."
+        "Another user already uses that email or student number.",
+        {
+          ...(input.email && duplicateUser.email === input.email
+            ? { email: ["Another user already uses that email."] }
+            : {}),
+          ...(roleAwareUpdateData.studentNumber &&
+          duplicateUser.studentNumber === roleAwareUpdateData.studentNumber
+            ? { studentNumber: ["Another user already uses that student number."] }
+            : {})
+        }
       );
     }
 
-    const updatedUser = await this.db.user.update({
-      where: { id: userId },
-      data: {
-        firstName: input.firstName,
-        lastName: input.lastName,
-        email: input.email,
-        role: input.role,
-        ...roleAwareUpdateData,
-        department: input.department,
-        phone: input.phone,
-        status: input.status,
-        ...(input.password ? { passwordHash: await bcrypt.hash(input.password, 10) } : {})
+    const shouldRevokeSessions =
+      (typeof input.role !== "undefined" && input.role !== user.role) ||
+      (typeof input.status !== "undefined" && input.status !== user.status);
+
+    const passwordHash = input.password ? await bcrypt.hash(input.password, 10) : undefined;
+
+    const updatedUser = await this.db.$transaction(async (tx) => {
+      const nextUser = await tx.user.update({
+        where: { id: userId },
+        data: {
+          firstName: input.firstName,
+          lastName: input.lastName,
+          email: input.email,
+          role: input.role,
+          ...roleAwareUpdateData,
+          department: input.department,
+          phone: input.phone,
+          status: input.status,
+          ...(passwordHash ? { passwordHash } : {})
+        }
+      });
+
+      if (shouldRevokeSessions) {
+        await this.revokeActiveSessions(tx, userId);
       }
+
+      return nextUser;
     });
 
     await this.activityLogService.logActivity({
@@ -174,9 +209,15 @@ export class UserService {
       throw new ApiError(StatusCodes.NOT_FOUND, "User account not found.");
     }
 
-    const updatedUser = await this.db.user.update({
-      where: { id: userId },
-      data: { status }
+    const updatedUser = await this.db.$transaction(async (tx) => {
+      const nextUser = await tx.user.update({
+        where: { id: userId },
+        data: { status }
+      });
+
+      await this.revokeActiveSessions(tx, userId);
+
+      return nextUser;
     });
 
     await this.activityLogService.logActivity({
@@ -219,5 +260,17 @@ export class UserService {
 
     const { passwordHash: _passwordHash, ...safeUser } = updatedUser;
     return safeUser;
+  }
+
+  private async revokeActiveSessions(dbClient: DbClient, userId: number) {
+    await dbClient.authSession.updateMany({
+      where: {
+        userId,
+        revokedAt: null
+      },
+      data: {
+        revokedAt: new Date()
+      }
+    });
   }
 }

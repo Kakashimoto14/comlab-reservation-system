@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import type { PrismaClient, ScheduleStatus, UserRole } from "@prisma/client";
 import { StatusCodes } from "http-status-codes";
 
@@ -20,6 +21,8 @@ type CurrentUser = {
   id: number;
   role: UserRole;
 };
+
+type DbClient = PrismaClient | Prisma.TransactionClient;
 
 export class ScheduleService {
   private readonly activityLogService: ActivityLogService;
@@ -82,20 +85,31 @@ export class ScheduleService {
     await this.staffAccessService.ensureCanManageLab(currentUser, input.laboratoryId);
     await this.laboratoryService.ensureLaboratoryIsAvailable(input.laboratoryId);
     this.validateTimeRange(input.startTime, input.endTime);
-    await this.ensureNoOverlap(input.laboratoryId, input.date, input.startTime, input.endTime);
+    
+    const schedule = await this.db.$transaction(async (tx) => {
+      await this.lockLaboratories(tx, [input.laboratoryId]);
+      await this.ensureNoOverlap(
+        input.laboratoryId,
+        input.date,
+        input.startTime,
+        input.endTime,
+        undefined,
+        tx
+      );
 
-    const schedule = await this.db.schedule.create({
-      data: {
-        laboratoryId: input.laboratoryId,
-        date: toDateOnly(input.date),
-        startTime: input.startTime,
-        endTime: input.endTime,
-        status: input.status,
-        createdById: currentUser.id
-      },
-      include: {
-        laboratory: true
-      }
+      return tx.schedule.create({
+        data: {
+          laboratoryId: input.laboratoryId,
+          date: toDateOnly(input.date),
+          startTime: input.startTime,
+          endTime: input.endTime,
+          status: input.status,
+          createdById: currentUser.id
+        },
+        include: {
+          laboratory: true
+        }
+      });
     });
 
     await this.activityLogService.logActivity({
@@ -113,7 +127,7 @@ export class ScheduleService {
   async updateSchedule(id: number, input: ScheduleInput, currentUser: CurrentUser) {
     const schedule = await this.db.schedule.findUnique({
       where: { id },
-      include: { laboratory: true }
+      include: { laboratory: true, reservations: { select: { id: true } } }
     });
 
     if (!schedule) {
@@ -128,26 +142,45 @@ export class ScheduleService {
 
     await this.laboratoryService.ensureLaboratoryIsAvailable(input.laboratoryId);
     this.validateTimeRange(input.startTime, input.endTime);
-    await this.ensureNoOverlap(
-      input.laboratoryId,
-      input.date,
-      input.startTime,
-      input.endTime,
-      id
-    );
+    const hasReservations = schedule.reservations.length > 0;
+    const hasMutation =
+      input.laboratoryId !== schedule.laboratoryId ||
+      toDateOnly(input.date).getTime() !== schedule.date.getTime() ||
+      input.startTime !== schedule.startTime ||
+      input.endTime !== schedule.endTime ||
+      input.status !== schedule.status;
 
-    const updatedSchedule = await this.db.schedule.update({
-      where: { id },
-      data: {
-        laboratoryId: input.laboratoryId,
-        date: toDateOnly(input.date),
-        startTime: input.startTime,
-        endTime: input.endTime,
-        status: input.status
-      },
-      include: {
-        laboratory: true
-      }
+    if (hasReservations && hasMutation) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        "Schedules with reservation history cannot be modified."
+      );
+    }
+
+    const updatedSchedule = await this.db.$transaction(async (tx) => {
+      await this.lockLaboratories(tx, [schedule.laboratoryId, input.laboratoryId]);
+      await this.ensureNoOverlap(
+        input.laboratoryId,
+        input.date,
+        input.startTime,
+        input.endTime,
+        id,
+        tx
+      );
+
+      return tx.schedule.update({
+        where: { id },
+        data: {
+          laboratoryId: input.laboratoryId,
+          date: toDateOnly(input.date),
+          startTime: input.startTime,
+          endTime: input.endTime,
+          status: input.status
+        },
+        include: {
+          laboratory: true
+        }
+      });
     });
 
     await this.activityLogService.logActivity({
@@ -248,9 +281,10 @@ export class ScheduleService {
     date: string,
     startTime: string,
     endTime: string,
-    excludeId?: number
+    excludeId?: number,
+    dbClient: DbClient = this.db
   ) {
-    const schedules = await this.db.schedule.findMany({
+    const schedules = await dbClient.schedule.findMany({
       where: {
         laboratoryId,
         date: toDateOnly(date),
@@ -273,6 +307,21 @@ export class ScheduleService {
         "The selected schedule overlaps with an existing schedule."
       );
     }
+  }
+
+  private async lockLaboratories(tx: Prisma.TransactionClient, laboratoryIds: number[]) {
+    const uniqueLaboratoryIds = [...new Set(laboratoryIds)].sort((left, right) => left - right);
+
+    if (uniqueLaboratoryIds.length === 0) {
+      return;
+    }
+
+    await tx.$queryRaw`
+      SELECT id
+      FROM Laboratory
+      WHERE id IN (${Prisma.join(uniqueLaboratoryIds)})
+      FOR UPDATE
+    `;
   }
 
   private async resolveAccessibleLaboratoryIds(

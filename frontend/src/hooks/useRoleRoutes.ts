@@ -61,7 +61,7 @@ export const useRoleRoutes = () => {
     if (isManagementRole(user.role)) {
       items.push({
         label: "Laboratory Guide",
-        to: "/student/laboratories",
+        to: "/laboratory-guide",
         icon: BookOpen
       });
     }

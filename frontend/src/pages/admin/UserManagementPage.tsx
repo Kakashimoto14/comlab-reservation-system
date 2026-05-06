@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { SubmitErrorHandler } from "react-hook-form";
 import { useForm } from "react-hook-form";
 import { AxiosError } from "axios";
@@ -24,6 +24,7 @@ const requiredStudentMessage = "Student number is required for student accounts.
 const requiredYearLevelMessage = "Year level is required for student accounts.";
 const invalidUserFormMessage =
   "Please correct the highlighted fields before submitting the user form.";
+const PAGE_SIZE = 10;
 
 const optionalTextField = z.preprocess((value) => {
   if (typeof value !== "string") {
@@ -52,7 +53,16 @@ const userSchema = z
     firstName: z.string().trim().min(2),
     lastName: z.string().trim().min(2),
     email: z.string().email(),
-    password: z.string().trim().min(8).optional().or(z.literal("")),
+    password: z
+      .string()
+      .trim()
+      .min(10, "Password must be at least 10 characters.")
+      .regex(/[a-z]/, "Password must include a lowercase letter.")
+      .regex(/[A-Z]/, "Password must include an uppercase letter.")
+      .regex(/\d/, "Password must include a number.")
+      .regex(/[^A-Za-z0-9]/, "Password must include a special character.")
+      .optional()
+      .or(z.literal("")),
     role: z.enum(["ADMIN", "STUDENT", "LABORATORY_STAFF"]),
     studentNumber: optionalTextField,
     department: optionalTextField,
@@ -134,10 +144,23 @@ export const UserManagementPage = () => {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [statusTargetUser, setStatusTargetUser] = useState<User | null>(null);
   const [formErrorMessage, setFormErrorMessage] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const { data, isLoading } = useQuery({
     queryKey: ["users"],
     queryFn: userApi.list
   });
+  const users = data ?? [];
+  const totalPages = Math.max(1, Math.ceil(users.length / PAGE_SIZE));
+  const paginatedUsers = useMemo(() => {
+    const startIndex = (currentPage - 1) * PAGE_SIZE;
+    return users.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [currentPage, users]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const {
     register,
@@ -257,9 +280,50 @@ export const UserManagementPage = () => {
       <Card>
         {isLoading ? (
           <div>Loading users...</div>
-        ) : data?.length ? (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
+        ) : users.length ? (
+          <>
+            <div className="space-y-3 md:hidden">
+              {paginatedUsers.map((user) => (
+                <div key={user.id} className="rounded-2xl border border-slate-200 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-900">
+                        {user.firstName} {user.lastName}
+                      </p>
+                      <p className="mt-1 break-all text-sm text-slate-500">{user.email}</p>
+                    </div>
+                    <StatusBadge status={user.status} />
+                  </div>
+                  <p className="mt-3 text-sm text-slate-600">{user.role.replace("_", " ")}</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {user.department ?? "Not specified"}
+                  </p>
+                  {user.studentNumber ? (
+                    <p className="mt-1 text-sm text-slate-500">{user.studentNumber}</p>
+                  ) : null}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setSelectedUser(user);
+                        setOpen(true);
+                      }}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant={user.status === "ACTIVE" ? "danger" : "secondary"}
+                      onClick={() => setStatusTargetUser(user)}
+                    >
+                      {user.status === "ACTIVE" ? "Deactivate" : "Activate"}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
+              <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead>
                 <tr className="text-left text-slate-500">
                   <th className="py-3 pr-4">User</th>
@@ -269,8 +333,8 @@ export const UserManagementPage = () => {
                   <th className="py-3">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {data.map((user) => (
+                <tbody className="divide-y divide-slate-100">
+                  {paginatedUsers.map((user) => (
                   <tr key={user.id}>
                     <td className="py-4 pr-4">
                       <p className="font-semibold text-slate-900">
@@ -308,10 +372,37 @@ export const UserManagementPage = () => {
                       </div>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-6 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-slate-500">
+                Showing {(currentPage - 1) * PAGE_SIZE + 1}-
+                {Math.min(currentPage * PAGE_SIZE, users.length)} of {users.length} users
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage((page) => page - 1)}
+                >
+                  Previous
+                </Button>
+                <span className="rounded-xl bg-slate-100 px-3 py-2 text-sm font-medium text-slate-600">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <Button
+                  variant="secondary"
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage((page) => page + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          </>
         ) : (
           <EmptyState
             title="No users available"

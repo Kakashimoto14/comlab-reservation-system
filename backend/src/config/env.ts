@@ -53,6 +53,14 @@ const envSchema = z.object({
 });
 
 const parsedEnv = envSchema.parse(process.env);
+
+if (
+  parsedEnv.NODE_ENV === "production" &&
+  parsedEnv.JWT_REFRESH_SECRET === "change-me-refresh-secret"
+) {
+  throw new Error("JWT_REFRESH_SECRET must be explicitly set in production.");
+}
+
 const resolvedSameSite =
   parsedEnv.AUTH_COOKIE_SAME_SITE ?? (parsedEnv.NODE_ENV === "production" ? "none" : "lax");
 

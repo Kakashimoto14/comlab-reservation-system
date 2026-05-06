@@ -8,7 +8,6 @@ const timeSchema = z
 export const createReservationSchema = z.object({
   body: z
     .object({
-      userId: z.coerce.number().int().positive().optional(),
       scheduleId: z.coerce.number().int().positive(),
       laboratoryId: z.coerce.number().int().positive(),
       reservationType: z.enum(["LAB", "PC"]).default("LAB"),

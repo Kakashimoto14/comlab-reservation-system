@@ -149,8 +149,6 @@ async function main() {
   await prisma.pC.createMany({ 
     data: pcData 
   });
-  });
-  });
 
   const labPcs = await Promise.all(
     laboratories.map((laboratory) =>

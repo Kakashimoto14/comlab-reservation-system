@@ -137,6 +137,7 @@ async function main() {
     })
   ]);
 
+  // 1. Prepare the PC data array
   const pcData = laboratories.flatMap((laboratory) =>
     Array.from({ length: laboratory.computerCount }, (_, index) => ({
       laboratoryId: laboratory.id,
@@ -147,6 +148,7 @@ async function main() {
 
   await prisma.pC.createMany({ 
     data: pcData 
+  });
   });
   });
 

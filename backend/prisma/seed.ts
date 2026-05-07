@@ -137,19 +137,17 @@ async function main() {
     })
   ]);
 
-  await Promise.all(
-    laboratories.flatMap((laboratory) =>
-      Array.from({ length: laboratory.computerCount }, (_, index) =>
-        prisma.pC.create({
-          data: {
-            laboratoryId: laboratory.id,
-            pcNumber: `PC-${String(index + 1).padStart(2, "0")}`,
-            status: laboratory.id === laboratories[0].id && index < 2 ? "OCCUPIED" : "AVAILABLE"
-          }
-        })
-      )
-    )
+  const pcData = laboratories.flatMap((laboratory) =>
+    Array.from({ length: laboratory.computerCount }, (_, index) => ({
+      laboratoryId: laboratory.id,
+      pcNumber: `PC-${String(index + 1).padStart(2, "0")}`,
+      status: laboratory.id === laboratories[0].id && index < 2 ? "OCCUPIED" : "AVAILABLE"
+    }))
   );
+
+  await prisma.pC.createMany({ 
+    data: pcData 
+  });
 
   const labPcs = await Promise.all(
     laboratories.map((laboratory) =>

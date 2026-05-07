@@ -20,6 +20,8 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(5000),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   DATABASE_URL: z.string().min(1),
+  DATABASE_SSL_ACCEPT: z.enum(["strict", "accept_invalid_certs"]).optional(),
+  DATABASE_SSL_CERT_PATH: z.string().min(1).optional(),
   JWT_SECRET: z.string().min(10),
   JWT_EXPIRES_IN: z.string().default("1d"),
   JWT_REFRESH_SECRET: z.string().min(10).default("change-me-refresh-secret"),

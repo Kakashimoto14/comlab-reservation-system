@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/src/server.js",
-    "start:deploy": "npm run prisma:deploy && node dist/src/server.js",
+    "postinstall": "prisma generate",
+    "start": "npm run start:deploy",
+    "start:server": "node dist/src/server.js",
+    "start:deploy": "prisma generate && prisma migrate deploy && npm run start:server",
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -29,6 +31,7 @@
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "nodemailer": "^6.10.1",
+    "prisma": "^6.6.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
@@ -40,7 +43,6 @@
     "@types/morgan": "^1.9.9",
     "@types/node": "^22.13.11",
     "@types/nodemailer": "^6.4.23",
-    "prisma": "^6.6.0",
     "supertest": "^7.0.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",

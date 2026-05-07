@@ -141,12 +141,13 @@ async function main() {
     Array.from({ length: laboratory.computerCount }, (_, index) => ({
       laboratoryId: laboratory.id,
       pcNumber: `PC-${String(index + 1).padStart(2, "0")}`,
-      status: laboratory.id === laboratories[0].id && index < 2 ? "OCCUPIED" : "AVAILABLE"
+      status: (laboratory.id === laboratories[0].id && index < 2 ? "OCCUPIED" : "AVAILABLE") as "OCCUPIED" | "AVAILABLE"
     }))
   );
 
   await prisma.pC.createMany({ 
     data: pcData 
+  });
   });
 
   const labPcs = await Promise.all(

@@ -30,9 +30,6 @@ const resolveDatasourceUrl = () => {
     return env.DATABASE_URL;
   }
 
-  // Normalize provider-specific SSL flags into Prisma's supported MySQL parameters.
-  connectionUrl.searchParams.delete("ssl-mode");
-  connectionUrl.searchParams.delete("sslmode");
   connectionUrl.searchParams.set(
     "sslaccept",
     env.DATABASE_SSL_ACCEPT ?? "strict"

@@ -3,11 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "postinstall": "prisma generate",
-    "start": "npm run start:deploy",
+    "start": "node dist/src/server.js",
     "start:server": "node dist/src/server.js",
     "start:deploy": "prisma generate && prisma migrate deploy && npm run start:server",
     "lint": "tsc --noEmit",

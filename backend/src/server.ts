@@ -24,7 +24,7 @@ async function startServer() {
   reservationReminderService.start();
   console.info("[startup] Notification handlers and reminder worker started.");
 
-  const server = app.listen(env.PORT, () => {
+  const server = app.listen(env.PORT, "0.0.0.0", () => {
     console.info(`[startup] Backend server running on port ${env.PORT}.`);
     console.info(`[startup] Environment: ${env.NODE_ENV}.`);
     console.info("[startup] API health check available at /api/health.");

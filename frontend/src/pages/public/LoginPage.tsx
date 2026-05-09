@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { AxiosError } from "axios";
-import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useState } from "react";
+import { useForm, type SubmitErrorHandler } from "react-hook-form";
 import toast from "react-hot-toast";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { z } from "zod";
@@ -23,6 +23,7 @@ export const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { login, logout, user } = useAuth();
+  const [formErrorMessage, setFormErrorMessage] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -42,6 +43,8 @@ export const LoginPage = () => {
   }, [navigate, user]);
 
   const onSubmit = async (values: LoginFormValues) => {
+    setFormErrorMessage(null);
+
     try {
       const response = await login(values);
       toast.success("Welcome back.");
@@ -53,8 +56,17 @@ export const LoginPage = () => {
       const message =
         (error as AxiosError<{ message?: string }>).response?.data?.message ??
         "Login failed. Please check your credentials.";
+      setFormErrorMessage(message);
       toast.error(message);
     }
+  };
+
+  const onInvalid: SubmitErrorHandler<LoginFormValues> = (formErrors) => {
+    const firstErrorMessage = Object.values(formErrors).find(
+      (error): error is { message?: string } => Boolean(error?.message)
+    )?.message;
+
+    setFormErrorMessage(firstErrorMessage ?? "Please review the highlighted fields.");
   };
 
   const resetSession = () => {
@@ -77,14 +89,23 @@ export const LoginPage = () => {
         </p>
       </div>
 
-      <form className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
+      <form className="space-y-5" onSubmit={handleSubmit(onSubmit, onInvalid)}>
         <FormField label="Email" error={errors.email?.message}>
-          <Input type="email" {...register("email")} />
+          <Input type="email" inputMode="email" autoComplete="email" {...register("email")} />
         </FormField>
 
         <FormField label="Password" error={errors.password?.message}>
-          <Input type="password" {...register("password")} />
+          <Input type="password" autoComplete="current-password" {...register("password")} />
         </FormField>
+
+        {formErrorMessage ? (
+          <div
+            className="rounded-2xl border border-danger/20 bg-red-50 px-4 py-3 text-sm text-danger"
+            role="alert"
+          >
+            {formErrorMessage}
+          </div>
+        ) : null}
 
         <Button type="submit" fullWidth disabled={isSubmitting}>
           {isSubmitting ? "Signing in..." : "Login"}

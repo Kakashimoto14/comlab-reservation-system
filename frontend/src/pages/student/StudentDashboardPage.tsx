@@ -18,7 +18,20 @@ export const StudentDashboardPage = () => {
   });
 
   if (isLoading) {
-    return <div>Loading dashboard...</div>;
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Student Dashboard"
+          description="Loading your reservation summary and latest activity..."
+        />
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Card key={index} className="h-36 animate-pulse bg-slate-100" />
+          ))}
+        </div>
+        <Card className="h-72 animate-pulse bg-slate-100" />
+      </div>
+    );
   }
 
   return (

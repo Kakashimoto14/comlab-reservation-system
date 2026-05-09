@@ -183,9 +183,16 @@ export const optionalYearLevelSchema = z.preprocess(
   z.enum(YEAR_LEVEL_OPTIONS).optional()
 );
 
+export const roleSchema = z.enum(["ADMIN", "STUDENT", "LABORATORY_STAFF"]);
+
 type StudentRoleFields = {
   role: UserRole;
   studentNumber?: string;
+  yearLevel?: string;
+};
+
+type YearLevelRoleFields = {
+  role: UserRole;
   yearLevel?: string;
 };
 
@@ -229,6 +236,93 @@ export const validateStudentFieldsForRole = (
     });
   }
 };
+
+export const validateYearLevelForRole = (
+  values: YearLevelRoleFields,
+  context: z.RefinementCtx
+) => {
+  if (values.role === "STUDENT") {
+    if (!values.yearLevel) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Year level is required for student accounts.",
+        path: ["yearLevel"]
+      });
+    }
+
+    return;
+  }
+
+  if (values.yearLevel) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Only student accounts can store a year level.",
+      path: ["yearLevel"]
+    });
+  }
+};
+
+const optionalPasswordSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") {
+      return value;
+    }
+
+    const trimmedValue = value.trim();
+    return trimmedValue === "" ? undefined : trimmedValue;
+  },
+  passwordSchema.optional()
+);
+
+export const buildStudentRegistrationSchema = () =>
+  z.object({
+    firstName: requiredNameSchema("First name"),
+    lastName: requiredNameSchema("Last name"),
+    email: emailSchema,
+    password: passwordSchema,
+    studentNumber: studentNumberSchema,
+    department: departmentSchema,
+    yearLevel: yearLevelSchema,
+    phone: phoneSchema
+  });
+
+export const buildManagedUserSchema = () =>
+  z
+    .object({
+      firstName: requiredNameSchema("First name"),
+      lastName: requiredNameSchema("Last name"),
+      email: emailSchema,
+      password: optionalPasswordSchema,
+      role: roleSchema,
+      studentNumber: optionalStudentNumberSchema,
+      department: optionalDepartmentSchema,
+      yearLevel: optionalYearLevelSchema,
+      phone: optionalPhoneSchema
+    })
+    .superRefine(validateStudentFieldsForRole);
+
+export const buildProfileSchema = (role?: UserRole) =>
+  z
+    .object({
+      firstName: requiredNameSchema("First name"),
+      lastName: requiredNameSchema("Last name"),
+      department: optionalDepartmentSchema,
+      yearLevel: optionalYearLevelSchema,
+      phone: optionalPhoneSchema
+    })
+    .superRefine((values, context) => {
+      if (!role) {
+        return;
+      }
+
+      validateYearLevelForRole(
+        {
+          role,
+          yearLevel: values.yearLevel
+        },
+        context
+      );
+    });
 
 export const normalizeUserDisplayName = (firstName?: string | null, lastName?: string | null) =>
   [firstName, lastName].filter(Boolean).join(" ");

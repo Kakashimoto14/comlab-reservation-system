@@ -6,6 +6,21 @@ import { env } from "../config/env.js";
 import { ApiError } from "../utils/ApiError.js";
 import { verifyAccessToken } from "../utils/jwt.js";
 
+const authSessionSelect = {
+  id: true,
+  userId: true,
+  expiresAt: true,
+  revokedAt: true,
+  user: {
+    select: {
+      id: true,
+      email: true,
+      role: true,
+      status: true
+    }
+  }
+} as const;
+
 const extractToken = (req: Request) => {
   const header = req.headers.authorization;
 
@@ -38,7 +53,7 @@ export const authenticate = async (req: Request, _res: Response, next: NextFunct
 
     const session = await prisma.authSession.findUnique({
       where: { id: payload.sid },
-      include: { user: true }
+      select: authSessionSelect
     });
 
     if (
@@ -88,7 +103,7 @@ export const optionalAuthenticate = async (req: Request, _res: Response, next: N
 
     const session = await prisma.authSession.findUnique({
       where: { id: payload.sid },
-      include: { user: true }
+      select: authSessionSelect
     });
 
     if (

@@ -4,6 +4,7 @@ import { StatusCodes } from "http-status-codes";
 
 import { UserFactory } from "../domain/UserFactory.js";
 import { ApiError } from "../utils/ApiError.js";
+import { assertRoleScopedUserFields } from "../validations/userRules.js";
 import { ActivityLogService } from "./ActivityLogService.js";
 
 type CreateUserInput = {
@@ -32,6 +33,26 @@ type UpdateProfileInput = {
 
 type DbClient = PrismaClient | Prisma.TransactionClient;
 
+const publicUserSelect = {
+  id: true,
+  firstName: true,
+  lastName: true,
+  email: true,
+  role: true,
+  status: true,
+  studentNumber: true,
+  department: true,
+  yearLevel: true,
+  phone: true,
+  createdAt: true,
+  updatedAt: true
+} satisfies Prisma.UserSelect;
+
+const userEntitySelect = {
+  ...publicUserSelect,
+  passwordHash: true
+} satisfies Prisma.UserSelect;
+
 export class UserService {
   private readonly activityLogService: ActivityLogService;
 
@@ -46,6 +67,12 @@ export class UserService {
       yearLevel?: number | null;
     }
   ) {
+    assertRoleScopedUserFields({
+      role,
+      studentNumber: input.studentNumber ?? null,
+      yearLevel: input.yearLevel ?? null
+    });
+
     if (role !== "STUDENT") {
       return {
         studentNumber: null,
@@ -53,38 +80,17 @@ export class UserService {
       };
     }
 
-    if (!input.studentNumber) {
-      throw new ApiError(
-        StatusCodes.UNPROCESSABLE_ENTITY,
-        "Student accounts must include a student number.",
-        {
-          studentNumber: ["Student number is required for student accounts."]
-        }
-      );
-    }
-
-    if (typeof input.yearLevel !== "number" || Number.isNaN(input.yearLevel)) {
-      throw new ApiError(
-        StatusCodes.UNPROCESSABLE_ENTITY,
-        "Student accounts must include a year level.",
-        {
-          yearLevel: ["Year level is required for student accounts."]
-        }
-      );
-    }
-
     return {
-      studentNumber: input.studentNumber,
-      yearLevel: input.yearLevel
+      studentNumber: input.studentNumber!,
+      yearLevel: input.yearLevel!
     };
   }
 
   async listUsers() {
-    const users = await this.db.user.findMany({
-      orderBy: [{ role: "asc" }, { lastName: "asc" }]
+    return this.db.user.findMany({
+      select: publicUserSelect,
+      orderBy: [{ role: "asc" }, { lastName: "asc" }, { firstName: "asc" }]
     });
-
-    return users.map(({ passwordHash: _passwordHash, ...user }) => user);
   }
 
   async createUser(input: CreateUserInput, actorId: number) {
@@ -132,7 +138,8 @@ export class UserService {
         phone: input.phone ?? null,
         ...studentFields,
         passwordHash
-      }
+      },
+      select: publicUserSelect
     });
 
     await this.activityLogService.logActivity({
@@ -143,12 +150,14 @@ export class UserService {
       description: `Created ${user.role.toLowerCase()} account for ${user.firstName} ${user.lastName}.`
     });
 
-    const { passwordHash: _passwordHash, ...safeUser } = user;
-    return safeUser;
+    return user;
   }
 
   async updateUser(userId: number, input: UpdateUserInput, actorId: number) {
-    const user = await this.db.user.findUnique({ where: { id: userId } });
+    const user = await this.db.user.findUnique({
+      where: { id: userId },
+      select: userEntitySelect
+    });
 
     if (!user) {
       throw new ApiError(StatusCodes.NOT_FOUND, "User account not found.");
@@ -211,7 +220,8 @@ export class UserService {
           studentNumber: studentFields.studentNumber,
           yearLevel: studentFields.yearLevel,
           ...(passwordHash ? { passwordHash } : {})
-        }
+        },
+        select: publicUserSelect
       });
 
       if (shouldRevokeSessions) {
@@ -229,12 +239,14 @@ export class UserService {
       description: `Updated user account for ${updatedUser.firstName} ${updatedUser.lastName}.`
     });
 
-    const { passwordHash: _passwordHash, ...safeUser } = updatedUser;
-    return safeUser;
+    return updatedUser;
   }
 
   async setUserStatus(userId: number, status: UserStatus, actorId: number) {
-    const user = await this.db.user.findUnique({ where: { id: userId } });
+    const user = await this.db.user.findUnique({
+      where: { id: userId },
+      select: publicUserSelect
+    });
 
     if (!user) {
       throw new ApiError(StatusCodes.NOT_FOUND, "User account not found.");
@@ -243,7 +255,8 @@ export class UserService {
     const updatedUser = await this.db.$transaction(async (tx) => {
       const nextUser = await tx.user.update({
         where: { id: userId },
-        data: { status }
+        data: { status },
+        select: publicUserSelect
       });
 
       await this.revokeActiveSessions(tx, userId);
@@ -259,12 +272,14 @@ export class UserService {
       description: `${status === "ACTIVE" ? "Activated" : "Deactivated"} ${updatedUser.firstName} ${updatedUser.lastName}.`
     });
 
-    const { passwordHash: _passwordHash, ...safeUser } = updatedUser;
-    return safeUser;
+    return updatedUser;
   }
 
   async updateProfile(userId: number, input: UpdateProfileInput) {
-    const user = await this.db.user.findUnique({ where: { id: userId } });
+    const user = await this.db.user.findUnique({
+      where: { id: userId },
+      select: userEntitySelect
+    });
 
     if (!user) {
       throw new ApiError(StatusCodes.NOT_FOUND, "User account not found.");
@@ -280,12 +295,21 @@ export class UserService {
       user.role === "STUDENT"
         ? this.getPersistedStudentFields(user.role, {
             studentNumber: user.studentNumber,
-            yearLevel: input.yearLevel ?? null
+            yearLevel:
+              typeof input.yearLevel !== "undefined" ? input.yearLevel : user.yearLevel
           })
         : {
             studentNumber: null,
             yearLevel: null
           };
+
+    if (user.role !== "STUDENT" && input.yearLevel !== undefined && input.yearLevel !== null) {
+      assertRoleScopedUserFields({
+        role: user.role,
+        studentNumber: user.studentNumber ?? null,
+        yearLevel: input.yearLevel
+      });
+    }
 
     const updatedUser = await this.db.user.update({
       where: { id: userId },
@@ -295,7 +319,8 @@ export class UserService {
         department: input.department ?? null,
         phone: input.phone ?? null,
         yearLevel: studentFields.yearLevel
-      }
+      },
+      select: publicUserSelect
     });
 
     await this.activityLogService.logActivity({
@@ -306,8 +331,7 @@ export class UserService {
       description: `${updatedUser.firstName} ${updatedUser.lastName} updated their profile.`
     });
 
-    const { passwordHash: _passwordHash, ...safeUser } = updatedUser;
-    return safeUser;
+    return updatedUser;
   }
 
   private async revokeActiveSessions(dbClient: DbClient, userId: number) {

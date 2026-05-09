@@ -12,7 +12,22 @@ export class DashboardService {
 
   async getDashboardData(currentUser: { id: number; role: UserRole }) {
     const user = await this.db.user.findUnique({
-      where: { id: currentUser.id }
+      where: { id: currentUser.id },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        passwordHash: true,
+        role: true,
+        status: true,
+        studentNumber: true,
+        department: true,
+        yearLevel: true,
+        phone: true,
+        createdAt: true,
+        updatedAt: true
+      }
     });
 
     if (!user) {
@@ -154,8 +169,20 @@ export class DashboardService {
         take: 5,
         orderBy: [{ reservationDate: "desc" }, { startTime: "desc" }],
         include: {
-          laboratory: true,
-          pc: true
+          laboratory: {
+            select: {
+              id: true,
+              name: true,
+              roomCode: true
+            }
+          },
+          pc: {
+            select: {
+              id: true,
+              pcNumber: true,
+              status: true
+            }
+          }
         }
       }),
       this.db.laboratory.count({

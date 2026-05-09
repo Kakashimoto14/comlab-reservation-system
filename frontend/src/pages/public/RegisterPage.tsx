@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Controller, useForm, type FieldPath, type SubmitErrorHandler } from "react-hook-form";
 import toast from "react-hot-toast";
 import { Link, useNavigate } from "react-router-dom";
@@ -13,29 +13,14 @@ import { Select } from "../../components/ui/Select";
 import { useAuth } from "../../store/AuthContext";
 import { applyServerValidationErrors } from "../../utils/formErrors";
 import {
-  departmentSchema,
-  emailSchema,
+  buildStudentRegistrationSchema,
   getFormattedStudentNumberInput,
-  passwordSchema,
-  phoneSchema,
-  requiredNameSchema,
   sanitizeNameInput,
   sanitizePhoneInput,
-  studentNumberSchema,
-  yearLevelSchema,
   YEAR_LEVEL_OPTIONS
 } from "../../utils/userValidation";
 
-const registerSchema = z.object({
-  firstName: requiredNameSchema("First name"),
-  lastName: requiredNameSchema("Last name"),
-  email: emailSchema,
-  password: passwordSchema,
-  studentNumber: studentNumberSchema,
-  department: departmentSchema,
-  yearLevel: yearLevelSchema,
-  phone: phoneSchema
-});
+const registerSchema = buildStudentRegistrationSchema();
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
@@ -54,6 +39,7 @@ const passwordRuleLabels = [
 export const RegisterPage = () => {
   const navigate = useNavigate();
   const { register: registerUser, user } = useAuth();
+  const [formErrorMessage, setFormErrorMessage] = useState<string | null>(null);
   const {
     register,
     control,
@@ -88,12 +74,15 @@ export const RegisterPage = () => {
   }));
 
   const onSubmit = async (values: RegisterFormValues) => {
+    setFormErrorMessage(null);
+
     try {
       await registerUser(values);
       toast.success("Student account created successfully.");
       navigate("/student/dashboard", { replace: true });
     } catch (error) {
       const message = applyServerValidationErrors(error, { setError, setFocus });
+      setFormErrorMessage(message ?? "Registration failed. Please review your details.");
       toast.error(message ?? "Registration failed. Please review your details.");
     }
   };
@@ -104,6 +93,12 @@ export const RegisterPage = () => {
     if (firstField) {
       setFocus(firstField);
     }
+
+    const firstErrorMessage = Object.values(formErrors).find(
+      (error): error is { message?: string } => Boolean(error?.message)
+    )?.message;
+
+    setFormErrorMessage(firstErrorMessage ?? "Please review the highlighted fields.");
   };
 
   return (
@@ -227,6 +222,14 @@ export const RegisterPage = () => {
             </div>
           </div>
         </FormField>
+        {formErrorMessage ? (
+          <div
+            className="md:col-span-2 rounded-2xl border border-danger/20 bg-red-50 px-4 py-3 text-sm text-danger"
+            role="alert"
+          >
+            {formErrorMessage}
+          </div>
+        ) : null}
         <div className="md:col-span-2">
           <Button type="submit" fullWidth disabled={isSubmitting}>
             {isSubmitting ? "Creating account..." : "Register Student"}

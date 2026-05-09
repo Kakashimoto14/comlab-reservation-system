@@ -53,24 +53,31 @@ describe("AuthService", () => {
       createdAt: new Date(),
       updatedAt: new Date()
     }));
-    db.user.findUnique.mockImplementation(async ({ where }: { where: { id: number } }) =>
-      where.id === 10
-        ? {
-            id: 10,
-            firstName: "Alyssa",
-            lastName: "Cruz",
-            email: "alyssa@student.edu",
-            passwordHash: "hidden",
-            role: "STUDENT",
-            status: "ACTIVE",
-            studentNumber: "24-00001",
-            department: "BS Information Technology",
-            yearLevel: 2,
-            phone: "09171234567",
-            createdAt: new Date(),
-            updatedAt: new Date()
-          }
-        : null
+    db.user.findUnique.mockImplementation(
+      async ({
+        where,
+        select
+      }: {
+        where: { id: number };
+        select?: Record<string, boolean>;
+      }) =>
+        where.id === 10
+          ? {
+              id: 10,
+              firstName: "Alyssa",
+              lastName: "Cruz",
+              email: "alyssa@student.edu",
+              ...(select?.passwordHash ? { passwordHash: "hidden" } : {}),
+              role: "STUDENT",
+              status: "ACTIVE",
+              studentNumber: "24-00001",
+              department: "BS Information Technology",
+              yearLevel: 2,
+              phone: "09171234567",
+              createdAt: new Date(),
+              updatedAt: new Date()
+            }
+          : null
     );
 
     const service = new AuthService(db);

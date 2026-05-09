@@ -54,6 +54,40 @@ const reservationTransactionOptions = {
   maxWait: 10_000,
   timeout: 20_000
 };
+const reservationListInclude = {
+  laboratory: {
+    select: {
+      id: true,
+      name: true,
+      roomCode: true,
+      status: true
+    }
+  },
+  pc: {
+    select: {
+      id: true,
+      pcNumber: true,
+      status: true
+    }
+  },
+  student: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      studentNumber: true
+    }
+  },
+  reviewedBy: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      role: true
+    }
+  }
+} satisfies Prisma.ReservationInclude;
 
 export class ReservationService {
   private readonly laboratoryService: LaboratoryService;
@@ -80,37 +114,7 @@ export class ReservationService {
 
     return this.db.reservation.findMany({
       where,
-      include: {
-        laboratory: {
-          include: {
-            custodian: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true
-              }
-            }
-          }
-        },
-        pc: true,
-        student: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            studentNumber: true
-          }
-        },
-        reviewedBy: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            role: true
-          }
-        }
-      },
+      include: reservationListInclude,
       orderBy: [{ reservationDate: "desc" }, { startTime: "desc" }]
     });
   }
@@ -199,19 +203,7 @@ export class ReservationService {
         data: {
           reservationCode
         },
-        include: {
-          laboratory: true,
-          pc: true,
-          student: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-              studentNumber: true
-            }
-          }
-        }
+        include: reservationListInclude
       });
 
       await this.logReservationAction(tx, {
@@ -391,27 +383,7 @@ export class ReservationService {
           reviewedById: currentUser.id,
           reviewedAt: new Date()
         },
-        include: {
-          laboratory: true,
-          pc: true,
-          student: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-              studentNumber: true
-            }
-          },
-          reviewedBy: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              role: true
-            }
-          }
-        }
+        include: reservationListInclude
       });
 
       const reviewAction =

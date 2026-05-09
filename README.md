@@ -819,7 +819,7 @@ npx prisma generate
 From the repository root:
 
 ```bash
-npm run prisma:migrate
+npm run prisma:migrate:dev
 ```
 
 Or from the backend workspace:
@@ -897,6 +897,7 @@ The system is currently designed to work with DigitalOcean App Platform for the 
 - Set a valid production `DATABASE_URL`
 - Set production `JWT_SECRET` and `JWT_REFRESH_SECRET`
 - Set `CLIENT_URL` and `APP_BASE_URL` to the real frontend domain
+- Run `npx prisma migrate deploy` during backend startup or release
 - Use the exposed backend health endpoint `/api/health` for readiness checks
 
 ---

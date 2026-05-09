@@ -1,5 +1,8 @@
 import { UserRole } from "@prisma/client";
+import { StatusCodes } from "http-status-codes";
 import { z } from "zod";
+
+import { ApiError } from "../utils/ApiError.js";
 
 export const NAME_PATTERN = /^[A-Za-z]+(?:[ -][A-Za-z]+)*$/;
 export const STUDENT_NUMBER_PATTERN = /^\d{2}-\d{5}$/;
@@ -159,43 +162,127 @@ type StudentFieldCarrier = {
   yearLevel?: number | null;
 };
 
+type YearLevelCarrier = {
+  role?: UserRole;
+  yearLevel?: number | null;
+};
+
+type RoleFieldIssue = {
+  path: "studentNumber" | "yearLevel";
+  message: string;
+};
+
+const buildRoleFieldErrors = (issues: RoleFieldIssue[]) =>
+  issues.reduce<Record<string, string[]>>((accumulator, issue) => {
+    accumulator[issue.path] ??= [];
+    accumulator[issue.path].push(issue.message);
+    return accumulator;
+  }, {});
+
+const getYearLevelIssues = ({ role, yearLevel }: YearLevelCarrier): RoleFieldIssue[] => {
+  if (!role) {
+    return [];
+  }
+
+  if (role === UserRole.STUDENT) {
+    if (typeof yearLevel !== "number" || Number.isNaN(yearLevel)) {
+      return [
+        {
+          path: "yearLevel",
+          message: "Year level is required for student accounts."
+        }
+      ];
+    }
+
+    return [];
+  }
+
+  if (yearLevel !== undefined && yearLevel !== null) {
+    return [
+      {
+        path: "yearLevel",
+        message: "Only student accounts can store a year level."
+      }
+    ];
+  }
+
+  return [];
+};
+
 export const validateStudentFieldsForRole = (
   value: StudentFieldCarrier,
   context: z.RefinementCtx
 ) => {
-  if (value.role === UserRole.STUDENT) {
-    if (!value.studentNumber) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Student number is required for student accounts.",
-        path: ["studentNumber"]
-      });
-    }
-
-    if (typeof value.yearLevel !== "number" || Number.isNaN(value.yearLevel)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Year level is required for student accounts.",
-        path: ["yearLevel"]
-      });
-    }
-
+  if (!value.role) {
     return;
   }
 
-  if (value.studentNumber !== undefined && value.studentNumber !== null) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Only student accounts can store a student number.",
-      path: ["studentNumber"]
+  const issues: RoleFieldIssue[] = [];
+
+  if (value.role === UserRole.STUDENT) {
+    if (!value.studentNumber) {
+      issues.push({
+        path: "studentNumber",
+        message: "Student number is required for student accounts."
+      });
+    }
+  } else if (value.studentNumber !== undefined && value.studentNumber !== null) {
+    issues.push({
+      path: "studentNumber",
+      message: "Only student accounts can store a student number."
     });
   }
 
-  if (value.yearLevel !== undefined && value.yearLevel !== null) {
+  issues.push(...getYearLevelIssues(value));
+
+  for (const issue of issues) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Only student accounts can store a year level.",
-      path: ["yearLevel"]
+      message: issue.message,
+      path: [issue.path]
     });
   }
+};
+
+export const validateYearLevelForRole = (
+  value: YearLevelCarrier,
+  context: z.RefinementCtx
+) => {
+  for (const issue of getYearLevelIssues(value)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: issue.message,
+      path: [issue.path]
+    });
+  }
+};
+
+export const assertRoleScopedUserFields = (value: Required<StudentFieldCarrier>) => {
+  const issues: RoleFieldIssue[] = [];
+
+  if (value.role === UserRole.STUDENT) {
+    if (!value.studentNumber) {
+      issues.push({
+        path: "studentNumber",
+        message: "Student number is required for student accounts."
+      });
+    }
+  } else if (value.studentNumber !== undefined && value.studentNumber !== null) {
+    issues.push({
+      path: "studentNumber",
+      message: "Only student accounts can store a student number."
+    });
+  }
+
+  issues.push(...getYearLevelIssues(value));
+
+  if (!issues.length) {
+    return;
+  }
+
+  throw new ApiError(
+    StatusCodes.UNPROCESSABLE_ENTITY,
+    "User details do not match the selected role.",
+    buildRoleFieldErrors(issues)
+  );
 };

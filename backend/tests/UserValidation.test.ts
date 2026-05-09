@@ -1,5 +1,6 @@
 import { UserRole } from "@prisma/client";
 
+import { assertRoleScopedUserFields } from "../src/validations/userRules.js";
 import { createUserSchema, updateUserSchema } from "../src/validations/user.validation.js";
 
 const createBaseBody = () => ({
@@ -122,5 +123,15 @@ describe("user validation", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it("rejects non-student year levels in service-level guards", () => {
+    expect(() =>
+      assertRoleScopedUserFields({
+        role: UserRole.ADMIN,
+        studentNumber: null,
+        yearLevel: 2
+      })
+    ).toThrow("User details do not match the selected role.");
   });
 });

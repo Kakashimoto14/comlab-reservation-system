@@ -14,8 +14,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "prisma:generate": "prisma generate",
-    "prisma:deploy": "prisma migrate deploy",
-    "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:migrate:dev": "prisma migrate dev",
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {

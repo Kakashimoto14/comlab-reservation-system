@@ -610,8 +610,9 @@ export const ReservationManagementPage = () => {
             />
           </label>
 
-          <div className="flex flex-wrap justify-end gap-3">
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
             <Button
+              fullWidth
               variant="secondary"
               onClick={() => {
                 setSelectedReservation(null);
@@ -623,6 +624,7 @@ export const ReservationManagementPage = () => {
             {selectedReservation?.status === "PENDING" ? (
               <>
                 <Button
+                  fullWidth
                   variant="danger"
                   onClick={() =>
                     selectedReservation
@@ -637,6 +639,7 @@ export const ReservationManagementPage = () => {
                   Reject
                 </Button>
                 <Button
+                  fullWidth
                   onClick={() =>
                     selectedReservation
                       ? reviewMutation.mutate({

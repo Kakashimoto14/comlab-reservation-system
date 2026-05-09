@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
+import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
 
 import { ApiError } from "../utils/ApiError.js";
@@ -38,6 +39,35 @@ export const errorHandler = (
     return res.status(StatusCodes.BAD_REQUEST).json({
       message: "Validation failed.",
       errors
+    });
+  }
+
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === "P2002") {
+      const targets = Array.isArray(error.meta?.target)
+        ? error.meta.target.map(String)
+        : [];
+      const fieldErrors = targets.reduce<Record<string, string[]>>((accumulator, field) => {
+        accumulator[field] = [`${field} already exists.`];
+        return accumulator;
+      }, {});
+
+      return res.status(StatusCodes.CONFLICT).json({
+        message: "A record with the same unique field already exists.",
+        ...(targets.length ? { errors: fieldErrors } : {})
+      });
+    }
+
+    if (error.code === "P2025") {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        message: "The requested record no longer exists."
+      });
+    }
+  }
+
+  if (error instanceof Prisma.PrismaClientValidationError) {
+    return res.status(StatusCodes.BAD_REQUEST).json({
+      message: "Invalid request data."
     });
   }
 

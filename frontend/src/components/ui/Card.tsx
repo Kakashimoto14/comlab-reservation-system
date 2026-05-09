@@ -8,7 +8,7 @@ export const Card = ({
 }: PropsWithChildren<HTMLAttributes<HTMLDivElement>>) => (
   <div
     className={clsx(
-      "rounded-3xl border border-slate-200 bg-white p-6 shadow-soft",
+      "overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-soft sm:p-6",
       className
     )}
     {...props}

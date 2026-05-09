@@ -21,17 +21,10 @@ import { Select } from "../../components/ui/Select";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { applyServerValidationErrors } from "../../utils/formErrors";
 import {
-  emailSchema,
+  buildManagedUserSchema,
   getFormattedStudentNumberInput,
-  optionalDepartmentSchema,
-  optionalPhoneSchema,
-  optionalStudentNumberSchema,
-  optionalYearLevelSchema,
-  passwordSchema,
-  requiredNameSchema,
   sanitizeNameInput,
   sanitizePhoneInput,
-  validateStudentFieldsForRole,
   YEAR_LEVEL_OPTIONS
 } from "../../utils/userValidation";
 
@@ -39,29 +32,7 @@ const invalidUserFormMessage =
   "Please correct the highlighted fields before submitting the user form.";
 const PAGE_SIZE = 10;
 
-const userSchema = z
-  .object({
-    firstName: requiredNameSchema("First name"),
-    lastName: requiredNameSchema("Last name"),
-    email: emailSchema,
-    password: z.preprocess(
-      (value) => {
-        if (typeof value !== "string") {
-          return value;
-        }
-
-        const trimmedValue = value.trim();
-        return trimmedValue === "" ? undefined : trimmedValue;
-      },
-      passwordSchema.optional()
-    ),
-    role: z.enum(["ADMIN", "STUDENT", "LABORATORY_STAFF"]),
-    studentNumber: optionalStudentNumberSchema,
-    department: optionalDepartmentSchema,
-    yearLevel: optionalYearLevelSchema,
-    phone: optionalPhoneSchema
-  })
-  .superRefine(validateStudentFieldsForRole);
+const userSchema = buildManagedUserSchema();
 
 type UserFormValues = z.infer<typeof userSchema>;
 
@@ -112,7 +83,8 @@ export const UserManagementPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const { data, isLoading } = useQuery({
     queryKey: ["users"],
-    queryFn: userApi.list
+    queryFn: userApi.list,
+    staleTime: 30_000
   });
   const users = data ?? [];
   const totalPages = Math.max(1, Math.ceil(users.length / PAGE_SIZE));
@@ -531,9 +503,10 @@ export const UserManagementPage = () => {
               {formErrorMessage}
             </div>
           ) : null}
-          <div className="md:col-span-2 flex justify-end gap-3">
+          <div className="md:col-span-2 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <Button
               variant="secondary"
+              fullWidth
               type="button"
               onClick={() => {
                 setOpen(false);
@@ -545,6 +518,7 @@ export const UserManagementPage = () => {
             </Button>
             <Button
               type="submit"
+              fullWidth
               disabled={
                 isSubmitting || createMutation.isPending || updateMutation.isPending
               }

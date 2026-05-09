@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { StatusCodes } from "http-status-codes";
 
 import { ApiError } from "../utils/ApiError.js";
@@ -19,6 +19,41 @@ type ScheduleInput = {
   endTime: string;
   status: "AVAILABLE" | "BLOCKED" | "CLOSED";
 };
+
+const staffReservationInclude = {
+  laboratory: {
+    select: {
+      id: true,
+      name: true,
+      roomCode: true,
+      status: true
+    }
+  },
+  pc: {
+    select: {
+      id: true,
+      pcNumber: true,
+      status: true
+    }
+  },
+  student: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      studentNumber: true
+    }
+  },
+  reviewedBy: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      role: true
+    }
+  }
+} satisfies Prisma.ReservationInclude;
 
 export class StaffService {
   private readonly laboratoryService: LaboratoryService;
@@ -44,27 +79,7 @@ export class StaffService {
       where: {
         laboratoryId: laboratory.id
       },
-      include: {
-        laboratory: true,
-        pc: true,
-        student: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            studentNumber: true
-          }
-        },
-        reviewedBy: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            role: true
-          }
-        }
-      },
+      include: staffReservationInclude,
       orderBy: [{ reservationDate: "desc" }, { startTime: "desc" }]
     });
   }

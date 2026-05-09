@@ -40,7 +40,7 @@ export const FormField = ({
       <span className="text-sm font-medium text-slate-700">{label}</span>
       {enhancedChild}
       {error ? (
-        <span id={errorId} className="text-xs text-danger" role="alert">
+        <span id={errorId} className="break-words text-xs text-danger" role="alert">
           {error}
         </span>
       ) : null}

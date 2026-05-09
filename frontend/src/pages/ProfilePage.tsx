@@ -17,23 +17,12 @@ import { useAuth } from "../store/AuthContext";
 import { applyServerValidationErrors } from "../utils/formErrors";
 import { roleLabels } from "../utils/constants";
 import {
-  optionalDepartmentSchema,
-  optionalPhoneSchema,
-  optionalYearLevelSchema,
+  buildProfileSchema,
   passwordSchema,
-  requiredNameSchema,
   sanitizeNameInput,
   sanitizePhoneInput,
   YEAR_LEVEL_OPTIONS
 } from "../utils/userValidation";
-
-const baseProfileSchema = z.object({
-  firstName: requiredNameSchema("First name"),
-  lastName: requiredNameSchema("Last name"),
-  department: optionalDepartmentSchema,
-  yearLevel: optionalYearLevelSchema,
-  phone: optionalPhoneSchema
-});
 
 const changePasswordSchema = z
   .object({
@@ -46,7 +35,7 @@ const changePasswordSchema = z
     message: "Passwords do not match."
   });
 
-type ProfileFormValues = z.infer<typeof baseProfileSchema>;
+type ProfileFormValues = z.infer<ReturnType<typeof buildProfileSchema>>;
 type ChangePasswordFormValues = z.infer<typeof changePasswordSchema>;
 type ProfileUpdatePayload = {
   firstName: string;
@@ -70,17 +59,8 @@ export const ProfilePage = () => {
   const { user, setCurrentUser } = useAuth();
   const isStudent = user?.role === "STUDENT";
   const profileSchema = useMemo(
-    () =>
-      baseProfileSchema.superRefine((values, context) => {
-        if (isStudent && !values.yearLevel) {
-          context.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "Year level is required for student accounts.",
-            path: ["yearLevel"]
-          });
-        }
-      }),
-    [isStudent]
+    () => buildProfileSchema(user?.role),
+    [user?.role]
   );
   const {
     register,
@@ -252,7 +232,7 @@ export const ProfilePage = () => {
                 )}
               />
             </FormField>
-            <Button type="submit" disabled={isSubmitting || profileMutation.isPending}>
+            <Button type="submit" fullWidth disabled={isSubmitting || profileMutation.isPending}>
               {isSubmitting || profileMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>
           </form>
@@ -267,7 +247,7 @@ export const ProfilePage = () => {
           </p>
         </div>
 
-        <form className="grid gap-5 md:grid-cols-3" onSubmit={handlePasswordSubmit(onPasswordSubmit)}>
+        <form className="grid gap-5 lg:grid-cols-3" onSubmit={handlePasswordSubmit(onPasswordSubmit)}>
           <FormField label="Current Password" error={passwordErrors.currentPassword?.message}>
             <Input type="password" {...registerPassword("currentPassword")} />
           </FormField>
@@ -280,6 +260,7 @@ export const ProfilePage = () => {
           <div className="md:col-span-3">
             <Button
               type="submit"
+              fullWidth
               disabled={isChangingPassword || changePasswordMutation.isPending}
             >
               {isChangingPassword || changePasswordMutation.isPending

@@ -94,7 +94,19 @@ const NotFoundPage = lazy(() =>
   import("./pages/public/NotFoundPage").then((module) => ({ default: module.NotFoundPage }))
 );
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      gcTime: 300_000,
+      refetchOnWindowFocus: false,
+      retry: 1
+    },
+    mutations: {
+      retry: 0
+    }
+  }
+});
 
 const HomeRedirect = () => {
   const { user } = useAuth();

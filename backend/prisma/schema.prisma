@@ -173,7 +173,8 @@ model Reservation {
   @@index([laboratoryId, reservationDate])
   @@index([status, reservationDate])
   @@index([pcId, reservationDate])
-}
+  @@index([laboratoryId, reservationDate, status, startTime, endTime], map: "idx_reservation_conflict")
+ }
 
 model PC {
   id           Int          @id @default(autoincrement())

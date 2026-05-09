@@ -1,4 +1,4 @@
-import type { PrismaClient, UserRole } from "@prisma/client";
+import type { Prisma, PrismaClient, UserRole } from "@prisma/client";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { StatusCodes } from "http-status-codes";
@@ -11,6 +11,7 @@ import {
   signRefreshToken,
   verifyRefreshToken
 } from "../utils/jwt.js";
+import { assertRoleScopedUserFields } from "../validations/userRules.js";
 import { ActivityLogService } from "./ActivityLogService.js";
 
 type RegisterStudentInput = {
@@ -59,6 +60,26 @@ type AuthResponse = {
   user: Awaited<ReturnType<AuthService["getProfile"]>>;
 };
 
+const publicUserSelect = {
+  id: true,
+  firstName: true,
+  lastName: true,
+  email: true,
+  role: true,
+  status: true,
+  studentNumber: true,
+  department: true,
+  yearLevel: true,
+  phone: true,
+  createdAt: true,
+  updatedAt: true
+} satisfies Prisma.UserSelect;
+
+const authUserSelect = {
+  ...publicUserSelect,
+  passwordHash: true
+} satisfies Prisma.UserSelect;
+
 export class AuthService {
   private readonly activityLogService: ActivityLogService;
 
@@ -67,6 +88,12 @@ export class AuthService {
   }
 
   async registerStudent(input: RegisterStudentInput, sessionMeta?: AuthSessionMeta) {
+    assertRoleScopedUserFields({
+      role: "STUDENT",
+      studentNumber: input.studentNumber,
+      yearLevel: input.yearLevel
+    });
+
     const existingUser = await this.db.user.findFirst({
       where: {
         OR: [{ email: input.email }, { studentNumber: input.studentNumber }]
@@ -113,7 +140,8 @@ export class AuthService {
 
   async login(input: LoginInput, sessionMeta?: AuthSessionMeta) {
     const user = await this.db.user.findUnique({
-      where: { email: input.email }
+      where: { email: input.email },
+      select: authUserSelect
     });
 
     if (!user) {
@@ -148,7 +176,8 @@ export class AuthService {
 
   async forgotPassword(input: ForgotPasswordInput): Promise<PasswordActionResponse> {
     const user = await this.db.user.findUnique({
-      where: { email: input.email }
+      where: { email: input.email },
+      select: authUserSelect
     });
 
     const genericResponse: PasswordActionResponse = {
@@ -266,7 +295,8 @@ export class AuthService {
     input: ChangePasswordInput
   ): Promise<PasswordActionResponse> {
     const user = await this.db.user.findUnique({
-      where: { id: userId }
+      where: { id: userId },
+      select: authUserSelect
     });
 
     if (!user) {
@@ -318,19 +348,25 @@ export class AuthService {
 
   async getProfile(userId: number) {
     const user = await this.db.user.findUnique({
-      where: { id: userId }
+      where: { id: userId },
+      select: publicUserSelect
     });
 
     if (!user) {
       throw new ApiError(StatusCodes.NOT_FOUND, "User account not found.");
     }
 
-    return this.toSafeUser(user);
+    return user;
   }
 
   async logout(userId: number) {
     const user = await this.db.user.findUnique({
-      where: { id: userId }
+      where: { id: userId },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true
+      }
     });
 
     if (!user) {
@@ -361,7 +397,11 @@ export class AuthService {
 
     const session = await this.db.authSession.findUnique({
       where: { id: payload.sid },
-      include: { user: true }
+      include: {
+        user: {
+          select: publicUserSelect
+        }
+      }
     });
 
     if (!session) {
@@ -394,13 +434,18 @@ export class AuthService {
 
     return {
       ...rotatedTokens,
-      user: this.toSafeUser(session.user)
+      user: session.user
     };
   }
 
   async logoutSession(userId: number, refreshToken?: string | null) {
     const user = await this.db.user.findUnique({
-      where: { id: userId }
+      where: { id: userId },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true
+      }
     });
 
     if (!user) {
@@ -536,15 +581,6 @@ export class AuthService {
         revokedAt: new Date()
       }
     });
-  }
-
-  private toSafeUser(user: Awaited<ReturnType<PrismaClient["user"]["findUnique"]>>) {
-    if (!user) {
-      throw new ApiError(StatusCodes.NOT_FOUND, "User account not found.");
-    }
-
-    const { passwordHash: _passwordHash, ...safeUser } = user;
-    return safeUser;
   }
 
   private hashResetToken(token: string) {

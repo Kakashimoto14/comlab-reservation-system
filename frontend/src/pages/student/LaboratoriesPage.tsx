@@ -15,7 +15,8 @@ export const LaboratoriesPage = () => {
   const [search, setSearch] = useState("");
   const { data, isLoading } = useQuery({
     queryKey: ["laboratories"],
-    queryFn: laboratoryApi.list
+    queryFn: laboratoryApi.list,
+    staleTime: 60_000
   });
 
   const filteredLaboratories = useMemo(() => {

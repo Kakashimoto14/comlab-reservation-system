@@ -53,7 +53,8 @@ export const ReserveLaboratoryPage = () => {
   const { data, isLoading } = useQuery({
     queryKey: ["laboratory", id],
     queryFn: () => laboratoryApi.getById(Number(id)),
-    enabled: Boolean(id)
+    enabled: Boolean(id),
+    staleTime: 60_000
   });
 
   const {

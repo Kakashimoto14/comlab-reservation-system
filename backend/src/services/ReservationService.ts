@@ -50,6 +50,10 @@ type ConflictCheckInput = {
 type DbClient = PrismaClient | Prisma.TransactionClient;
 
 const activeReservationStatuses: ReservationStatus[] = ["PENDING", "APPROVED", "COMPLETED"];
+const reservationTransactionOptions = {
+  maxWait: 10_000,
+  timeout: 20_000
+};
 
 export class ReservationService {
   private readonly laboratoryService: LaboratoryService;
@@ -159,7 +163,7 @@ export class ReservationService {
     const reservationType = input.reservationType ?? "LAB";
     const pc = await this.resolveReservationPc(input.laboratoryId, reservationType, input.pcId);
 
-    const createdReservation = await this.db.$transaction(async (tx) => {
+    const createdReservation = await this.runTransaction(async (tx) => {
       await this.lockLaboratoryReservations(tx, input.laboratoryId);
       await this.ensureNoReservationConflict(
         {
@@ -293,40 +297,71 @@ export class ReservationService {
     input: ReviewReservationInput,
     currentUser: CurrentUser
   ) {
-    const updatedReservation = await this.db.$transaction(async (tx) => {
-      const [reviewer, reservationRecord] = await Promise.all([
-        tx.user.findUnique({ where: { id: currentUser.id } }),
-        tx.reservation.findUnique({
-          where: { id: reservationId },
-          include: {
-            laboratory: true,
-            pc: true
-          }
-        })
-      ]);
+    const [reviewer, reservationRecord] = await Promise.all([
+      this.db.user.findUnique({ where: { id: currentUser.id } }),
+      this.db.reservation.findUnique({
+        where: { id: reservationId },
+        select: {
+          id: true,
+          laboratoryId: true,
+          reservationDate: true,
+          startTime: true,
+          endTime: true,
+          reservationType: true,
+          pcId: true,
+          status: true
+        }
+      })
+    ]);
 
-      if (!reviewer) {
-        throw new ApiError(StatusCodes.NOT_FOUND, "Reviewer account not found.");
-      }
+    if (!reviewer) {
+      throw new ApiError(StatusCodes.NOT_FOUND, "Reviewer account not found.");
+    }
 
-      if (!reservationRecord) {
+    if (!reservationRecord) {
+      throw new ApiError(StatusCodes.NOT_FOUND, "Reservation not found.");
+    }
+
+    const reviewerEntity = UserFactory.create(reviewer);
+
+    if (!reviewerEntity.canReviewReservations()) {
+      throw new ApiError(
+        StatusCodes.FORBIDDEN,
+        "Your role is not allowed to review reservations."
+      );
+    }
+
+    await this.staffAccessService.ensureCanManageLab(currentUser, reservationRecord.laboratoryId);
+
+    if (reservationRecord.status !== "PENDING") {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        "Only pending reservations can be reviewed."
+      );
+    }
+
+    const updatedReservation = await this.runTransaction(async (tx) => {
+      await this.lockLaboratoryReservations(tx, reservationRecord.laboratoryId);
+
+      const currentReservation = await tx.reservation.findUnique({
+        where: { id: reservationId },
+        select: {
+          id: true,
+          laboratoryId: true,
+          reservationDate: true,
+          startTime: true,
+          endTime: true,
+          reservationType: true,
+          pcId: true,
+          status: true
+        }
+      });
+
+      if (!currentReservation) {
         throw new ApiError(StatusCodes.NOT_FOUND, "Reservation not found.");
       }
 
-      const reviewerEntity = UserFactory.create(reviewer);
-
-      if (!reviewerEntity.canReviewReservations()) {
-        throw new ApiError(
-          StatusCodes.FORBIDDEN,
-          "Your role is not allowed to review reservations."
-        );
-      }
-
-      await this.staffAccessService.ensureCanManageLab(currentUser, reservationRecord.laboratoryId);
-
-      const reservation = new Reservation(reservationRecord);
-
-      if (!reservation.isPending()) {
+      if (currentReservation.status !== "PENDING") {
         throw new ApiError(
           StatusCodes.BAD_REQUEST,
           "Only pending reservations can be reviewed."
@@ -334,16 +369,15 @@ export class ReservationService {
       }
 
       if (input.status === "APPROVED") {
-        await this.lockLaboratoryReservations(tx, reservationRecord.laboratoryId);
         await this.ensureNoReservationConflict(
           {
-            laboratoryId: reservationRecord.laboratoryId,
-            reservationDate: reservationRecord.reservationDate,
-            startTime: reservationRecord.startTime,
-            endTime: reservationRecord.endTime,
-            reservationType: reservationRecord.reservationType,
-            pcId: reservationRecord.pcId,
-            excludeReservationId: reservationRecord.id
+            laboratoryId: currentReservation.laboratoryId,
+            reservationDate: currentReservation.reservationDate,
+            startTime: currentReservation.startTime,
+            endTime: currentReservation.endTime,
+            reservationType: currentReservation.reservationType,
+            pcId: currentReservation.pcId,
+            excludeReservationId: currentReservation.id
           },
           tx
         );
@@ -424,36 +458,89 @@ export class ReservationService {
   }
 
   async completeReservation(reservationId: number, currentUser: CurrentUser, remarks?: string) {
-    return this.db.$transaction(async (tx) => {
-      const [reviewer, reservationRecord] = await Promise.all([
-        tx.user.findUnique({ where: { id: currentUser.id } }),
-        tx.reservation.findUnique({
-          where: { id: reservationId }
-        })
-      ]);
+    const [reviewer, reservationRecord] = await Promise.all([
+      this.db.user.findUnique({ where: { id: currentUser.id } }),
+      this.db.reservation.findUnique({
+        where: { id: reservationId },
+        select: {
+          id: true,
+          reservationCode: true,
+          laboratoryId: true,
+          pcId: true,
+          status: true,
+          remarks: true,
+          reviewedById: true,
+          reviewedAt: true,
+          cancelledAt: true,
+          studentId: true,
+          scheduleId: true,
+          reservationType: true,
+          purpose: true,
+          reservationDate: true,
+          startTime: true,
+          endTime: true,
+          createdAt: true,
+          updatedAt: true
+        }
+      })
+    ]);
 
-      if (!reviewer) {
-        throw new ApiError(StatusCodes.NOT_FOUND, "Reviewer account not found.");
-      }
+    if (!reviewer) {
+      throw new ApiError(StatusCodes.NOT_FOUND, "Reviewer account not found.");
+    }
 
-      if (!reservationRecord) {
+    if (!reservationRecord) {
+      throw new ApiError(StatusCodes.NOT_FOUND, "Reservation not found.");
+    }
+
+    const reviewerEntity = UserFactory.create(reviewer);
+
+    if (!reviewerEntity.canReviewReservations()) {
+      throw new ApiError(
+        StatusCodes.FORBIDDEN,
+        "Your role is not allowed to complete reservations."
+      );
+    }
+
+    await this.staffAccessService.ensureCanManageLab(currentUser, reservationRecord.laboratoryId);
+
+    if (reservationRecord.status !== "APPROVED") {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        "Only approved reservations can be marked as completed."
+      );
+    }
+
+    return this.runTransaction(async (tx) => {
+      const currentReservation = await tx.reservation.findUnique({
+        where: { id: reservationId },
+        select: {
+          id: true,
+          reservationCode: true,
+          laboratoryId: true,
+          pcId: true,
+          status: true,
+          remarks: true,
+          reviewedById: true,
+          reviewedAt: true,
+          cancelledAt: true,
+          studentId: true,
+          scheduleId: true,
+          reservationType: true,
+          purpose: true,
+          reservationDate: true,
+          startTime: true,
+          endTime: true,
+          createdAt: true,
+          updatedAt: true
+        }
+      });
+
+      if (!currentReservation) {
         throw new ApiError(StatusCodes.NOT_FOUND, "Reservation not found.");
       }
 
-      const reviewerEntity = UserFactory.create(reviewer);
-
-      if (!reviewerEntity.canReviewReservations()) {
-        throw new ApiError(
-          StatusCodes.FORBIDDEN,
-          "Your role is not allowed to complete reservations."
-        );
-      }
-
-      await this.staffAccessService.ensureCanManageLab(currentUser, reservationRecord.laboratoryId);
-
-      const reservation = new Reservation(reservationRecord);
-
-      if (!reservation.canBeCompleted()) {
+      if (currentReservation.status !== "APPROVED") {
         throw new ApiError(
           StatusCodes.BAD_REQUEST,
           "Only approved reservations can be marked as completed."
@@ -464,7 +551,7 @@ export class ReservationService {
         where: { id: reservationId },
         data: {
           status: "COMPLETED",
-          remarks: remarks ?? reservationRecord.remarks,
+          remarks: remarks ?? currentReservation.remarks,
           reviewedById: currentUser.id,
           reviewedAt: new Date()
         }
@@ -495,6 +582,10 @@ export class ReservationService {
 
       return updatedReservation;
     });
+  }
+
+  private runTransaction<T>(callback: (tx: Prisma.TransactionClient) => Promise<T>) {
+    return this.db.$transaction(callback, reservationTransactionOptions);
   }
 
   private validateTimeRange(startTime: string, endTime: string) {

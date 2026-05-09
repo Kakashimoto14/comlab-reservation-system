@@ -45,7 +45,8 @@ const AdminScheduleWorkspace = () => {
 
   const { data: laboratories } = useQuery({
     queryKey: ["laboratories"],
-    queryFn: laboratoryApi.list
+    queryFn: laboratoryApi.list,
+    staleTime: 60_000
   });
 
   const { data, isLoading } = useQuery({
@@ -54,7 +55,8 @@ const AdminScheduleWorkspace = () => {
       scheduleApi.list({
         laboratoryId: selectedLaboratoryId || undefined,
         date: selectedDate || undefined
-      })
+      }),
+    staleTime: 30_000
   });
 
   const {
@@ -318,17 +320,20 @@ const StaffScheduleWorkspace = () => {
 
   const { data: myLab } = useQuery({
     queryKey: ["staff-my-lab"],
-    queryFn: staffApi.getMyLab
+    queryFn: staffApi.getMyLab,
+    staleTime: 60_000
   });
 
   const { data: mySchedules, isLoading } = useQuery({
     queryKey: ["staff-my-lab-schedules"],
-    queryFn: staffApi.getMyLabSchedules
+    queryFn: staffApi.getMyLabSchedules,
+    staleTime: 30_000
   });
 
   const { data: publicSchedules } = useQuery({
     queryKey: ["staff-public-schedules"],
-    queryFn: () => staffApi.listPublicSchedules()
+    queryFn: () => staffApi.listPublicSchedules(),
+    staleTime: 30_000
   });
 
   const {

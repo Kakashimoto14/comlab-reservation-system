@@ -23,6 +23,10 @@ type CurrentUser = {
 };
 
 type DbClient = PrismaClient | Prisma.TransactionClient;
+const scheduleTransactionOptions = {
+  maxWait: 10_000,
+  timeout: 20_000
+};
 
 export class ScheduleService {
   private readonly activityLogService: ActivityLogService;
@@ -56,24 +60,24 @@ export class ScheduleService {
             }),
         ...(filters.date ? { date: toDateOnly(filters.date) } : {})
       },
-      include: {
+      select: {
+        id: true,
+        laboratoryId: true,
+        date: true,
+        startTime: true,
+        endTime: true,
+        status: true,
+        createdById: true,
+        createdAt: true,
+        updatedAt: true,
         laboratory: {
-          include: {
-            custodian: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true
-              }
-            }
-          }
-        },
-        createdBy: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
-            role: true
+            name: true,
+            roomCode: true,
+            building: true,
+            location: true,
+            status: true
           }
         }
       },
@@ -86,7 +90,7 @@ export class ScheduleService {
     await this.laboratoryService.ensureLaboratoryIsAvailable(input.laboratoryId);
     this.validateTimeRange(input.startTime, input.endTime);
     
-    const schedule = await this.db.$transaction(async (tx) => {
+    const schedule = await this.runTransaction(async (tx) => {
       await this.lockLaboratories(tx, [input.laboratoryId]);
       await this.ensureNoOverlap(
         input.laboratoryId,
@@ -157,7 +161,7 @@ export class ScheduleService {
       );
     }
 
-    const updatedSchedule = await this.db.$transaction(async (tx) => {
+    const updatedSchedule = await this.runTransaction(async (tx) => {
       await this.lockLaboratories(tx, [schedule.laboratoryId, input.laboratoryId]);
       await this.ensureNoOverlap(
         input.laboratoryId,
@@ -322,6 +326,10 @@ export class ScheduleService {
       WHERE id IN (${Prisma.join(uniqueLaboratoryIds)})
       FOR UPDATE
     `;
+  }
+
+  private runTransaction<T>(callback: (tx: Prisma.TransactionClient) => Promise<T>) {
+    return this.db.$transaction(callback, scheduleTransactionOptions);
   }
 
   private async resolveAccessibleLaboratoryIds(

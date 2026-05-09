@@ -53,6 +53,33 @@ const laboratoryListInclude = {
   }
 } satisfies PrismaNamespace.LaboratoryInclude;
 
+const laboratoryListSelect = {
+  id: true,
+  name: true,
+  roomCode: true,
+  building: true,
+  location: true,
+  capacity: true,
+  computerCount: true,
+  description: true,
+  status: true,
+  imageUrl: true,
+  custodianId: true,
+  createdAt: true,
+  updatedAt: true,
+  custodian: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      department: true,
+      role: true,
+      status: true
+    }
+  }
+} satisfies PrismaNamespace.LaboratorySelect;
+
 export class LaboratoryService {
   private readonly activityLogService: ActivityLogService;
 
@@ -63,15 +90,18 @@ export class LaboratoryService {
   async listLaboratories(includeUnavailable = true) {
     return this.db.laboratory.findMany({
       where: includeUnavailable ? undefined : { status: "AVAILABLE" },
-      include: laboratoryListInclude,
+      select: laboratoryListSelect,
       orderBy: [{ building: "asc" }, { roomCode: "asc" }]
     });
   }
 
   async getLaboratoryById(id: number) {
+    const today = toDateOnly(new Date());
+
     const laboratory = await this.db.laboratory.findUnique({
       where: { id },
-      include: {
+      select: {
+        ...laboratoryListSelect,
         custodian: {
           select: {
             id: true,
@@ -84,10 +114,19 @@ export class LaboratoryService {
           }
         },
         schedules: {
+          where: {
+            date: {
+              gte: today
+            },
+            status: "AVAILABLE"
+          },
           orderBy: [{ date: "asc" }, { startTime: "asc" }]
         },
         reservations: {
           where: {
+            reservationDate: {
+              gte: today
+            },
             status: {
               in: ["PENDING", "APPROVED", "COMPLETED"]
             }
@@ -106,6 +145,14 @@ export class LaboratoryService {
           }
         },
         pcs: {
+          select: {
+            id: true,
+            laboratoryId: true,
+            pcNumber: true,
+            status: true,
+            createdAt: true,
+            updatedAt: true
+          },
           orderBy: {
             pcNumber: "asc"
           }

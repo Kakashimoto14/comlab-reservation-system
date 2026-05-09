@@ -66,17 +66,20 @@ const StaffLaboratoryWorkspace = () => {
 
   const { data: myLab, isLoading: isLoadingLab } = useQuery({
     queryKey: ["staff-my-lab"],
-    queryFn: staffApi.getMyLab
+    queryFn: staffApi.getMyLab,
+    staleTime: 60_000
   });
 
   const { data: pcs, isLoading: isLoadingPcs } = useQuery({
     queryKey: ["staff-my-lab-pcs"],
-    queryFn: staffApi.getMyLabPcs
+    queryFn: staffApi.getMyLabPcs,
+    staleTime: 30_000
   });
 
   const { data: availability } = useQuery({
     queryKey: ["staff-lab-availability"],
-    queryFn: () => staffApi.listAvailability()
+    queryFn: () => staffApi.listAvailability(),
+    staleTime: 30_000
   });
 
   const pcStatusMutation = useMutation({
@@ -269,7 +272,8 @@ const AdminLaboratoryWorkspace = () => {
   const [laboratoryToDelete, setLaboratoryToDelete] = useState<Laboratory | null>(null);
   const { data, isLoading } = useQuery({
     queryKey: ["laboratories"],
-    queryFn: laboratoryApi.list
+    queryFn: laboratoryApi.list,
+    staleTime: 60_000
   });
 
   const {

@@ -1,55 +1,61 @@
 import { PrismaClient } from "@prisma/client";
-import { existsSync } from "node:fs";
-import path from "node:path";
+import { existsSync } from "fs";
+import path from "path";
 
-import { env } from "./env.js";
+import { env } from "./env";
 
-declare global {
-  // eslint-disable-next-line no-var
-  var prisma: PrismaClient | undefined;
-}
+function buildDatabaseUrl() {
+  const databaseUrl = new URL(env.DATABASE_URL);
 
-const defaultCertificatePath = path.resolve(process.cwd(), "prisma", "ca-certificate.crt");
+  const isMysql = databaseUrl.protocol.startsWith("mysql");
 
-const resolveDatasourceUrl = () => {
-  const connectionUrl = new URL(env.DATABASE_URL);
-  const isMysql = connectionUrl.protocol === "mysql:";
-  const hasTlsConfig =
-    connectionUrl.searchParams.has("sslaccept") ||
-    connectionUrl.searchParams.has("sslcert") ||
-    connectionUrl.searchParams.has("sslidentity") ||
-    connectionUrl.searchParams.has("sslpassword");
-
-  if (!isMysql || hasTlsConfig) {
+  if (!isMysql) {
     return env.DATABASE_URL;
   }
 
-  const certificatePath = env.DATABASE_SSL_CERT_PATH ?? defaultCertificatePath;
+  // LOCAL DEVELOPMENT
+  // Do not force SSL on localhost
+  const isLocalhost =
+    databaseUrl.hostname === "localhost" ||
+    databaseUrl.hostname === "127.0.0.1";
+
+  if (isLocalhost) {
+    return env.DATABASE_URL;
+  }
+
+  // PRODUCTION SSL
+  const certificatePath =
+    env.DATABASE_SSL_CERT_PATH ??
+    path.resolve(process.cwd(), "prisma", "ca-certificate.crt");
 
   if (!existsSync(certificatePath)) {
     return env.DATABASE_URL;
   }
 
-  connectionUrl.searchParams.set(
+  databaseUrl.searchParams.set(
     "sslaccept",
     env.DATABASE_SSL_ACCEPT ?? "strict"
   );
-  connectionUrl.searchParams.set("sslcert", certificatePath);
 
-  return connectionUrl.toString();
+  databaseUrl.searchParams.set("sslcert", certificatePath);
+
+  return databaseUrl.toString();
+}
+
+const globalForPrisma = globalThis as unknown as {
+  prisma?: PrismaClient;
 };
 
 export const prisma =
-  global.prisma ??
+  globalForPrisma.prisma ??
   new PrismaClient({
     datasources: {
       db: {
-        url: resolveDatasourceUrl()
-      }
+        url: buildDatabaseUrl(),
+      },
     },
-    log: ["error", "warn"]
   });
 
-if (process.env.NODE_ENV !== "production") {
-  global.prisma = prisma;
+if (env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
 }

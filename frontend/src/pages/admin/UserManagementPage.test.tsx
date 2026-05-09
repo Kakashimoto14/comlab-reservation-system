@@ -84,10 +84,10 @@ describe("UserManagementPage", () => {
       lastName: "Lovelace",
       email: "ada@comlab.edu",
       password: "Password123!",
-      role: "ADMIN"
+      role: "ADMIN",
+      studentNumber: null,
+      yearLevel: null
     });
-    expect(submittedPayload).not.toHaveProperty("studentNumber");
-    expect(submittedPayload).not.toHaveProperty("yearLevel");
     expect(screen.getByRole("button", { name: "Creating..." })).toBeDisabled();
 
     resolveCreate?.();
@@ -116,10 +116,10 @@ describe("UserManagementPage", () => {
     await waitFor(() => expect(mockedUserApi.create).toHaveBeenCalledTimes(1));
 
     expect(mockedUserApi.create.mock.calls[0][0]).toMatchObject({
-      role: "LABORATORY_STAFF"
+      role: "LABORATORY_STAFF",
+      studentNumber: null,
+      yearLevel: null
     });
-    expect(mockedUserApi.create.mock.calls[0][0]).not.toHaveProperty("studentNumber");
-    expect(mockedUserApi.create.mock.calls[0][0]).not.toHaveProperty("yearLevel");
     },
     15000
   );
@@ -141,9 +141,13 @@ describe("UserManagementPage", () => {
       screen.getAllByText("Student number is required for student accounts.")
     ).toHaveLength(2);
     expect(screen.getByText("Year level is required for student accounts.")).toBeVisible();
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Student number is required for student accounts."
-    );
+    expect(
+      screen
+        .getAllByRole("alert")
+        .some((element) =>
+          element.textContent?.includes("Student number is required for student accounts.")
+        )
+    ).toBe(true);
     expect(mockedToast.error).toHaveBeenCalledWith(
       "Student number is required for student accounts."
     );
@@ -163,7 +167,11 @@ describe("UserManagementPage", () => {
     await waitFor(() => expect(mockedUserApi.create).not.toHaveBeenCalled());
 
     expect(screen.getAllByText("Password is required for new users.")).toHaveLength(2);
-    expect(screen.getByRole("alert")).toHaveTextContent("Password is required for new users.");
+    expect(
+      screen
+        .getAllByRole("alert")
+        .some((element) => element.textContent?.includes("Password is required for new users."))
+    ).toBe(true);
     expect(mockedToast.error).toHaveBeenCalledWith("Password is required for new users.");
   });
 });

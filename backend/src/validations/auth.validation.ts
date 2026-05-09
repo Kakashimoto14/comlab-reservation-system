@@ -1,23 +1,25 @@
 import { z } from "zod";
 
-const passwordSchema = z
-  .string()
-  .min(10, "Password must be at least 10 characters.")
-  .regex(/[a-z]/, "Password must include a lowercase letter.")
-  .regex(/[A-Z]/, "Password must include an uppercase letter.")
-  .regex(/\d/, "Password must include a number.")
-  .regex(/[^A-Za-z0-9]/, "Password must include a special character.");
+import {
+  emailSchema,
+  passwordSchema,
+  requiredDepartmentSchema,
+  requiredNameSchema,
+  requiredPhoneSchema,
+  requiredStudentNumberSchema,
+  yearLevelSchema
+} from "./userRules.js";
 
 export const registerStudentSchema = z.object({
   body: z.object({
-    firstName: z.string().min(2),
-    lastName: z.string().min(2),
-    email: z.string().email(),
+    firstName: requiredNameSchema("First name"),
+    lastName: requiredNameSchema("Last name"),
+    email: emailSchema,
     password: passwordSchema,
-    studentNumber: z.string().min(6),
-    department: z.string().min(2),
-    yearLevel: z.coerce.number().min(1).max(6),
-    phone: z.string().min(7).optional()
+    studentNumber: requiredStudentNumberSchema,
+    department: requiredDepartmentSchema,
+    yearLevel: yearLevelSchema,
+    phone: requiredPhoneSchema
   }),
   params: z.object({}).default({}),
   query: z.object({}).default({})
@@ -25,7 +27,7 @@ export const registerStudentSchema = z.object({
 
 export const loginSchema = z.object({
   body: z.object({
-    email: z.string().email(),
+    email: emailSchema,
     password: z.string().min(1, "Password is required.")
   }),
   params: z.object({}).default({}),
@@ -34,7 +36,7 @@ export const loginSchema = z.object({
 
 export const forgotPasswordSchema = z.object({
   body: z.object({
-    email: z.string().email()
+    email: emailSchema
   }),
   params: z.object({}).default({}),
   query: z.object({}).default({})

@@ -64,11 +64,11 @@ async function main() {
   ]);
 
   const studentSeeds = [
-    ["Alyssa", "Cruz", "2024-0001", 2],
-    ["Brian", "Santos", "2024-0002", 2],
-    ["Carla", "Dizon", "2024-0003", 2],
-    ["Derrick", "Lim", "2024-0004", 3],
-    ["Elaine", "Navarro", "2024-0005", 1]
+    ["Alyssa", "Cruz", "24-00001", 2],
+    ["Brian", "Santos", "24-00002", 2],
+    ["Carla", "Dizon", "24-00003", 2],
+    ["Derrick", "Lim", "24-00004", 3],
+    ["Elaine", "Navarro", "24-00005", 1]
   ] as const;
 
   const students = await Promise.all(

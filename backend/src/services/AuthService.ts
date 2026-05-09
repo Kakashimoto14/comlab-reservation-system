@@ -21,7 +21,7 @@ type RegisterStudentInput = {
   studentNumber: string;
   department: string;
   yearLevel: number;
-  phone?: string;
+  phone: string;
 };
 
 type LoginInput = {
@@ -94,7 +94,7 @@ export class AuthService {
     const user = await this.db.user.create({
       data: {
         ...userData,
-        phone: input.phone ?? null,
+        phone: input.phone,
         role: "STUDENT",
         passwordHash
       }

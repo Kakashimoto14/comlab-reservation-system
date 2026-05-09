@@ -74,16 +74,16 @@ enum NotificationStatus {
 
 model User {
   id                   Int             @id @default(autoincrement())
-  firstName            String
-  lastName             String
+  firstName            String          @db.VarChar(50)
+  lastName             String          @db.VarChar(50)
   email                String          @unique
   passwordHash         String
   role                 UserRole
   status               UserStatus      @default(ACTIVE)
-  studentNumber        String?         @unique
-  department           String?
+  studentNumber        String?         @unique @db.VarChar(8)
+  department           String?         @db.VarChar(120)
   yearLevel            Int?
-  phone                String?
+  phone                String?         @db.VarChar(13)
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
   reservations         Reservation[]   @relation("ReservationStudent")

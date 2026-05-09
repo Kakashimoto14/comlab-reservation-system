@@ -12,10 +12,10 @@ type CreateUserInput = {
   email: string;
   password: string;
   role: UserRole;
-  studentNumber?: string;
-  department?: string;
-  yearLevel?: number;
-  phone?: string;
+  studentNumber?: string | null;
+  department?: string | null;
+  yearLevel?: number | null;
+  phone?: string | null;
 };
 
 type UpdateUserInput = Partial<CreateUserInput> & {
@@ -25,9 +25,9 @@ type UpdateUserInput = Partial<CreateUserInput> & {
 type UpdateProfileInput = {
   firstName: string;
   lastName: string;
-  department?: string;
-  yearLevel?: number;
-  phone?: string;
+  department?: string | null;
+  yearLevel?: number | null;
+  phone?: string | null;
 };
 
 type DbClient = PrismaClient | Prisma.TransactionClient;
@@ -39,24 +39,38 @@ export class UserService {
     this.activityLogService = new ActivityLogService(db);
   }
 
-  private normalizeCreateInput(input: CreateUserInput) {
-    if (input.role === "STUDENT") {
-      return input;
+  private getPersistedStudentFields(
+    role: UserRole,
+    input: {
+      studentNumber?: string | null;
+      yearLevel?: number | null;
     }
-
-    return {
-      ...input,
-      studentNumber: undefined,
-      yearLevel: undefined
-    };
-  }
-
-  private getRoleAwareUpdateData(input: UpdateUserInput) {
-    if (input.role && input.role !== "STUDENT") {
+  ) {
+    if (role !== "STUDENT") {
       return {
         studentNumber: null,
         yearLevel: null
       };
+    }
+
+    if (!input.studentNumber) {
+      throw new ApiError(
+        StatusCodes.UNPROCESSABLE_ENTITY,
+        "Student accounts must include a student number.",
+        {
+          studentNumber: ["Student number is required for student accounts."]
+        }
+      );
+    }
+
+    if (typeof input.yearLevel !== "number" || Number.isNaN(input.yearLevel)) {
+      throw new ApiError(
+        StatusCodes.UNPROCESSABLE_ENTITY,
+        "Student accounts must include a year level.",
+        {
+          yearLevel: ["Year level is required for student accounts."]
+        }
+      );
     }
 
     return {
@@ -74,13 +88,16 @@ export class UserService {
   }
 
   async createUser(input: CreateUserInput, actorId: number) {
-    const normalizedInput = this.normalizeCreateInput(input);
+    const studentFields = this.getPersistedStudentFields(input.role, {
+      studentNumber: input.studentNumber ?? null,
+      yearLevel: input.yearLevel ?? null
+    });
     const existingUser = await this.db.user.findFirst({
       where: {
         OR: [
-          { email: normalizedInput.email },
-          ...(normalizedInput.studentNumber
-            ? [{ studentNumber: normalizedInput.studentNumber }]
+          { email: input.email },
+          ...(studentFields.studentNumber
+            ? [{ studentNumber: studentFields.studentNumber }]
             : [])
         ]
       }
@@ -91,24 +108,29 @@ export class UserService {
         StatusCodes.CONFLICT,
         "A user with the same email or student number already exists.",
         {
-          ...(existingUser.email === normalizedInput.email
+          ...(existingUser.email === input.email
             ? { email: ["An account with that email already exists."] }
             : {}),
           ...(existingUser.studentNumber &&
-          normalizedInput.studentNumber &&
-          existingUser.studentNumber === normalizedInput.studentNumber
+          studentFields.studentNumber &&
+          existingUser.studentNumber === studentFields.studentNumber
             ? { studentNumber: ["That student number is already registered."] }
             : {})
         }
       );
     }
 
-    const passwordHash = await bcrypt.hash(normalizedInput.password, 10);
-    const { password: _password, ...userData } = normalizedInput;
+    const passwordHash = await bcrypt.hash(input.password, 10);
 
     const user = await this.db.user.create({
       data: {
-        ...userData,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        email: input.email,
+        role: input.role,
+        department: input.department ?? null,
+        phone: input.phone ?? null,
+        ...studentFields,
         passwordHash
       }
     });
@@ -127,19 +149,25 @@ export class UserService {
 
   async updateUser(userId: number, input: UpdateUserInput, actorId: number) {
     const user = await this.db.user.findUnique({ where: { id: userId } });
-    const roleAwareUpdateData = this.getRoleAwareUpdateData(input);
 
     if (!user) {
       throw new ApiError(StatusCodes.NOT_FOUND, "User account not found.");
     }
+
+    const nextRole = input.role ?? user.role;
+    const studentFields = this.getPersistedStudentFields(nextRole, {
+      studentNumber:
+        typeof input.studentNumber !== "undefined" ? input.studentNumber : user.studentNumber,
+      yearLevel: typeof input.yearLevel !== "undefined" ? input.yearLevel : user.yearLevel
+    });
 
     const duplicateUser = await this.db.user.findFirst({
       where: {
         id: { not: userId },
         OR: [
           ...(input.email ? [{ email: input.email }] : []),
-          ...(roleAwareUpdateData.studentNumber
-            ? [{ studentNumber: roleAwareUpdateData.studentNumber }]
+          ...(studentFields.studentNumber
+            ? [{ studentNumber: studentFields.studentNumber }]
             : [])
         ]
       }
@@ -153,8 +181,8 @@ export class UserService {
           ...(input.email && duplicateUser.email === input.email
             ? { email: ["Another user already uses that email."] }
             : {}),
-          ...(roleAwareUpdateData.studentNumber &&
-          duplicateUser.studentNumber === roleAwareUpdateData.studentNumber
+          ...(studentFields.studentNumber &&
+          duplicateUser.studentNumber === studentFields.studentNumber
             ? { studentNumber: ["Another user already uses that student number."] }
             : {})
         }
@@ -171,14 +199,17 @@ export class UserService {
       const nextUser = await tx.user.update({
         where: { id: userId },
         data: {
-          firstName: input.firstName,
-          lastName: input.lastName,
-          email: input.email,
-          role: input.role,
-          ...roleAwareUpdateData,
-          department: input.department,
-          phone: input.phone,
-          status: input.status,
+          ...(typeof input.firstName !== "undefined" ? { firstName: input.firstName } : {}),
+          ...(typeof input.lastName !== "undefined" ? { lastName: input.lastName } : {}),
+          ...(typeof input.email !== "undefined" ? { email: input.email } : {}),
+          ...(typeof input.role !== "undefined" ? { role: input.role } : {}),
+          ...(typeof input.department !== "undefined"
+            ? { department: input.department ?? null }
+            : {}),
+          ...(typeof input.phone !== "undefined" ? { phone: input.phone ?? null } : {}),
+          ...(typeof input.status !== "undefined" ? { status: input.status } : {}),
+          studentNumber: studentFields.studentNumber,
+          yearLevel: studentFields.yearLevel,
           ...(passwordHash ? { passwordHash } : {})
         }
       });
@@ -245,9 +276,26 @@ export class UserService {
       throw new ApiError(StatusCodes.FORBIDDEN, "Inactive users cannot update profiles.");
     }
 
+    const studentFields =
+      user.role === "STUDENT"
+        ? this.getPersistedStudentFields(user.role, {
+            studentNumber: user.studentNumber,
+            yearLevel: input.yearLevel ?? null
+          })
+        : {
+            studentNumber: null,
+            yearLevel: null
+          };
+
     const updatedUser = await this.db.user.update({
       where: { id: userId },
-      data: input
+      data: {
+        firstName: input.firstName,
+        lastName: input.lastName,
+        department: input.department ?? null,
+        phone: input.phone ?? null,
+        yearLevel: studentFields.yearLevel
+      }
     });
 
     await this.activityLogService.logActivity({

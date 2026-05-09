@@ -2,13 +2,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import type { SubmitErrorHandler } from "react-hook-form";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { AxiosError } from "axios";
 import toast from "react-hot-toast";
 import { z } from "zod";
 
 import { userApi } from "../../api/services";
-import type { User, UserRole } from "../../types/api";
+import type { User } from "../../types/api";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { EmptyState } from "../../components/ui/EmptyState";
@@ -19,77 +19,49 @@ import { Modal } from "../../components/ui/Modal";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Select } from "../../components/ui/Select";
 import { StatusBadge } from "../../components/ui/StatusBadge";
+import { applyServerValidationErrors } from "../../utils/formErrors";
+import {
+  emailSchema,
+  getFormattedStudentNumberInput,
+  optionalDepartmentSchema,
+  optionalPhoneSchema,
+  optionalStudentNumberSchema,
+  optionalYearLevelSchema,
+  passwordSchema,
+  requiredNameSchema,
+  sanitizeNameInput,
+  sanitizePhoneInput,
+  validateStudentFieldsForRole,
+  YEAR_LEVEL_OPTIONS
+} from "../../utils/userValidation";
 
-const requiredStudentMessage = "Student number is required for student accounts.";
-const requiredYearLevelMessage = "Year level is required for student accounts.";
 const invalidUserFormMessage =
   "Please correct the highlighted fields before submitting the user form.";
 const PAGE_SIZE = 10;
 
-const optionalTextField = z.preprocess((value) => {
-  if (typeof value !== "string") {
-    return value;
-  }
-
-  const trimmedValue = value.trim();
-  return trimmedValue === "" ? undefined : trimmedValue;
-}, z.string().optional());
-
-const optionalYearLevelField = z.preprocess((value) => {
-  if (
-    value === "" ||
-    value === null ||
-    typeof value === "undefined" ||
-    (typeof value === "number" && Number.isNaN(value))
-  ) {
-    return undefined;
-  }
-
-  return value;
-}, z.coerce.number().int().min(1).max(6).optional());
-
 const userSchema = z
   .object({
-    firstName: z.string().trim().min(2),
-    lastName: z.string().trim().min(2),
-    email: z.string().email(),
-    password: z
-      .string()
-      .trim()
-      .min(10, "Password must be at least 10 characters.")
-      .regex(/[a-z]/, "Password must include a lowercase letter.")
-      .regex(/[A-Z]/, "Password must include an uppercase letter.")
-      .regex(/\d/, "Password must include a number.")
-      .regex(/[^A-Za-z0-9]/, "Password must include a special character.")
-      .optional()
-      .or(z.literal("")),
+    firstName: requiredNameSchema("First name"),
+    lastName: requiredNameSchema("Last name"),
+    email: emailSchema,
+    password: z.preprocess(
+      (value) => {
+        if (typeof value !== "string") {
+          return value;
+        }
+
+        const trimmedValue = value.trim();
+        return trimmedValue === "" ? undefined : trimmedValue;
+      },
+      passwordSchema.optional()
+    ),
     role: z.enum(["ADMIN", "STUDENT", "LABORATORY_STAFF"]),
-    studentNumber: optionalTextField,
-    department: optionalTextField,
-    yearLevel: optionalYearLevelField,
-    phone: optionalTextField
+    studentNumber: optionalStudentNumberSchema,
+    department: optionalDepartmentSchema,
+    yearLevel: optionalYearLevelSchema,
+    phone: optionalPhoneSchema
   })
-  .superRefine((values, context) => {
-    if (values.role !== "STUDENT") {
-      return;
-    }
-
-    if (!values.studentNumber) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: requiredStudentMessage,
-        path: ["studentNumber"]
-      });
-    }
-
-    if (typeof values.yearLevel !== "number" || Number.isNaN(values.yearLevel)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: requiredYearLevelMessage,
-        path: ["yearLevel"]
-      });
-    }
-  });
+  .superRefine(validateStudentFieldsForRole);
 
 type UserFormValues = z.infer<typeof userSchema>;
 
@@ -105,28 +77,21 @@ const getErrorMessage = (error: unknown, fallbackMessage: string) => {
 
 const sanitizeUserPayload = (values: UserFormValues, isEditing: boolean) => {
   const payload: Record<string, unknown> = {
-    firstName: values.firstName.trim(),
-    lastName: values.lastName.trim(),
-    email: values.email.trim(),
+    firstName: values.firstName,
+    lastName: values.lastName,
+    email: values.email,
     role: values.role
   };
 
-  if (values.department?.trim()) {
-    payload.department = values.department.trim();
-  }
-
-  if (values.phone?.trim()) {
-    payload.phone = values.phone.trim();
-  }
+  payload.department = values.department ?? null;
+  payload.phone = values.phone ?? null;
 
   if (values.role === "STUDENT") {
-    if (values.studentNumber?.trim()) {
-      payload.studentNumber = values.studentNumber.trim();
-    }
-
-    if (typeof values.yearLevel === "number" && !Number.isNaN(values.yearLevel)) {
-      payload.yearLevel = values.yearLevel;
-    }
+    payload.studentNumber = values.studentNumber ?? null;
+    payload.yearLevel = values.yearLevel ? Number(values.yearLevel) : null;
+  } else {
+    payload.studentNumber = null;
+    payload.yearLevel = null;
   }
 
   if (values.password?.trim()) {
@@ -164,13 +129,18 @@ export const UserManagementPage = () => {
 
   const {
     register,
+    control,
     handleSubmit,
     reset,
     setError,
+    setFocus,
+    setValue,
+    clearErrors,
     watch,
     formState: { errors, isSubmitting }
   } = useForm<UserFormValues>({
     resolver: zodResolver(userSchema),
+    mode: "onChange",
     shouldUnregister: true,
     defaultValues: {
       role: "STUDENT"
@@ -191,7 +161,7 @@ export const UserManagementPage = () => {
         role: selectedUser.role,
         studentNumber: selectedUser.studentNumber ?? "",
         department: selectedUser.department ?? "",
-        yearLevel: selectedUser.yearLevel ?? undefined,
+        yearLevel: selectedUser.yearLevel ? String(selectedUser.yearLevel) as UserFormValues["yearLevel"] : undefined,
         phone: selectedUser.phone ?? ""
       });
       return;
@@ -210,6 +180,16 @@ export const UserManagementPage = () => {
     });
   }, [reset, selectedUser]);
 
+  useEffect(() => {
+    if (role === "STUDENT") {
+      return;
+    }
+
+    setValue("studentNumber", "", { shouldValidate: true, shouldDirty: true });
+    setValue("yearLevel", undefined, { shouldValidate: true, shouldDirty: true });
+    clearErrors(["studentNumber", "yearLevel"]);
+  }, [clearErrors, role, setValue]);
+
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ["users"] });
     setOpen(false);
@@ -222,7 +202,11 @@ export const UserManagementPage = () => {
       toast.success("User account created.");
       await invalidate();
     },
-    onError: (error) => toast.error(getErrorMessage(error, "Unable to create user account."))
+    onError: (error) => {
+      const message = applyServerValidationErrors(error, { setError, setFocus });
+      setFormErrorMessage(message ?? "Unable to create user account.");
+      toast.error(message ?? getErrorMessage(error, "Unable to create user account."));
+    }
   });
 
   const updateMutation = useMutation({
@@ -231,7 +215,11 @@ export const UserManagementPage = () => {
       toast.success("User account updated.");
       await invalidate();
     },
-    onError: (error) => toast.error(getErrorMessage(error, "Unable to update user account."))
+    onError: (error) => {
+      const message = applyServerValidationErrors(error, { setError, setFocus });
+      setFormErrorMessage(message ?? "Unable to update user account.");
+      toast.error(message ?? getErrorMessage(error, "Unable to update user account."));
+    }
   });
 
   const statusMutation = useMutation({
@@ -425,17 +413,44 @@ export const UserManagementPage = () => {
           onSubmit={handleSubmit(onSubmit, onInvalidSubmit)}
         >
           <FormField label="First Name" error={errors.firstName?.message}>
-            <Input {...register("firstName")} />
+            <Controller
+              name="firstName"
+              control={control}
+              render={({ field }) => (
+                <Input
+                  {...field}
+                  value={field.value ?? ""}
+                  autoComplete="given-name"
+                  inputMode="text"
+                  maxLength={50}
+                  onChange={(event) => field.onChange(sanitizeNameInput(event.target.value))}
+                />
+              )}
+            />
           </FormField>
           <FormField label="Last Name" error={errors.lastName?.message}>
-            <Input {...register("lastName")} />
+            <Controller
+              name="lastName"
+              control={control}
+              render={({ field }) => (
+                <Input
+                  {...field}
+                  value={field.value ?? ""}
+                  autoComplete="family-name"
+                  inputMode="text"
+                  maxLength={50}
+                  onChange={(event) => field.onChange(sanitizeNameInput(event.target.value))}
+                />
+              )}
+            />
           </FormField>
           <FormField label="Email" error={errors.email?.message}>
-            <Input type="email" {...register("email")} />
+            <Input autoComplete="email" inputMode="email" type="email" {...register("email")} />
           </FormField>
           <FormField label="Password" error={errors.password?.message}>
             <Input
               type="password"
+              autoComplete={selectedUser ? "current-password" : "new-password"}
               placeholder={selectedUser ? "Leave blank to keep current password" : ""}
               {...register("password")}
             />
@@ -450,20 +465,63 @@ export const UserManagementPage = () => {
             </Select>
           </FormField>
           <FormField label="Department" error={errors.department?.message}>
-            <Input {...register("department")} />
+            <Input autoComplete="organization" maxLength={120} {...register("department")} />
           </FormField>
           {role === "STUDENT" ? (
             <>
               <FormField label="Student Number" error={errors.studentNumber?.message}>
-                <Input {...register("studentNumber")} />
+                <Controller
+                  name="studentNumber"
+                  control={control}
+                  render={({ field }) => (
+                    <Input
+                      {...field}
+                      value={field.value ?? ""}
+                      inputMode="numeric"
+                      maxLength={8}
+                      placeholder="24-12345"
+                      onChange={(event) => {
+                        const input = event.currentTarget;
+                        const selectionStart = input.selectionStart ?? input.value.length;
+                        const nextValue = getFormattedStudentNumberInput(input.value, selectionStart);
+
+                        field.onChange(nextValue.value);
+                        requestAnimationFrame(() => {
+                          input.setSelectionRange(nextValue.cursor, nextValue.cursor);
+                        });
+                      }}
+                    />
+                  )}
+                />
               </FormField>
               <FormField label="Year Level" error={errors.yearLevel?.message}>
-                <Input type="number" {...register("yearLevel", { valueAsNumber: true })} />
+                <Select {...register("yearLevel")}>
+                  <option value="">Select year level</option>
+                  {YEAR_LEVEL_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      Year {option}
+                    </option>
+                  ))}
+                </Select>
               </FormField>
             </>
           ) : null}
           <FormField label="Phone Number" error={errors.phone?.message}>
-            <Input {...register("phone")} />
+            <Controller
+              name="phone"
+              control={control}
+              render={({ field }) => (
+                <Input
+                  {...field}
+                  value={field.value ?? ""}
+                  autoComplete="tel"
+                  inputMode="tel"
+                  maxLength={13}
+                  placeholder="09123456789"
+                  onChange={(event) => field.onChange(sanitizePhoneInput(event.target.value))}
+                />
+              )}
+            />
           </FormField>
           {formErrorMessage ? (
             <div

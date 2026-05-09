@@ -1,8 +1,8 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { AxiosError } from "axios";
-import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useMemo } from "react";
+import { Controller, useForm } from "react-hook-form";
 import toast from "react-hot-toast";
 import { z } from "zod";
 
@@ -12,30 +12,49 @@ import { Card } from "../components/ui/Card";
 import { FormField } from "../components/ui/FormField";
 import { Input } from "../components/ui/Input";
 import { PageHeader } from "../components/ui/PageHeader";
+import { Select } from "../components/ui/Select";
 import { useAuth } from "../store/AuthContext";
+import { applyServerValidationErrors } from "../utils/formErrors";
 import { roleLabels } from "../utils/constants";
+import {
+  optionalDepartmentSchema,
+  optionalPhoneSchema,
+  optionalYearLevelSchema,
+  passwordSchema,
+  requiredNameSchema,
+  sanitizeNameInput,
+  sanitizePhoneInput,
+  YEAR_LEVEL_OPTIONS
+} from "../utils/userValidation";
 
-const profileSchema = z.object({
-  firstName: z.string().min(2),
-  lastName: z.string().min(2),
-  department: z.string().optional(),
-  yearLevel: z.coerce.number().min(1).max(6).optional(),
-  phone: z.string().optional()
+const baseProfileSchema = z.object({
+  firstName: requiredNameSchema("First name"),
+  lastName: requiredNameSchema("Last name"),
+  department: optionalDepartmentSchema,
+  yearLevel: optionalYearLevelSchema,
+  phone: optionalPhoneSchema
 });
 
 const changePasswordSchema = z
   .object({
-    currentPassword: z.string().min(8, "Current password must be at least 8 characters."),
-    newPassword: z.string().min(8, "New password must be at least 8 characters."),
-    confirmPassword: z.string().min(8, "Confirm your new password.")
+    currentPassword: z.string().min(1, "Current password is required."),
+    newPassword: passwordSchema,
+    confirmPassword: z.string().min(1, "Confirm your new password.")
   })
   .refine((values) => values.newPassword === values.confirmPassword, {
     path: ["confirmPassword"],
     message: "Passwords do not match."
   });
 
-type ProfileFormValues = z.infer<typeof profileSchema>;
+type ProfileFormValues = z.infer<typeof baseProfileSchema>;
 type ChangePasswordFormValues = z.infer<typeof changePasswordSchema>;
+type ProfileUpdatePayload = {
+  firstName: string;
+  lastName: string;
+  department?: string | null;
+  yearLevel?: number | null;
+  phone?: string | null;
+};
 
 const getErrorMessage = (error: unknown, fallbackMessage: string) => {
   if (error instanceof AxiosError) {
@@ -49,13 +68,31 @@ const getErrorMessage = (error: unknown, fallbackMessage: string) => {
 
 export const ProfilePage = () => {
   const { user, setCurrentUser } = useAuth();
+  const isStudent = user?.role === "STUDENT";
+  const profileSchema = useMemo(
+    () =>
+      baseProfileSchema.superRefine((values, context) => {
+        if (isStudent && !values.yearLevel) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Year level is required for student accounts.",
+            path: ["yearLevel"]
+          });
+        }
+      }),
+    [isStudent]
+  );
   const {
     register,
+    control,
     handleSubmit,
     reset,
+    setError,
+    setFocus,
     formState: { errors, isSubmitting }
   } = useForm<ProfileFormValues>({
-    resolver: zodResolver(profileSchema)
+    resolver: zodResolver(profileSchema),
+    mode: "onChange"
   });
 
   const {
@@ -76,19 +113,22 @@ export const ProfilePage = () => {
         firstName: user.firstName,
         lastName: user.lastName,
         department: user.department ?? "",
-        yearLevel: user.yearLevel ?? undefined,
+        yearLevel: user.yearLevel ? String(user.yearLevel) as ProfileFormValues["yearLevel"] : undefined,
         phone: user.phone ?? ""
       });
     }
   }, [reset, user]);
 
   const profileMutation = useMutation({
-    mutationFn: (values: ProfileFormValues) => userApi.updateProfile(values),
+    mutationFn: (values: ProfileUpdatePayload) => userApi.updateProfile(values),
     onSuccess: (updatedUser) => {
       setCurrentUser(updatedUser);
       toast.success("Profile updated successfully.");
     },
-    onError: (error) => toast.error(getErrorMessage(error, "Unable to update profile."))
+    onError: (error) => {
+      const message = applyServerValidationErrors(error, { setError, setFocus });
+      toast.error(message ?? getErrorMessage(error, "Unable to update profile."));
+    }
   });
 
   const changePasswordMutation = useMutation({
@@ -110,7 +150,13 @@ export const ProfilePage = () => {
   });
 
   const onSubmit = async (values: ProfileFormValues) => {
-    await profileMutation.mutateAsync(values);
+    await profileMutation.mutateAsync({
+      firstName: values.firstName,
+      lastName: values.lastName,
+      department: values.department ?? null,
+      phone: values.phone ?? null,
+      yearLevel: isStudent ? (values.yearLevel ? Number(values.yearLevel) : null) : null
+    });
   };
 
   const onPasswordSubmit = async (values: ChangePasswordFormValues) => {
@@ -142,20 +188,69 @@ export const ProfilePage = () => {
           <form className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
             <div className="grid gap-5 md:grid-cols-2">
               <FormField label="First Name" error={errors.firstName?.message}>
-                <Input {...register("firstName")} />
+                <Controller
+                  name="firstName"
+                  control={control}
+                  render={({ field }) => (
+                    <Input
+                      {...field}
+                      value={field.value ?? ""}
+                      autoComplete="given-name"
+                      inputMode="text"
+                      maxLength={50}
+                      onChange={(event) => field.onChange(sanitizeNameInput(event.target.value))}
+                    />
+                  )}
+                />
               </FormField>
               <FormField label="Last Name" error={errors.lastName?.message}>
-                <Input {...register("lastName")} />
+                <Controller
+                  name="lastName"
+                  control={control}
+                  render={({ field }) => (
+                    <Input
+                      {...field}
+                      value={field.value ?? ""}
+                      autoComplete="family-name"
+                      inputMode="text"
+                      maxLength={50}
+                      onChange={(event) => field.onChange(sanitizeNameInput(event.target.value))}
+                    />
+                  )}
+                />
               </FormField>
               <FormField label="Department" error={errors.department?.message}>
-                <Input {...register("department")} />
+                <Input autoComplete="organization" maxLength={120} {...register("department")} />
               </FormField>
-              <FormField label="Year Level" error={errors.yearLevel?.message}>
-                <Input type="number" {...register("yearLevel", { valueAsNumber: true })} />
-              </FormField>
+              {isStudent ? (
+                <FormField label="Year Level" error={errors.yearLevel?.message}>
+                  <Select {...register("yearLevel")}>
+                    <option value="">Select year level</option>
+                    {YEAR_LEVEL_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        Year {option}
+                      </option>
+                    ))}
+                  </Select>
+                </FormField>
+              ) : null}
             </div>
             <FormField label="Phone Number" error={errors.phone?.message}>
-              <Input {...register("phone")} />
+              <Controller
+                name="phone"
+                control={control}
+                render={({ field }) => (
+                  <Input
+                    {...field}
+                    value={field.value ?? ""}
+                    autoComplete="tel"
+                    inputMode="tel"
+                    maxLength={13}
+                    placeholder="09123456789"
+                    onChange={(event) => field.onChange(sanitizePhoneInput(event.target.value))}
+                  />
+                )}
+              />
             </FormField>
             <Button type="submit" disabled={isSubmitting || profileMutation.isPending}>
               {isSubmitting || profileMutation.isPending ? "Saving..." : "Save Changes"}

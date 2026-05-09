@@ -2,7 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { existsSync } from "fs";
 import path from "path";
 
-import { env } from "./env";
+import { env } from "./env.js";
 
 function buildDatabaseUrl() {
   const databaseUrl = new URL(env.DATABASE_URL);

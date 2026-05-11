@@ -1,3 +1,4 @@
+import clsx from "clsx";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import { addWeeks, format, isSameDay } from "date-fns";
@@ -58,17 +59,17 @@ export const WeeklyScheduleGrid = ({
   );
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-soft">
-      <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+    <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-soft sm:p-5">
+      <div className="flex flex-col gap-4 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
             Weekly Timetable
           </p>
-          <h3 className="mt-2 text-lg font-semibold text-slate-900">
+          <h3 className="mt-2 text-lg font-semibold leading-tight text-slate-900 sm:text-xl">
             {formatWeekLabel(weekAnchorDate)}
           </h3>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="secondary"
             type="button"
@@ -94,7 +95,7 @@ export const WeeklyScheduleGrid = ({
       </div>
 
       {hasWeeklySchedules ? (
-        <div className="mt-5 grid gap-4 xl:grid-cols-7 md:grid-cols-2">
+        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7">
           {weekDays.map((day) => {
             const daySchedules = filterSchedulesByDate(schedules, day).sort((left, right) =>
               left.startTime.localeCompare(right.startTime)
@@ -104,11 +105,12 @@ export const WeeklyScheduleGrid = ({
               <button
                 key={day.toISOString()}
                 type="button"
-                className={`rounded-2xl border p-4 text-left transition ${
+                className={clsx(
+                  "min-w-0 rounded-xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-brand-300 focus:ring-offset-2",
                   selectedDate && isSameDay(day, selectedDate)
                     ? "border-brand-300 bg-brand-50"
                     : "border-slate-200 bg-slate-50/80 hover:border-brand-200"
-                }`}
+                )}
                 onClick={() => onSelectDate?.(day)}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -116,7 +118,7 @@ export const WeeklyScheduleGrid = ({
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                       {format(day, "EEE")}
                     </p>
-                    <p className="mt-1 text-lg font-semibold text-slate-900">
+                    <p className="mt-1 text-lg font-semibold leading-tight text-slate-900">
                       {format(day, "MMM dd")}
                     </p>
                   </div>
@@ -143,7 +145,7 @@ export const WeeklyScheduleGrid = ({
                       return (
                         <div
                           key={schedule.id}
-                          className="rounded-2xl border border-white bg-white p-3 shadow-soft"
+                          className="rounded-xl border border-slate-100 bg-white p-3 shadow-soft"
                         >
                           <div className="flex items-center justify-between gap-2">
                             <p className="text-sm font-semibold text-slate-900">

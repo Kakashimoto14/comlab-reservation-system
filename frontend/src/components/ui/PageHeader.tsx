@@ -9,11 +9,13 @@ export const PageHeader = ({
   description: string;
   actions?: ReactNode;
 }>) => (
-  <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-    <div>
-      <h1 className="font-display text-3xl font-bold text-slate-900">{title}</h1>
-      <p className="mt-2 max-w-2xl text-sm text-slate-500">{description}</p>
+  <div className="mb-6 flex flex-col gap-4 sm:mb-8 lg:flex-row lg:items-end lg:justify-between">
+    <div className="min-w-0">
+      <h1 className="font-display text-2xl font-bold leading-tight text-slate-900 sm:text-3xl">
+        {title}
+      </h1>
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{description}</p>
     </div>
-    {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
+    {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
   </div>
 );

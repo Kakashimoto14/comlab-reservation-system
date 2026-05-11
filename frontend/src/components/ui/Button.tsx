@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import { forwardRef } from "react";
 import type { ButtonHTMLAttributes, PropsWithChildren } from "react";
 
 type ButtonProps = PropsWithChildren<
@@ -15,22 +16,21 @@ const variants = {
   danger: "bg-danger text-white hover:bg-red-800"
 };
 
-export const Button = ({
-  children,
-  className,
-  variant = "primary",
-  fullWidth,
-  ...props
-}: ButtonProps) => (
-  <button
-    className={clsx(
-      "inline-flex min-h-11 min-w-0 items-center justify-center rounded-xl px-4 py-2.5 text-center text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 whitespace-normal break-words sm:whitespace-nowrap",
-      variants[variant],
-      fullWidth && "w-full",
-      className
-    )}
-    {...props}
-  >
-    {children}
-  </button>
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ children, className, variant = "primary", fullWidth, ...props }, ref) => (
+    <button
+      ref={ref}
+      className={clsx(
+        "inline-flex min-h-11 min-w-0 items-center justify-center rounded-xl px-4 py-2.5 text-center text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 whitespace-normal break-words sm:whitespace-nowrap",
+        variants[variant],
+        fullWidth && "w-full",
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </button>
+  )
 );
+
+Button.displayName = "Button";

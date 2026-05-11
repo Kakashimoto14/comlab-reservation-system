@@ -1,28 +1,30 @@
 version: "3.9"
 
 services:
-  mysql:
-    image: mysql:8.4
-    container_name: comlab-mysql
+  postgres:
+    image: postgres:16
+    container_name: comlab-postgres
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: password
-      MYSQL_DATABASE: comlab_reservation_system
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: comlab_reservation_system
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
+      - postgres_data:/var/lib/postgresql/data
 
   backend:
     build:
       context: ./backend
     container_name: comlab-backend
     depends_on:
-      - mysql
+      - postgres
     environment:
       PORT: 5000
       NODE_ENV: production
-      DATABASE_URL: mysql://root:password@mysql:3306/comlab_reservation_system
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/comlab_reservation_system
+      DIRECT_URL: postgresql://postgres:password@postgres:5432/comlab_reservation_system
       JWT_SECRET: super-secret-jwt-key
       JWT_EXPIRES_IN: 1d
       CLIENT_URL: http://localhost:4173
@@ -39,4 +41,4 @@ services:
       - "4173:80"
 
 volumes:
-  mysql_data:
+  postgres_data:

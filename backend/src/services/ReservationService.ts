@@ -5,6 +5,7 @@ import type {
   ReservationType,
   UserRole
 } from "@prisma/client";
+import { randomUUID } from "crypto";
 import { StatusCodes } from "http-status-codes";
 
 import { Reservation } from "../domain/Reservation.js";
@@ -183,7 +184,7 @@ export class ReservationService {
 
       const reservation = await tx.reservation.create({
         data: {
-          reservationCode: "PENDING-CODE",
+          reservationCode: this.buildPendingReservationCode(),
           studentId,
           laboratoryId: input.laboratoryId,
           scheduleId: schedule.id,
@@ -642,7 +643,7 @@ export class ReservationService {
   private async lockLaboratoryReservations(tx: Prisma.TransactionClient, laboratoryId: number) {
     const laboratories = await tx.$queryRaw<Array<{ id: number }>>`
       SELECT id
-      FROM Laboratory
+      FROM "Laboratory"
       WHERE id = ${laboratoryId}
       FOR UPDATE
     `;
@@ -650,6 +651,10 @@ export class ReservationService {
     if (laboratories.length === 0) {
       throw new ApiError(StatusCodes.NOT_FOUND, "Laboratory not found.");
     }
+  }
+
+  private buildPendingReservationCode() {
+    return `PENDING-${randomUUID()}`;
   }
 
   private async logReservationAction(

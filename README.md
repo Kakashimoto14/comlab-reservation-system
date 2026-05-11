@@ -86,8 +86,8 @@ ComPort follows a modern client-server architecture:
 
 - The frontend is a React single-page application used by students, staff, and administrators
 - The backend is a Node.js and Express REST API responsible for authentication, validation, business rules, and persistence
-- Prisma ORM acts as the data-access layer between the backend and the MySQL database
-- MySQL stores users, laboratories, PCs, schedules, reservations, sessions, notifications, logs, and calendar data
+- Prisma ORM acts as the data-access layer between the backend and a Supabase PostgreSQL database
+- Supabase PostgreSQL stores users, laboratories, PCs, schedules, reservations, sessions, notifications, logs, and calendar data
 - DigitalOcean App Platform is used as the production hosting environment for the backend web service
 
 ### 2.2 High-Level Request Flow
@@ -96,7 +96,7 @@ ComPort follows a modern client-server architecture:
 2. The frontend submits API requests to the Express backend.
 3. The backend validates the request using Zod schemas and route middleware.
 4. Business rules are enforced in service classes such as `AuthService`, `LaboratoryService`, `ScheduleService`, and `ReservationService`.
-5. Prisma reads from or writes to the MySQL database.
+5. Prisma reads from or writes to the Supabase PostgreSQL database.
 6. The backend returns structured JSON responses to the frontend.
 7. Notifications, dashboard metrics, and logs are updated as part of the business workflow where applicable.
 
@@ -110,7 +110,7 @@ ComPort follows a modern client-server architecture:
 | Backend | Node.js, Express, TypeScript | API server and business logic |
 | Validation | Zod | Request and form validation |
 | ORM | Prisma | Database access, migrations, and schema management |
-| Database | MySQL | Persistent relational data storage |
+| Database | Supabase PostgreSQL | Persistent relational data storage |
 | Auth | JWT + HttpOnly cookies + bcrypt | Secure login, session refresh, and password hashing |
 | Notifications | In-app notifications + SSE stream | User alerts and real-time updates |
 | Testing | Vitest, Testing Library, Supertest-ready backend structure | Unit and integration-oriented validation |
@@ -712,7 +712,7 @@ Install the following first:
 - Git
 - Node.js 22.x or a compatible modern Node.js runtime
 - npm
-- MySQL Server
+- A Supabase project with PostgreSQL credentials, or a local PostgreSQL 16+ database for development
 
 ### 5.2 Clone the Repository
 
@@ -752,7 +752,8 @@ Or create them manually.
 ```env
 PORT=5000
 NODE_ENV=development
-DATABASE_URL="mysql://root:password@localhost:3306/comlab_reservation_system"
+DATABASE_URL="postgresql://postgres.[PROJECT_REF]:[DB_PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1"
+DIRECT_URL="postgresql://postgres:[DB_PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres"
 JWT_SECRET=super-secret-jwt-key
 JWT_EXPIRES_IN=1d
 JWT_REFRESH_SECRET=super-secret-refresh-key
@@ -791,13 +792,15 @@ PASSWORD_RESET_RATE_LIMIT_MAX=5
 VITE_API_URL=http://localhost:5000/api
 ```
 
-### 5.5 Create the Database
+### 5.5 Configure the Database
 
-In MySQL:
+For Supabase, create or open a Supabase project and copy both PostgreSQL connection strings from the dashboard Connect panel.
 
-```sql
-CREATE DATABASE comlab_reservation_system;
-```
+- `DATABASE_URL` is used by the running Express backend. Use the Supabase pooler connection string. If you use transaction pooler mode on port `6543`, include `pgbouncer=true`; serverless-style deployments should also keep `connection_limit=1`.
+- `DIRECT_URL` is used by Prisma migrations. Prefer the direct database connection on port `5432` when the deployment environment supports IPv6. If IPv6 is unavailable, use the Supabase session pooler connection string on port `5432`.
+- Do not commit real Supabase credentials. Keep them only in local `.env` files and deployment environment settings.
+
+For local-only development without Supabase, the provided Docker Compose file starts PostgreSQL on port `5432`; use `postgresql://postgres:password@localhost:5432/comlab_reservation_system` for both `DATABASE_URL` and `DIRECT_URL`.
 
 ### 5.6 Generate Prisma Client
 
@@ -891,10 +894,11 @@ npm run test --workspace frontend
 
 ### 5.12 Deployment Note
 
-The system is currently designed to work with DigitalOcean App Platform for the backend web service. In production:
+The backend remains an Express API. Supabase is used only as the PostgreSQL database in this migration phase; do not replace Express routes with Supabase APIs, Supabase Auth, Realtime, or Storage yet. In production:
 
 - Set `NODE_ENV=production`
-- Set a valid production `DATABASE_URL`
+- Set `DATABASE_URL` to the Supabase pooler connection string used by the running backend
+- Set `DIRECT_URL` to the Supabase direct connection string, or to the session pooler connection string if direct IPv6 access is unavailable
 - Set production `JWT_SECRET` and `JWT_REFRESH_SECRET`
 - Set `CLIENT_URL` and `APP_BASE_URL` to the real frontend domain
 - Run `npx prisma migrate deploy` during backend startup or release

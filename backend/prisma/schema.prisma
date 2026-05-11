@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum UserRole {
@@ -109,7 +110,7 @@ model Laboratory {
   computerCount Int
   description   String
   status        LaboratoryStatus @default(AVAILABLE)
-  imageUrl      String?          @db.LongText
+  imageUrl      String?
   custodianId   Int?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
@@ -173,6 +174,8 @@ model Reservation {
   @@index([laboratoryId, reservationDate])
   @@index([status, reservationDate])
   @@index([pcId, reservationDate])
+  @@index([scheduleId])
+  @@index([reviewedById])
   @@index([laboratoryId, reservationDate, status, startTime, endTime], map: "idx_reservation_conflict")
  }
 
@@ -209,6 +212,7 @@ model ActivityLog {
   pc          PC?       @relation(fields: [pcId], references: [id], onDelete: SetNull)
 
   @@index([action])
+  @@index([userId])
   @@index([entityType, entityId])
   @@index([createdAt])
   @@index([labId, timestamp])
@@ -247,6 +251,7 @@ model CalendarEvent {
 
   @@index([date, type])
   @@index([laboratoryId, date])
+  @@index([pcId])
   @@index([createdById])
 }
 
@@ -275,7 +280,7 @@ model Notification {
   type          NotificationType
   status        NotificationStatus @default(PENDING)
   subject       String
-  message       String             @db.LongText
+  message       String
   metadata      Json?
   readAt        DateTime?
   sentAt        DateTime?

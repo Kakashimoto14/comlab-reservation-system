@@ -322,7 +322,7 @@ export class ScheduleService {
 
     await tx.$queryRaw`
       SELECT id
-      FROM Laboratory
+      FROM "Laboratory"
       WHERE id IN (${Prisma.join(uniqueLaboratoryIds)})
       FOR UPDATE
     `;

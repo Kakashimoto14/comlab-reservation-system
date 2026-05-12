@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { z } from "zod";
 
+import { authApi } from "../../api/services";
 import { useAuth } from "../../store/AuthContext";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
@@ -24,12 +25,25 @@ export const LoginPage = () => {
   const location = useLocation();
   const { login, logout, user } = useAuth();
   const [formErrorMessage, setFormErrorMessage] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(
+    (location.state as { authMessage?: string } | null)?.authMessage ?? null
+  );
+  const [previewVerificationUrl, setPreviewVerificationUrl] = useState<string | null>(
+    (location.state as { previewVerificationUrl?: string } | null)?.previewVerificationUrl ??
+      null
+  );
+  const [isResendingVerification, setIsResendingVerification] = useState(false);
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting }
   } = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema)
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: (location.state as { verificationEmail?: string } | null)?.verificationEmail ?? "",
+      password: ""
+    }
   });
 
   useEffect(() => {
@@ -47,6 +61,8 @@ export const LoginPage = () => {
 
     try {
       const response = await login(values);
+      setInfoMessage(null);
+      setPreviewVerificationUrl(null);
       toast.success("Welcome back.");
       const target =
         (location.state as { from?: { pathname?: string } } | undefined)?.from?.pathname ??
@@ -57,6 +73,9 @@ export const LoginPage = () => {
         (error as AxiosError<{ message?: string }>).response?.data?.message ??
         "Login failed. Please check your credentials.";
       setFormErrorMessage(message);
+      if (message.includes("verify your email")) {
+        setInfoMessage("Please verify your email before logging in. Check your inbox.");
+      }
       toast.error(message);
     }
   };
@@ -75,6 +94,30 @@ export const LoginPage = () => {
     navigate("/login", { replace: true });
   };
 
+  const resendVerification = async () => {
+    const email = watch("email");
+
+    if (!email) {
+      setFormErrorMessage("Enter your email first so we know where to send the verification link.");
+      return;
+    }
+
+    try {
+      setIsResendingVerification(true);
+      const response = await authApi.resendVerification({ email });
+      setInfoMessage(response.message);
+      setPreviewVerificationUrl(response.previewVerificationUrl ?? null);
+      toast.success(response.message);
+    } catch (error) {
+      const message =
+        (error as AxiosError<{ message?: string }>).response?.data?.message ??
+        "Unable to resend the verification email right now.";
+      toast.error(message);
+    } finally {
+      setIsResendingVerification(false);
+    }
+  };
+
   return (
     <Card className="w-full max-w-md">
       <div className="mb-8">
@@ -88,6 +131,20 @@ export const LoginPage = () => {
           Use your registered account to continue securely.
         </p>
       </div>
+
+      {infoMessage ? (
+        <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <p>{infoMessage}</p>
+          {previewVerificationUrl ? (
+            <a
+              className="mt-2 inline-flex font-semibold text-brand-700 underline"
+              href={previewVerificationUrl}
+            >
+              Open verification page
+            </a>
+          ) : null}
+        </div>
+      ) : null}
 
       <form className="space-y-5" onSubmit={handleSubmit(onSubmit, onInvalid)}>
         <FormField label="Email" error={errors.email?.message}>
@@ -110,6 +167,18 @@ export const LoginPage = () => {
         <Button type="submit" fullWidth disabled={isSubmitting}>
           {isSubmitting ? "Signing in..." : "Login"}
         </Button>
+
+        {formErrorMessage?.includes("verify your email") ? (
+          <Button
+            type="button"
+            variant="outline"
+            fullWidth
+            disabled={isResendingVerification}
+            onClick={resendVerification}
+          >
+            {isResendingVerification ? "Resending verification..." : "Resend Verification Email"}
+          </Button>
+        ) : null}
       </form>
 
       <div className="mt-4">

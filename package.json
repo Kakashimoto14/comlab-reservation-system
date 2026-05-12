@@ -2,6 +2,9 @@
   "name": "comlab-reservation-system",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=22 <23"
+  },
   "workspaces": [
     "backend",
     "frontend"
@@ -14,6 +17,8 @@
     "prisma:generate": "npm run prisma:generate --workspace backend",
     "prisma:migrate:dev": "npm run prisma:migrate:dev --workspace backend",
     "prisma:migrate:deploy": "npm run prisma:migrate:deploy --workspace backend",
+    "prisma:migrate:reset": "npm run prisma:migrate:reset --workspace backend",
+    "prisma:studio": "npm run prisma:studio --workspace backend",
     "seed": "npm run seed --workspace backend"
   },
   "devDependencies": {

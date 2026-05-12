@@ -22,18 +22,27 @@ services:
       - postgres
     environment:
       PORT: 5000
-      NODE_ENV: production
+      NODE_ENV: development
       DATABASE_URL: postgresql://postgres:password@postgres:5432/comlab_reservation_system
       DIRECT_URL: postgresql://postgres:password@postgres:5432/comlab_reservation_system
       JWT_SECRET: super-secret-jwt-key
       JWT_EXPIRES_IN: 1d
+      JWT_REFRESH_SECRET: super-secret-refresh-key
+      JWT_REFRESH_EXPIRES_IN: 7d
       CLIENT_URL: http://localhost:4173
+      FRONTEND_URL: http://localhost:4173
+      APP_BASE_URL: http://localhost:4173
+      AUTH_COOKIE_SAME_SITE: lax
+      RESET_TOKEN_PREVIEW: true
+      NOTIFICATION_EMAIL_PREVIEW: true
     ports:
       - "5000:5000"
 
   frontend:
     build:
       context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:5000/api
     container_name: comlab-frontend
     depends_on:
       - backend

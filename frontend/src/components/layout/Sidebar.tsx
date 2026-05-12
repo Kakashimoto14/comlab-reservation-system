@@ -1,10 +1,10 @@
 import clsx from "clsx";
-import { LogOut, MonitorCog, X } from "lucide-react";
+import { LogOut, X } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
 import { useRoleRoutes } from "../../hooks/useRoleRoutes";
 import { useAuth } from "../../store/AuthContext";
-import { APP_NAME, roleLabels } from "../../utils/constants";
+import { APP_NAME, APP_SHORT_NAME, APP_TAGLINE, roleLabels } from "../../utils/constants";
 import { Button } from "../ui/Button";
 
 type SidebarProps = {
@@ -24,14 +24,19 @@ export const Sidebar = ({ onClose, onNavigate }: SidebarProps) => {
     <aside className="flex h-full min-h-0 flex-col border-r border-slate-200 bg-slate-950 text-slate-100">
       <div className="shrink-0 px-5 pb-4 pt-5">
         <div className="flex items-center gap-3">
-          <div className="rounded-2xl bg-brand-600 p-3">
-            <MonitorCog className="h-5 w-5" />
-          </div>
+          <img
+            src="/comport-logo.png"
+            alt="ComPort logo"
+            className="h-12 w-12 rounded-2xl border border-white/10 bg-white object-cover p-1 shadow-soft"
+          />
           <div className="min-w-0">
             <p className="truncate font-display text-sm font-semibold text-brand-100">
-              ComLab Portal
+              {APP_SHORT_NAME}
             </p>
-            <p className="truncate text-xs text-slate-400">{APP_NAME}</p>
+            <p className="truncate text-xs text-slate-400">{APP_TAGLINE}</p>
+            <p className="truncate text-[11px] uppercase tracking-[0.18em] text-slate-500">
+              {APP_NAME}
+            </p>
           </div>
           {onClose ? (
             <button

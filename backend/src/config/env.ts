@@ -20,7 +20,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(5000),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   DATABASE_URL: z.string().min(1),
-  DIRECT_URL: z.string().min(1).optional(),
+  DIRECT_URL: z.string().min(1),
   JWT_SECRET: z.string().min(10),
   JWT_EXPIRES_IN: z.string().default("1d"),
   JWT_REFRESH_SECRET: z.string().min(10).default("change-me-refresh-secret"),
@@ -30,9 +30,11 @@ const envSchema = z.object({
   REFRESH_COOKIE_NAME: z.string().min(1).default("comlab_refresh_token"),
   REFRESH_COOKIE_MAX_AGE_MS: z.coerce.number().int().positive().default(604_800_000),
   AUTH_COOKIE_SAME_SITE: z.enum(["strict", "lax", "none"]).optional(),
-  CLIENT_URL: clientUrlSchema,
-  APP_BASE_URL: z.string().url().default("http://localhost:5173"),
+  CLIENT_URL: z.string().optional(),
+  FRONTEND_URL: z.string().url().optional(),
+  APP_BASE_URL: z.string().url().optional(),
   RESET_TOKEN_TTL_MINUTES: z.coerce.number().int().positive().default(30),
+  EMAIL_VERIFICATION_TOKEN_TTL_HOURS: z.coerce.number().int().positive().default(24),
   RESET_TOKEN_PREVIEW: z.coerce.boolean().optional(),
   ENABLE_DEMO_BOOTSTRAP: z.coerce.boolean().optional(),
   SMTP_HOST: z.string().min(1).optional(),
@@ -40,9 +42,16 @@ const envSchema = z.object({
   SMTP_SECURE: z.coerce.boolean().optional(),
   SMTP_USER: z.string().min(1).optional(),
   SMTP_PASS: z.string().min(1).optional(),
+  SMTP_FROM: z.string().min(1).optional(),
   SMTP_FROM_EMAIL: z.string().email().optional(),
   SMTP_FROM_NAME: z.string().min(1).optional(),
   NOTIFICATION_EMAIL_PREVIEW: z.coerce.boolean().optional(),
+  AI_PROVIDER: z.enum(["groq", "openrouter", "openai", "custom"]).optional(),
+  AI_API_KEY: z.string().min(1).optional(),
+  AI_MODEL: z.string().min(1).optional(),
+  AI_API_BASE_URL: z.string().url().optional(),
+  OPENROUTER_SITE_URL: z.string().url().optional(),
+  OPENROUTER_APP_NAME: z.string().min(1).optional(),
   RESERVATION_REMINDER_LEAD_MINUTES: z.coerce.number().int().positive().default(60),
   RESERVATION_REMINDER_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
   LOGIN_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
@@ -54,23 +63,47 @@ const envSchema = z.object({
 });
 
 const parsedEnv = envSchema.parse(process.env);
+const looksLikePlaceholderSecret = (value: string) =>
+  ["replace_me_", "change-me", "your_", "example"].some((fragment) =>
+    value.toLowerCase().includes(fragment)
+  );
 
 if (
   parsedEnv.NODE_ENV === "production" &&
-  parsedEnv.JWT_REFRESH_SECRET === "change-me-refresh-secret"
+  (looksLikePlaceholderSecret(parsedEnv.JWT_SECRET) ||
+    looksLikePlaceholderSecret(parsedEnv.JWT_REFRESH_SECRET))
 ) {
-  throw new Error("JWT_REFRESH_SECRET must be explicitly set in production.");
+  throw new Error(
+    "JWT_SECRET and JWT_REFRESH_SECRET must be explicitly set to real secure values in production."
+  );
+}
+
+if (
+  parsedEnv.NODE_ENV === "production" &&
+  !parsedEnv.FRONTEND_URL &&
+  !parsedEnv.APP_BASE_URL
+) {
+  throw new Error("FRONTEND_URL or APP_BASE_URL must be explicitly set in production.");
 }
 
 const resolvedSameSite =
   parsedEnv.AUTH_COOKIE_SAME_SITE ?? (parsedEnv.NODE_ENV === "production" ? "none" : "lax");
+const resolvedFrontendUrl = parsedEnv.FRONTEND_URL ?? parsedEnv.APP_BASE_URL ?? "http://localhost:5173";
+const resolvedClientUrl = clientUrlSchema.parse(parsedEnv.CLIENT_URL ?? resolvedFrontendUrl);
+const hasSmtpSender = Boolean(parsedEnv.SMTP_FROM || parsedEnv.SMTP_FROM_EMAIL);
+const hasSmtpConfig = Boolean(
+  parsedEnv.SMTP_HOST && parsedEnv.SMTP_PORT && hasSmtpSender
+);
 
 export const env = {
   ...parsedEnv,
+  CLIENT_URL: resolvedClientUrl,
+  FRONTEND_URL: resolvedFrontendUrl,
+  APP_BASE_URL: parsedEnv.APP_BASE_URL ?? resolvedFrontendUrl,
   AUTH_COOKIE_SAME_SITE: resolvedSameSite,
   RESET_TOKEN_PREVIEW: parsedEnv.RESET_TOKEN_PREVIEW ?? parsedEnv.NODE_ENV !== "production",
   ENABLE_DEMO_BOOTSTRAP: parsedEnv.ENABLE_DEMO_BOOTSTRAP ?? false,
   NOTIFICATION_EMAIL_PREVIEW:
     parsedEnv.NOTIFICATION_EMAIL_PREVIEW ??
-    (!parsedEnv.SMTP_HOST || parsedEnv.NODE_ENV !== "production")
+    (!hasSmtpConfig || parsedEnv.NODE_ENV !== "production")
 };

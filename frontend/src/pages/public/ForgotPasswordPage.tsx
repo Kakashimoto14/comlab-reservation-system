@@ -1,6 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { AxiosError } from "axios";
 import { useForm } from "react-hook-form";
+import { useState } from "react";
 import toast from "react-hot-toast";
 import { Link } from "react-router-dom";
 import { z } from "zod";
@@ -18,6 +19,10 @@ const forgotPasswordSchema = z.object({
 type ForgotPasswordFormValues = z.infer<typeof forgotPasswordSchema>;
 
 export const ForgotPasswordPage = () => {
+  const [result, setResult] = useState<{
+    message: string;
+    previewResetUrl?: string;
+  } | null>(null);
   const {
     register,
     handleSubmit,
@@ -29,6 +34,7 @@ export const ForgotPasswordPage = () => {
   const onSubmit = async (values: ForgotPasswordFormValues) => {
     try {
       const response = await authApi.forgotPassword(values);
+      setResult(response);
       toast.success(response.message);
 
       if (response.previewResetUrl) {
@@ -66,6 +72,20 @@ export const ForgotPasswordPage = () => {
           Enter your account email and we will prepare a reset link for you.
         </p>
       </div>
+
+      {result ? (
+        <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <p>{result.message}</p>
+          {result.previewResetUrl ? (
+            <a
+              className="mt-2 inline-flex font-semibold text-brand-700 underline"
+              href={result.previewResetUrl}
+            >
+              Open reset page
+            </a>
+          ) : null}
+        </div>
+      ) : null}
 
       <form className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
         <FormField label="Email" error={errors.email?.message}>

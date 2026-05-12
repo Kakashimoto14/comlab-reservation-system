@@ -42,10 +42,26 @@ export const forgotPasswordSchema = z.object({
   query: z.object({}).default({})
 });
 
+export const verifyEmailSchema = z.object({
+  body: z.object({
+    token: z.string().min(20)
+  }),
+  params: z.object({}).default({}),
+  query: z.object({}).default({})
+});
+
+export const resendVerificationSchema = z.object({
+  body: z.object({
+    email: emailSchema
+  }),
+  params: z.object({}).default({}),
+  query: z.object({}).default({})
+});
+
 export const resetPasswordSchema = z.object({
   body: z.object({
     token: z.string().min(20),
-    password: passwordSchema
+    newPassword: passwordSchema
   }),
   params: z.object({}).default({}),
   query: z.object({}).default({})

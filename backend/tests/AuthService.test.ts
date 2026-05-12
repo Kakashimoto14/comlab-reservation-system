@@ -2,14 +2,19 @@ import bcrypt from "bcrypt";
 import { StatusCodes } from "http-status-codes";
 
 import { AuthService } from "../src/services/AuthService.js";
-import { ApiError } from "../src/utils/ApiError.js";
 
-const createMockDb = () =>
-  ({
+const createMockDb = () => {
+  const db = {
     user: {
       findFirst: vi.fn(),
       create: vi.fn(),
       findUnique: vi.fn()
+    },
+    emailVerificationToken: {
+      deleteMany: vi.fn(),
+      create: vi.fn(),
+      findUnique: vi.fn(),
+      update: vi.fn()
     },
     passwordResetToken: {
       deleteMany: vi.fn(),
@@ -27,22 +32,30 @@ const createMockDb = () =>
     activityLog: {
       create: vi.fn()
     },
-    $transaction: vi.fn(async (operations: Promise<unknown>[]) => Promise.all(operations))
-  }) as any;
+    $transaction: vi.fn()
+  } as any;
+
+  db.$transaction.mockImplementation(async (input: unknown) => {
+    if (typeof input === "function") {
+      return input(db);
+    }
+
+    return Promise.all(input as Promise<unknown>[]);
+  });
+
+  return db;
+};
 
 describe("AuthService", () => {
-  it("registers a student and returns a token with a safe user object", async () => {
+  it("registers a student and prepares an email verification link", async () => {
     const db = createMockDb();
     db.user.findFirst.mockResolvedValue(null);
-    db.authSession.create.mockResolvedValue({
-      id: 21
-    });
-    db.authSession.update.mockResolvedValue(undefined);
     db.user.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
       id: 10,
       firstName: data.firstName,
       lastName: data.lastName,
       email: data.email,
+      emailVerifiedAt: data.emailVerifiedAt ?? null,
       passwordHash: data.passwordHash,
       role: "STUDENT",
       status: "ACTIVE",
@@ -53,32 +66,6 @@ describe("AuthService", () => {
       createdAt: new Date(),
       updatedAt: new Date()
     }));
-    db.user.findUnique.mockImplementation(
-      async ({
-        where,
-        select
-      }: {
-        where: { id: number };
-        select?: Record<string, boolean>;
-      }) =>
-        where.id === 10
-          ? {
-              id: 10,
-              firstName: "Alyssa",
-              lastName: "Cruz",
-              email: "alyssa@student.edu",
-              ...(select?.passwordHash ? { passwordHash: "hidden" } : {}),
-              role: "STUDENT",
-              status: "ACTIVE",
-              studentNumber: "24-00001",
-              department: "BS Information Technology",
-              yearLevel: 2,
-              phone: "09171234567",
-              createdAt: new Date(),
-              updatedAt: new Date()
-            }
-          : null
-    );
 
     const service = new AuthService(db);
 
@@ -93,10 +80,9 @@ describe("AuthService", () => {
       phone: "09171234567"
     });
 
-    expect(result.accessToken).toBeTypeOf("string");
-    expect(result.refreshToken).toBeTypeOf("string");
-    expect(result.user.email).toBe("alyssa@student.edu");
-    expect("passwordHash" in result.user).toBe(false);
+    expect(result.message).toContain("verify your account before logging in");
+    expect(result.previewVerificationUrl).toContain("/verify-email?token=");
+    expect(db.emailVerificationToken.create).toHaveBeenCalled();
     expect(db.activityLog.create).toHaveBeenCalled();
   });
 
@@ -108,6 +94,7 @@ describe("AuthService", () => {
       firstName: "Dormant",
       lastName: "Student",
       email: "inactive@student.edu",
+      emailVerifiedAt: new Date(),
       passwordHash,
       role: "STUDENT",
       status: "DEACTIVATED",
@@ -131,6 +118,38 @@ describe("AuthService", () => {
     });
   });
 
+  it("rejects login when the user email is not verified", async () => {
+    const db = createMockDb();
+    const passwordHash = await bcrypt.hash("Password123!", 10);
+    db.user.findUnique.mockResolvedValue({
+      id: 2,
+      firstName: "Pending",
+      lastName: "Student",
+      email: "pending@student.edu",
+      emailVerifiedAt: null,
+      passwordHash,
+      role: "STUDENT",
+      status: "ACTIVE",
+      studentNumber: "24-00010",
+      department: "BSIT",
+      yearLevel: 2,
+      phone: null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    const service = new AuthService(db);
+
+    await expect(
+      service.login({
+        email: "pending@student.edu",
+        password: "Password123!"
+      })
+    ).rejects.toMatchObject({
+      statusCode: StatusCodes.FORBIDDEN
+    });
+  });
+
   it("prepares a preview reset link for an active account", async () => {
     const db = createMockDb();
     db.user.findUnique.mockResolvedValue({
@@ -138,6 +157,7 @@ describe("AuthService", () => {
       firstName: "Marianne",
       lastName: "Torres",
       email: "admin@comlab.edu",
+      emailVerifiedAt: new Date(),
       passwordHash: "hash",
       role: "ADMIN",
       status: "ACTIVE",
@@ -152,7 +172,7 @@ describe("AuthService", () => {
     const service = new AuthService(db);
     const result = await service.forgotPassword({ email: "admin@comlab.edu" });
 
-    expect(result.message).toContain("If an account with that email exists");
+    expect(result.message).toContain("If an account exists");
     expect(result.previewResetUrl).toContain("/reset-password?token=");
     expect(db.passwordResetToken.create).toHaveBeenCalled();
     expect(db.activityLog.create).toHaveBeenCalled();

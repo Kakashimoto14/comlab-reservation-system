@@ -88,7 +88,7 @@ ComPort follows a modern client-server architecture:
 - The backend is a Node.js and Express REST API responsible for authentication, validation, business rules, and persistence
 - Prisma ORM acts as the data-access layer between the backend and a Supabase PostgreSQL database
 - Supabase PostgreSQL stores users, laboratories, PCs, schedules, reservations, sessions, notifications, logs, and calendar data
-- DigitalOcean App Platform is used as the production hosting environment for the backend web service
+- A platform-hosted Node runtime can be used for the backend web service, provided it can run the backend workspace commands and connect to Supabase
 
 ### 2.2 High-Level Request Flow
 
@@ -114,7 +114,7 @@ ComPort follows a modern client-server architecture:
 | Auth | JWT + HttpOnly cookies + bcrypt | Secure login, session refresh, and password hashing |
 | Notifications | In-app notifications + SSE stream | User alerts and real-time updates |
 | Testing | Vitest, Testing Library, Supertest-ready backend structure | Unit and integration-oriented validation |
-| Deployment | DigitalOcean App Platform | Cloud deployment for the backend service |
+| Deployment | Any Node-capable hosting platform + static frontend hosting | Cloud deployment for the backend API and built frontend |
 
 ### 2.4 Architectural Characteristics
 
@@ -135,7 +135,7 @@ The backend exposes:
 - API base path: `/api`
 - Health endpoint: `/api/health`
 
-The deployed backend is designed to run on DigitalOcean App Platform and bind to the configured `PORT`, which is `5000` in the current environment examples.
+The deployed backend is designed to bind to the configured `PORT`, which is `5000` in the current environment examples.
 
 ---
 
@@ -274,7 +274,7 @@ Step-by-step procedure:
 5. Submit the form.
 6. The backend validates all fields and checks for duplicate email or duplicate student number.
 7. If validation passes, the account is created with the `STUDENT` role.
-8. A session is created automatically and the student is redirected to the student dashboard.
+8. A verification email is prepared and the student is asked to verify the account before logging in.
 
 System checks performed:
 
@@ -737,6 +737,7 @@ This installs both workspace packages:
 ### 5.4 Configure Environment Variables
 
 Create local environment files using the provided examples.
+The `.env.example` files are templates only and are not loaded automatically. Your real runtime values must be stored in ignored files at `backend/.env` and `frontend/.env`.
 
 Windows:
 
@@ -752,30 +753,39 @@ Or create them manually.
 ```env
 PORT=5000
 NODE_ENV=development
-DATABASE_URL="postgresql://postgres.[PROJECT_REF]:[DB_PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1"
-DIRECT_URL="postgresql://postgres:[DB_PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres"
-JWT_SECRET=super-secret-jwt-key
+DATABASE_URL="postgresql://postgres.PROJECT_REF:YOUR_PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres?pgbouncer=true&connection_limit=1&sslmode=require"
+DIRECT_URL="postgresql://postgres.PROJECT_REF:YOUR_PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require"
+JWT_SECRET=replace_me_with_a_long_random_secret
 JWT_EXPIRES_IN=1d
-JWT_REFRESH_SECRET=super-secret-refresh-key
+JWT_REFRESH_SECRET=replace_me_with_a_second_long_random_secret
 JWT_REFRESH_EXPIRES_IN=7d
 AUTH_COOKIE_NAME=comlab_access_token
 AUTH_COOKIE_MAX_AGE_MS=86400000
 REFRESH_COOKIE_NAME=comlab_refresh_token
 REFRESH_COOKIE_MAX_AGE_MS=604800000
-AUTH_COOKIE_SAME_SITE=none
+AUTH_COOKIE_SAME_SITE=lax
 CLIENT_URL=http://localhost:5173
+FRONTEND_URL=http://localhost:5173
 APP_BASE_URL=http://localhost:5173
 RESET_TOKEN_TTL_MINUTES=30
+EMAIL_VERIFICATION_TOKEN_TTL_HOURS=24
 RESET_TOKEN_PREVIEW=true
 ENABLE_DEMO_BOOTSTRAP=false
+NOTIFICATION_EMAIL_PREVIEW=true
 SMTP_HOST=
 SMTP_PORT=587
 SMTP_SECURE=false
 SMTP_USER=
 SMTP_PASS=
-SMTP_FROM_EMAIL=no-reply@comlab.local
-SMTP_FROM_NAME=ComPort
-NOTIFICATION_EMAIL_PREVIEW=true
+SMTP_FROM="ComLab Reservation <no-reply@example.com>"
+SMTP_FROM_EMAIL=
+SMTP_FROM_NAME=
+AI_PROVIDER=groq
+AI_API_KEY=
+AI_MODEL=llama-3.1-8b-instant
+AI_API_BASE_URL=
+OPENROUTER_SITE_URL=
+OPENROUTER_APP_NAME=ComPort
 RESERVATION_REMINDER_LEAD_MINUTES=60
 RESERVATION_REMINDER_INTERVAL_MS=60000
 LOGIN_RATE_LIMIT_WINDOW_MS=60000
@@ -786,28 +796,37 @@ PASSWORD_RESET_RATE_LIMIT_WINDOW_MS=60000
 PASSWORD_RESET_RATE_LIMIT_MAX=5
 ```
 
+- `DATABASE_URL` is the Supabase pooler URL used by the running backend.
+- `DIRECT_URL` is the Supabase session pooler URL used by Prisma migrations in environments that cannot reach the direct database host.
+- Replace `PROJECT_REF` with your actual Supabase project ref.
+- Replace `YOUR_PASSWORD` with your actual database password.
+
 #### Frontend Environment Example
 
 ```env
 VITE_API_URL=http://localhost:5000/api
 ```
 
+For static production deployments, `VITE_API_URL` must be set explicitly. Use your backend URL such as `https://your-backend-domain.com/api`, or `/api` only when a reverse proxy is configured for that path.
+
 ### 5.5 Configure the Database
 
 For Supabase, create or open a Supabase project and copy both PostgreSQL connection strings from the dashboard Connect panel.
 
-- `DATABASE_URL` is used by the running Express backend. Use the Supabase pooler connection string. If you use transaction pooler mode on port `6543`, include `pgbouncer=true`; serverless-style deployments should also keep `connection_limit=1`.
-- `DIRECT_URL` is used by Prisma migrations. Prefer the direct database connection on port `5432` when the deployment environment supports IPv6. If IPv6 is unavailable, use the Supabase session pooler connection string on port `5432`.
+- `DATABASE_URL` is used by the running Express backend. In this repo, use the Supabase pooler connection string for the runtime.
+- `DIRECT_URL` is used by Prisma migrations. In this repo, use the Supabase session pooler connection string on port `5432` when the deployment environment cannot reach the direct database host.
+- Replace `PROJECT_REF` with the project reference from the Supabase dashboard.
+- Replace `YOUR_PASSWORD` with the database password for that project.
 - Do not commit real Supabase credentials. Keep them only in local `.env` files and deployment environment settings.
 
 For local-only development without Supabase, the provided Docker Compose file starts PostgreSQL on port `5432`; use `postgresql://postgres:password@localhost:5432/comlab_reservation_system` for both `DATABASE_URL` and `DIRECT_URL`.
 
 ### 5.6 Generate Prisma Client
 
-You can run this from the repository root:
+Recommended from the repository root:
 
 ```bash
-npm run prisma:generate
+npm run prisma:generate --workspace backend
 ```
 
 Or directly inside the backend workspace:
@@ -817,20 +836,36 @@ cd backend
 npx prisma generate
 ```
 
+The root shorthand `npm run prisma:generate` also works because it delegates into the backend workspace.
+
 ### 5.7 Run Database Migrations
 
-From the repository root:
+Recommended from the repository root:
 
 ```bash
-npm run prisma:migrate:dev
+npm run prisma:migrate:reset --workspace backend
+npm run prisma:migrate:dev --workspace backend
+npm run prisma:migrate:deploy --workspace backend
 ```
 
 Or from the backend workspace:
 
 ```bash
 cd backend
+npx prisma migrate reset
 npx prisma migrate dev
+npx prisma migrate deploy
 ```
+
+`prisma migrate reset` deletes local or test data and replays every migration from scratch. Use it when you are working with disposable data or when Prisma reports that an applied migration was modified and the development database needs to be realigned.
+
+Avoid running raw root-level Prisma commands like the example below:
+
+```bash
+npx prisma migrate reset --schema backend/prisma/schema.prisma
+```
+
+That form points Prisma at the backend schema file, but it does not automatically load `backend/.env` when run from the repository root. In this repo, use the backend workspace commands above so Prisma picks up `backend/.env` correctly.
 
 ### 5.8 Seed Optional Development Data
 
@@ -898,11 +933,16 @@ The backend remains an Express API. Supabase is used only as the PostgreSQL data
 
 - Set `NODE_ENV=production`
 - Set `DATABASE_URL` to the Supabase pooler connection string used by the running backend
-- Set `DIRECT_URL` to the Supabase direct connection string, or to the session pooler connection string if direct IPv6 access is unavailable
+- Set `DIRECT_URL` to the Supabase session pooler connection string on port `5432` when the deployment environment cannot reach the direct database host
 - Set production `JWT_SECRET` and `JWT_REFRESH_SECRET`
-- Set `CLIENT_URL` and `APP_BASE_URL` to the real frontend domain
+- Set `CLIENT_URL`, `FRONTEND_URL`, and `APP_BASE_URL` to the real frontend domain
+- Set SMTP variables and turn preview mode off for real email delivery
+- Set AI provider variables for Groq, OpenRouter, or a custom OpenAI-compatible endpoint
+- Set the frontend `VITE_API_URL` build-time variable to the deployed backend API URL
 - Run `npx prisma migrate deploy` during backend startup or release
 - Use the exposed backend health endpoint `/api/health` for readiness checks
+
+Deployment-specific environment examples, local preview setup, production SMTP and AI guidance, and a step-by-step verification checklist are documented in [docs/DEPLOYMENT.md](/C:/Users/Lorraine/Desktop/comlab-reservation-system/docs/DEPLOYMENT.md).
 
 ---
 

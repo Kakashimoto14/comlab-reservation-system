@@ -24,6 +24,7 @@ export type User = {
   firstName: string;
   lastName: string;
   email: string;
+  emailVerifiedAt?: string | null;
   role: UserRole;
   status: UserStatus;
   studentNumber?: string | null;
@@ -196,9 +197,10 @@ export type NotificationListResponse = {
   unreadCount: number;
 };
 
-export type PasswordActionResponse = {
+export type AuthActionResponse = {
   message: string;
   previewResetUrl?: string;
+  previewVerificationUrl?: string;
 };
 
 export type DashboardResponse = {
@@ -208,4 +210,19 @@ export type DashboardResponse = {
   recentActivity?: ActivityLog[];
   recentReservations?: Reservation[];
   trends?: Array<{ date: string; count: number }>;
+};
+
+export type ReservationAssistantCategory =
+  | "available_schedules"
+  | "available_laboratories"
+  | "specific_laboratory"
+  | "my_upcoming_reservations"
+  | "reservation_rules"
+  | "general_reservation_help"
+  | "out_of_scope";
+
+export type ReservationAssistantResponse = {
+  reply: string;
+  mode: "ai" | "fallback";
+  category: ReservationAssistantCategory;
 };

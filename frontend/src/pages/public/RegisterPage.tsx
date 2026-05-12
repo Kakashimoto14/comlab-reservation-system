@@ -40,6 +40,11 @@ export const RegisterPage = () => {
   const navigate = useNavigate();
   const { register: registerUser, user } = useAuth();
   const [formErrorMessage, setFormErrorMessage] = useState<string | null>(null);
+  const [registrationState, setRegistrationState] = useState<{
+    email: string;
+    message: string;
+    previewVerificationUrl?: string;
+  } | null>(null);
   const {
     register,
     control,
@@ -77,9 +82,13 @@ export const RegisterPage = () => {
     setFormErrorMessage(null);
 
     try {
-      await registerUser(values);
-      toast.success("Student account created successfully.");
-      navigate("/student/dashboard", { replace: true });
+      const response = await registerUser(values);
+      setRegistrationState({
+        email: values.email,
+        message: response.message,
+        previewVerificationUrl: response.previewVerificationUrl
+      });
+      toast.success(response.message);
     } catch (error) {
       const message = applyServerValidationErrors(error, { setError, setFocus });
       setFormErrorMessage(message ?? "Registration failed. Please review your details.");
@@ -100,6 +109,53 @@ export const RegisterPage = () => {
 
     setFormErrorMessage(firstErrorMessage ?? "Please review the highlighted fields.");
   };
+
+  if (registrationState) {
+    return (
+      <Card className="w-full max-w-xl">
+        <div className="space-y-5">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.25em] text-brand-700">
+              Registration Complete
+            </p>
+            <h2 className="mt-3 font-display text-3xl font-bold text-slate-900">
+              Verify your email before logging in
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              {registrationState.message} We sent the verification link to{" "}
+              <span className="font-semibold text-slate-900">{registrationState.email}</span>.
+            </p>
+          </div>
+
+          {registrationState.previewVerificationUrl ? (
+            <div className="rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-900">
+              <p>This environment is using email preview mode.</p>
+              <a
+                className="mt-2 inline-flex font-semibold text-brand-700 underline"
+                href={registrationState.previewVerificationUrl}
+              >
+                Open verification page
+              </a>
+            </div>
+          ) : null}
+
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button fullWidth onClick={() => navigate("/login", { replace: true, state: registrationState })}>
+              Go to Login
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              fullWidth
+              onClick={() => setRegistrationState(null)}
+            >
+              Register Another Account
+            </Button>
+          </div>
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <Card className="w-full max-w-xl">

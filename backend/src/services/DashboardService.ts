@@ -18,6 +18,7 @@ export class DashboardService {
         firstName: true,
         lastName: true,
         email: true,
+        emailVerifiedAt: true,
         passwordHash: true,
         role: true,
         status: true,

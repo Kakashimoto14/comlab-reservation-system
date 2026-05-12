@@ -19,14 +19,10 @@ const buildSessionMeta = (req: Request) => ({
 
 export class AuthController {
   static async register(req: Request, res: Response) {
-    const { accessToken, refreshToken, user } = await authService.registerStudent(
-      req.body,
-      buildSessionMeta(req)
-    );
+    const result = await authService.registerStudent(req.body);
 
-    setAccessAuthCookie(res, accessToken);
-    setRefreshAuthCookie(res, refreshToken);
-    res.status(StatusCodes.CREATED).json({ user });
+    clearAuthCookies(res);
+    res.status(StatusCodes.CREATED).json(result);
   }
 
   static async login(req: Request, res: Response) {
@@ -57,6 +53,18 @@ export class AuthController {
     setAccessAuthCookie(res, accessToken);
     setRefreshAuthCookie(res, rotatedRefreshToken);
     res.status(StatusCodes.OK).json({ user });
+  }
+
+  static async verifyEmail(req: Request, res: Response) {
+    const result = await authService.verifyEmail(req.body);
+
+    res.status(StatusCodes.OK).json(result);
+  }
+
+  static async resendVerification(req: Request, res: Response) {
+    const result = await authService.resendVerification(req.body);
+
+    res.status(StatusCodes.OK).json(result);
   }
 
   static async forgotPassword(req: Request, res: Response) {

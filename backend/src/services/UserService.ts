@@ -38,6 +38,7 @@ const publicUserSelect = {
   firstName: true,
   lastName: true,
   email: true,
+  emailVerifiedAt: true,
   role: true,
   status: true,
   studentNumber: true,
@@ -133,6 +134,7 @@ export class UserService {
         firstName: input.firstName,
         lastName: input.lastName,
         email: input.email,
+        emailVerifiedAt: new Date(),
         role: input.role,
         department: input.department ?? null,
         phone: input.phone ?? null,
@@ -210,7 +212,12 @@ export class UserService {
         data: {
           ...(typeof input.firstName !== "undefined" ? { firstName: input.firstName } : {}),
           ...(typeof input.lastName !== "undefined" ? { lastName: input.lastName } : {}),
-          ...(typeof input.email !== "undefined" ? { email: input.email } : {}),
+          ...(typeof input.email !== "undefined"
+            ? {
+                email: input.email,
+                emailVerifiedAt: new Date()
+              }
+            : {}),
           ...(typeof input.role !== "undefined" ? { role: input.role } : {}),
           ...(typeof input.department !== "undefined"
             ? { department: input.department ?? null }

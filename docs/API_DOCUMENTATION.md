@@ -7,6 +7,8 @@ Base URL: `http://localhost:5000/api`
 ### `POST /auth/register`
 - Registers a new student account.
 - Public endpoint.
+- Returns a success message and, in non-production preview mode only, may include `previewVerificationUrl`.
+- Does not create a logged-in session.
 
 Request body:
 
@@ -24,8 +26,32 @@ Request body:
 ```
 
 ### `POST /auth/login`
-- Logs in any active user role and returns a JWT.
+- Logs in any active and verified user role.
 - Rate limited to reduce brute-force attempts.
+- Sets HTTP-only auth cookies and returns the authenticated user profile.
+
+### `POST /auth/verify-email`
+- Validates an email verification token and marks the account as verified.
+
+Request body:
+
+```json
+{
+  "token": "raw-verification-token"
+}
+```
+
+### `POST /auth/resend-verification`
+- Sends a fresh verification email when the account exists and is still unverified.
+- Returns a generic success message whether or not the account exists.
+
+Request body:
+
+```json
+{
+  "email": "alyssa@student.edu"
+}
+```
 
 ### `POST /auth/forgot-password`
 - Prepares a password reset token for an active account.
@@ -48,7 +74,7 @@ Request body:
 ```json
 {
   "token": "raw-reset-token",
-  "password": "NewPassword123!"
+  "newPassword": "NewPassword123!"
 }
 ```
 
@@ -67,10 +93,36 @@ Request body:
 
 ### `GET /auth/me`
 - Returns the authenticated user profile.
-- Requires `Authorization: Bearer <token>`.
+- Requires an authenticated session.
 
 ### `POST /auth/logout`
-- Stateless logout endpoint for UI confirmation.
+- Clears the auth cookies and revokes the refresh session when present.
+
+## AI Assistant
+
+### `POST /ai/reservation-assistant`
+- Authenticated endpoint.
+- Rate limited.
+- Answers only ComLab reservation-related questions using controlled system context.
+- Falls back to deterministic system replies when no provider is configured or when provider calls fail.
+
+Request body:
+
+```json
+{
+  "message": "What are the available schedules this week?"
+}
+```
+
+Response shape:
+
+```json
+{
+  "reply": "These open schedule windows are available in this week: ...",
+  "mode": "ai",
+  "category": "available_schedules"
+}
+```
 
 ## Users
 

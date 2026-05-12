@@ -15,6 +15,7 @@ const authSessionSelect = {
     select: {
       id: true,
       email: true,
+      emailVerifiedAt: true,
       role: true,
       status: true
     }
@@ -61,7 +62,8 @@ export const authenticate = async (req: Request, _res: Response, next: NextFunct
       session.userId !== payload.id ||
       session.revokedAt !== null ||
       session.expiresAt <= new Date() ||
-      session.user.status !== "ACTIVE"
+      session.user.status !== "ACTIVE" ||
+      !session.user.emailVerifiedAt
     ) {
       if (session?.revokedAt === null) {
         await prisma.authSession.updateMany({
@@ -111,7 +113,8 @@ export const optionalAuthenticate = async (req: Request, _res: Response, next: N
       session.userId === payload.id &&
       session.revokedAt === null &&
       session.expiresAt > new Date() &&
-      session.user.status === "ACTIVE"
+      session.user.status === "ACTIVE" &&
+      Boolean(session.user.emailVerifiedAt)
     ) {
       req.authUser = {
         id: session.user.id,

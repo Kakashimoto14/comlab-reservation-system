@@ -14,12 +14,14 @@ async function main() {
   await prisma.user.deleteMany();
 
   const passwordHash = await bcrypt.hash("Password123!", 10);
+  const verifiedAt = new Date();
 
   const admin = await prisma.user.create({
     data: {
       firstName: "Marianne",
       lastName: "Torres",
       email: "admin@comlab.edu",
+      emailVerifiedAt: verifiedAt,
       passwordHash,
       role: "ADMIN",
       department: "College of Information Technology",
@@ -33,6 +35,7 @@ async function main() {
         firstName: "Daniel",
         lastName: "Reyes",
         email: "staff.a@comlab.edu",
+        emailVerifiedAt: verifiedAt,
         passwordHash,
         role: "LABORATORY_STAFF",
         department: "Computer Laboratory Office",
@@ -44,6 +47,7 @@ async function main() {
         firstName: "Jessa",
         lastName: "Mendoza",
         email: "staff.b@comlab.edu",
+        emailVerifiedAt: verifiedAt,
         passwordHash,
         role: "LABORATORY_STAFF",
         department: "Computer Laboratory Office",
@@ -55,6 +59,7 @@ async function main() {
         firstName: "Paolo",
         lastName: "Garcia",
         email: "staff.c@comlab.edu",
+        emailVerifiedAt: verifiedAt,
         passwordHash,
         role: "LABORATORY_STAFF",
         department: "Computer Laboratory Office",
@@ -78,6 +83,7 @@ async function main() {
           firstName,
           lastName,
           email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}@student.edu`,
+          emailVerifiedAt: verifiedAt,
           passwordHash,
           role: "STUDENT",
           studentNumber,

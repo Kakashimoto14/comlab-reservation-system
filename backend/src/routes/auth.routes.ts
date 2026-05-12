@@ -11,7 +11,9 @@ import {
   forgotPasswordSchema,
   loginSchema,
   registerStudentSchema,
-  resetPasswordSchema
+  resendVerificationSchema,
+  resetPasswordSchema,
+  verifyEmailSchema
 } from "../validations/auth.validation.js";
 
 const router = Router();
@@ -42,6 +44,18 @@ router.post(
 );
 router.post("/login", loginRateLimit, validate(loginSchema), asyncHandler(AuthController.login));
 router.post("/refresh", asyncHandler(AuthController.refresh));
+router.post(
+  "/verify-email",
+  passwordResetRateLimit,
+  validate(verifyEmailSchema),
+  asyncHandler(AuthController.verifyEmail)
+);
+router.post(
+  "/resend-verification",
+  passwordResetRateLimit,
+  validate(resendVerificationSchema),
+  asyncHandler(AuthController.resendVerification)
+);
 router.post(
   "/forgot-password",
   passwordResetRateLimit,

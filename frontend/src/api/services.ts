@@ -1,5 +1,6 @@
 import type {
   ActivityLog,
+  AuthActionResponse,
   AuthResponse,
   CalendarResponse,
   DashboardResponse,
@@ -7,9 +8,9 @@ import type {
   LaboratoryAvailability,
   NotificationListResponse,
   NotificationRecord,
-  PasswordActionResponse,
   PC,
   Reservation,
+  ReservationAssistantResponse,
   ReservationSlot,
   Schedule,
   User
@@ -18,36 +19,47 @@ import { apiClient } from "./client";
 
 export const authApi = {
   register: async (payload: Record<string, unknown>) => {
-    const { data } = await apiClient.post<AuthResponse>("/auth/register", payload);
+    const { data } = await apiClient.post<AuthActionResponse>("/auth/register", payload);
     return data;
   },
   login: async (payload: Record<string, unknown>) => {
     const { data } = await apiClient.post<AuthResponse>("/auth/login", payload);
     return data;
   },
+  verifyEmail: async (payload: { token: string }) => {
+    const { data } = await apiClient.post<AuthActionResponse>("/auth/verify-email", payload);
+    return data;
+  },
+  resendVerification: async (payload: { email: string }) => {
+    const { data } = await apiClient.post<AuthActionResponse>(
+      "/auth/resend-verification",
+      payload
+    );
+    return data;
+  },
   forgotPassword: async (payload: Record<string, unknown>) => {
-    const { data } = await apiClient.post<PasswordActionResponse>(
+    const { data } = await apiClient.post<AuthActionResponse>(
       "/auth/forgot-password",
       payload
     );
     return data;
   },
   resetPassword: async (payload: Record<string, unknown>) => {
-    const { data } = await apiClient.post<PasswordActionResponse>(
+    const { data } = await apiClient.post<AuthActionResponse>(
       "/auth/reset-password",
       payload
     );
     return data;
   },
   changePassword: async (payload: Record<string, unknown>) => {
-    const { data } = await apiClient.post<PasswordActionResponse>(
+    const { data } = await apiClient.post<AuthActionResponse>(
       "/auth/change-password",
       payload
     );
     return data;
   },
   logout: async () => {
-    const { data } = await apiClient.post<PasswordActionResponse>("/auth/logout");
+    const { data } = await apiClient.post<AuthActionResponse>("/auth/logout");
     return data;
   },
   me: async () => {
@@ -250,6 +262,16 @@ export const calendarApi = {
 export const dashboardApi = {
   get: async () => {
     const { data } = await apiClient.get<DashboardResponse>("/dashboard");
+    return data;
+  }
+};
+
+export const assistantApi = {
+  askReservationAssistant: async (message: string) => {
+    const { data } = await apiClient.post<ReservationAssistantResponse>(
+      "/ai/reservation-assistant",
+      { message }
+    );
     return data;
   }
 };

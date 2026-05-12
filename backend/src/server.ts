@@ -115,6 +115,18 @@ const registerProcessHandlers = () => {
 async function startServer() {
   await connectDatabaseWithRetry();
 
+  const aiProviderConfigured =
+    Boolean(env.AI_PROVIDER && env.AI_API_KEY && env.AI_MODEL) &&
+    (env.AI_PROVIDER !== "custom" || Boolean(env.AI_API_BASE_URL));
+
+  if (aiProviderConfigured) {
+    console.info(`[startup] AI assistant provider configured: ${env.AI_PROVIDER}.`);
+  } else {
+    console.info(
+      "[startup] AI assistant provider is not fully configured. The reservation assistant will use deterministic fallback replies."
+    );
+  }
+
   if (env.ENABLE_DEMO_BOOTSTRAP) {
     try {
       await systemBootstrapService.ensureDemoAccounts();

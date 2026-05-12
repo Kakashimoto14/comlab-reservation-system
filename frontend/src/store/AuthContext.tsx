@@ -8,13 +8,13 @@ import {
 } from "react";
 
 import { authApi } from "../api/services";
-import type { AuthResponse, User } from "../types/api";
+import type { AuthActionResponse, AuthResponse, User } from "../types/api";
 
 type AuthContextValue = {
   user: User | null;
   initialized: boolean;
   login: (payload: Record<string, unknown>) => Promise<AuthResponse>;
-  register: (payload: Record<string, unknown>) => Promise<AuthResponse>;
+  register: (payload: Record<string, unknown>) => Promise<AuthActionResponse>;
   logout: () => void;
   setCurrentUser: (user: User) => void;
 };
@@ -53,7 +53,7 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
       user,
       initialized,
       login: (payload) => handleAuthResponse(() => authApi.login(payload)),
-      register: (payload) => handleAuthResponse(() => authApi.register(payload)),
+      register: (payload) => authApi.register(payload),
       logout: () => {
         void authApi.logout().catch(() => undefined);
         setUser(null);

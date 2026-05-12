@@ -25,8 +25,16 @@ const ForgotPasswordPage = lazy(() =>
 const ResetPasswordPage = lazy(() =>
   import("./pages/public/ResetPasswordPage").then((module) => ({ default: module.ResetPasswordPage }))
 );
+const VerifyEmailPage = lazy(() =>
+  import("./pages/public/VerifyEmailPage").then((module) => ({ default: module.VerifyEmailPage }))
+);
 const ForbiddenPage = lazy(() =>
   import("./pages/public/ForbiddenPage").then((module) => ({ default: module.ForbiddenPage }))
+);
+const ReservationAssistantPage = lazy(() =>
+  import("./pages/ReservationAssistantPage").then((module) => ({
+    default: module.ReservationAssistantPage
+  }))
 );
 const StudentDashboardPage = lazy(() =>
   import("./pages/student/StudentDashboardPage").then((module) => ({
@@ -136,12 +144,14 @@ export const App = () => (
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/verify-email" element={<VerifyEmailPage />} />
             </Route>
             <Route path="/forbidden" element={<ForbiddenPage />} />
 
             <Route element={<ProtectedRoute />}>
               <Route element={<DashboardLayout />}>
                 <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/assistant" element={<ReservationAssistantPage />} />
                 <Route path="/laboratory-guide" element={<LaboratoriesPage />} />
               </Route>
             </Route>

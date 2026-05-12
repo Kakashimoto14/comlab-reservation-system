@@ -78,6 +78,7 @@ model User {
   firstName            String          @db.VarChar(50)
   lastName             String          @db.VarChar(50)
   email                String          @unique
+  emailVerifiedAt      DateTime?
   passwordHash         String
   role                 UserRole
   status               UserStatus      @default(ACTIVE)
@@ -93,6 +94,7 @@ model User {
   createdCalendarEvents CalendarEvent[] @relation("CalendarEventCreator")
   assignedLaboratories Laboratory[]    @relation("LaboratoryCustodian")
   activityLogs         ActivityLog[]
+  emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens  PasswordResetToken[]
   notifications        Notification[]
   authSessions         AuthSession[]
@@ -221,6 +223,18 @@ model ActivityLog {
 }
 
 model PasswordResetToken {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model EmailVerificationToken {
   id         Int      @id @default(autoincrement())
   userId     Int
   tokenHash  String   @unique

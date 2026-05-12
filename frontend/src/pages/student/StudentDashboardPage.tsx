@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Building2, CalendarCheck2, CheckCircle2, Clock3 } from "lucide-react";
+import { ArrowRight, Building2, CalendarCheck2, CheckCircle2, Clock3 } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { dashboardApi } from "../../api/services";
@@ -72,6 +72,54 @@ export const StudentDashboardPage = () => {
           icon={Building2}
         />
       </div>
+
+      <Card className="mt-8 overflow-hidden border-brand-100 bg-[radial-gradient(circle_at_top_right,_rgba(73,111,182,0.14),_transparent_28%),linear-gradient(135deg,_#f4f7fb,_#ffffff_55%,_#f8fafc)]">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-2xl">
+            <div className="flex items-center gap-3">
+              <img
+                src="/comport-logo.png"
+                alt="ComPort logo"
+                className="h-12 w-12 rounded-2xl border border-white/80 bg-white object-cover p-1 shadow-soft"
+              />
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.25em] text-brand-700">
+                  ComPort Assistant
+                </p>
+                <p className="text-sm text-slate-500">Live help from current reservation data</p>
+              </div>
+            </div>
+            <h2 className="mt-4 text-2xl font-semibold text-slate-900">
+              Ask before you book, reschedule, or double-check a lab
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Get quick answers from the current ComPort reservation records without leaving your
+              student workspace.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
+              <span className="rounded-full bg-white px-3 py-1.5 shadow-soft">
+                Available schedules this week
+              </span>
+              <span className="rounded-full bg-white px-3 py-1.5 shadow-soft">
+                My upcoming reservations
+              </span>
+              <span className="rounded-full bg-white px-3 py-1.5 shadow-soft">
+                Reservation rules
+              </span>
+              <span className="rounded-full bg-white px-3 py-1.5 shadow-soft">
+                Available labs today
+              </span>
+            </div>
+          </div>
+
+          <Link to="/assistant" className="w-full sm:w-auto">
+            <Button className="w-full sm:w-auto">
+              Open ComPort Assistant
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </Link>
+        </div>
+      </Card>
 
       <Card className="mt-8">
         <div className="mb-6 flex items-center justify-between">

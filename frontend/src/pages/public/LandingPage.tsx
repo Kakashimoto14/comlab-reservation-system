@@ -8,9 +8,18 @@ export const LandingPage = () => (
   <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(73,111,182,0.18),_transparent_30%),linear-gradient(180deg,_#f8fafc,_#eef3fb)] px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
     <div className="mx-auto max-w-7xl">
       <header className="flex flex-col gap-4 rounded-xl border border-white/70 bg-white/85 px-5 py-4 shadow-soft backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:px-6">
-        <div className="min-w-0">
-          <p className="font-display text-xl font-bold text-slate-900">ComLab Reservation System</p>
-          <p className="mt-1 text-sm leading-5 text-slate-500">Academic reservation platform for BSIT laboratory operations</p>
+        <div className="flex min-w-0 items-center gap-4">
+          <img
+            src="/comport-logo.png"
+            alt="ComPort logo"
+            className="h-12 w-12 rounded-2xl border border-white/80 bg-white object-cover p-1 shadow-soft"
+          />
+          <div className="min-w-0">
+            <p className="font-display text-xl font-bold text-slate-900">ComPort Reservation System</p>
+            <p className="mt-1 text-sm leading-5 text-slate-500">
+              Academic reservation platform for modern computer laboratory operations
+            </p>
+          </div>
         </div>
         <div className="flex flex-wrap gap-3">
           <Link to="/login">
@@ -24,14 +33,14 @@ export const LandingPage = () => (
 
       <section className="grid gap-10 py-12 sm:py-14 lg:grid-cols-[1.12fr_0.88fr] lg:items-center lg:py-16">
         <div className="min-w-0">
-          <span className="rounded-full bg-brand-100 px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-brand-700">
-            Production-style BSIT project
+          <span className="inline-flex rounded-full bg-brand-100 px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-brand-700">
+            ComPort Campus Workflow
           </span>
           <h1 className="mt-6 font-display text-3xl font-bold leading-tight text-slate-900 sm:text-4xl lg:text-5xl">
-            A polished way to manage computer laboratory reservations, approvals, and reports.
+            A polished way to manage computer laboratory reservations, approvals, assistance, and reports.
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg sm:leading-8">
-            Built for real academic operations with role-based dashboards, schedule-aware reservation requests, conflict prevention, and accountable workflows.
+            Built for real academic operations with role-based dashboards, schedule-aware reservation requests, assistant support, conflict prevention, and accountable workflows.
           </p>
           <div className="mt-8 flex flex-wrap gap-4">
             <Link to="/register">
@@ -51,7 +60,7 @@ export const LandingPage = () => (
             <Building2 className="h-8 w-8" />
             <h3 className="mt-6 text-xl font-semibold leading-tight">Laboratory Management</h3>
             <p className="mt-3 text-sm leading-6 text-brand-100">
-              Manage rooms, capacities, devices, statuses, and demonstration-ready details.
+              Manage rooms, capacities, devices, statuses, and ready-to-deploy operational details.
             </p>
           </Card>
           <Card className="bg-white">

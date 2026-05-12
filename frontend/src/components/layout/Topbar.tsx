@@ -3,13 +3,14 @@ import { useMemo } from "react";
 import { useLocation } from "react-router-dom";
 
 import { useAuth } from "../../store/AuthContext";
-import { roleLabels } from "../../utils/constants";
+import { APP_SHORT_NAME, roleLabels } from "../../utils/constants";
 import { NotificationCenter } from "./NotificationCenter";
 
 const routeMeta = [
   { match: "/student/dashboard", title: "Student Dashboard", description: "Track your booking activity and latest reservation updates." },
   { match: "/student/laboratories", title: "Laboratory Catalog", description: "Browse available laboratories, schedules, and reservation windows." },
   { match: "/student/reservations", title: "Reservation History", description: "Review your requests, status changes, and staff remarks." },
+  { match: "/assistant", title: "ComPort Assistant", description: "Ask about live schedules, room availability, your reservations, and system-enforced rules." },
   { match: "/dashboard", title: "Operations Dashboard", description: "Monitor reservation volume, approval queues, and laboratory usage." },
   { match: "/management/users", title: "User Administration", description: "Manage access, roles, and account status across the system." },
   { match: "/management/laboratories/assign-staff", title: "Staff Assignment", description: "Coordinate laboratory staff coverage and room access responsibilities." },
@@ -33,7 +34,7 @@ export const Topbar = () => {
           ? location.pathname === item.match
           : location.pathname.startsWith(item.match)
       ) ?? {
-        title: "ComLab Portal",
+        title: `${APP_SHORT_NAME} Workspace`,
         description: "Manage laboratory reservations with clarity and accountability."
       },
     [location.pathname]
@@ -55,6 +56,16 @@ export const Topbar = () => {
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
+            <div className="mb-3 flex items-center gap-3">
+              <img
+                src="/comport-logo.png"
+                alt="ComPort logo"
+                className="h-10 w-10 rounded-2xl border border-slate-200 bg-white object-cover p-1"
+              />
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+                {APP_SHORT_NAME}
+              </p>
+            </div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-600">
               {currentRoute.title}
             </p>

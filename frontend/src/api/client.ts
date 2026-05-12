@@ -32,13 +32,12 @@ const normalizeApiUrl = (value: string) => {
 };
 
 const configuredApiUrl = import.meta.env.VITE_API_URL?.trim();
-const fallbackApiUrl = import.meta.env.DEV
-  ? "http://localhost:5000/api"
-  : "/api";
+const fallbackApiUrl =
+  import.meta.env.DEV || import.meta.env.MODE === "test" ? "http://localhost:5000/api" : "";
 
-if (!configuredApiUrl && !import.meta.env.DEV) {
-  console.warn(
-    "VITE_API_URL is not set for production. Falling back to same-origin /api."
+if (!configuredApiUrl && import.meta.env.PROD) {
+  throw new Error(
+    "VITE_API_URL must be set for production builds. Use your backend URL such as https://your-backend-domain.com/api, or /api only when a reverse proxy is configured."
   );
 }
 

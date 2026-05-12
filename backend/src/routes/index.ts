@@ -1,5 +1,6 @@
 import { Router } from "express";
 
+import aiRoutes from "./ai.routes.js";
 import authRoutes from "./auth.routes.js";
 import calendarRoutes from "./calendar.routes.js";
 import dashboardRoutes from "./dashboard.routes.js";
@@ -22,6 +23,7 @@ router.get("/health", (_req, res) => {
 });
 
 router.use("/auth", authRoutes);
+router.use("/ai", aiRoutes);
 router.use("/users", userRoutes);
 router.use("/laboratories", laboratoryRoutes);
 router.use("/notifications", notificationRoutes);

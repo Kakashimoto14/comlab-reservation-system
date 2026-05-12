@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22 <23"
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
@@ -16,6 +19,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:migrate:reset": "prisma migrate reset",
+    "prisma:studio": "prisma studio",
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {

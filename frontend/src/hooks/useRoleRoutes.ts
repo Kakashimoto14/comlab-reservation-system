@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import {
   BookOpen,
+  Bot,
   Building2,
   CalendarClock,
   ClipboardList,
@@ -25,6 +26,7 @@ export const useRoleRoutes = () => {
     if (user.role === "STUDENT") {
       return [
         { label: "Dashboard", to: "/student/dashboard", icon: LayoutDashboard },
+        { label: "Assistant", to: "/assistant", icon: Bot },
         { label: "Laboratories", to: "/student/laboratories", icon: Building2 },
         { label: "My Reservations", to: "/student/reservations", icon: ClipboardList },
         { label: "Profile", to: "/profile", icon: UserRound }
@@ -33,6 +35,7 @@ export const useRoleRoutes = () => {
 
     const items = [
       { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
+      { label: "Assistant", to: "/assistant", icon: Bot },
       { label: "Laboratories", to: "/management/laboratories", icon: Building2 },
       { label: "Schedules", to: "/management/schedules", icon: CalendarClock },
       { label: "Reservations", to: "/management/reservations", icon: ClipboardList },

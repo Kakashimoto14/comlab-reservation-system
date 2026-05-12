@@ -2,6 +2,10 @@ node_modules
 dist
 .env
 .env.local
+backend/.env
+backend/.env.local
+frontend/.env
+frontend/.env.local
 .DS_Store
 coverage
 backend/generated

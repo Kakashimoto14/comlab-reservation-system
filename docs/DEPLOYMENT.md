@@ -53,6 +53,7 @@ NODE_ENV=development
 CLIENT_URL=http://localhost:5173
 FRONTEND_URL=http://localhost:5173
 APP_BASE_URL=http://localhost:5173
+CORS_ORIGINS=http://localhost:5173,http://localhost:5174
 
 DATABASE_URL="postgresql://postgres.PROJECT_REF:YOUR_PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres?pgbouncer=true&connection_limit=1&sslmode=require"
 DIRECT_URL="postgresql://postgres.PROJECT_REF:YOUR_PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require"
@@ -106,7 +107,8 @@ Notes:
 - `DIRECT_URL` is the Supabase session pooler URL used by Prisma migrations.
 - Replace `PROJECT_REF` with your Supabase project ref.
 - Replace `YOUR_PASSWORD` with your Supabase database password.
-- `CLIENT_URL` may contain multiple allowed origins separated by commas.
+- `CLIENT_URL`, `FRONTEND_URL`, and `APP_BASE_URL` are single canonical frontend URLs.
+- `CORS_ORIGINS` is the only comma-separated frontend origin allowlist.
 - Leave SMTP blank in local preview mode if you want preview links instead of real email delivery.
 
 ## 4. Frontend Local Env
@@ -186,9 +188,10 @@ Backend production example:
 PORT=5000
 NODE_ENV=production
 
-CLIENT_URL=https://your-frontend-domain.com
-FRONTEND_URL=https://your-frontend-domain.com
-APP_BASE_URL=https://your-frontend-domain.com
+CLIENT_URL=https://www.comlabreservation.app
+FRONTEND_URL=https://www.comlabreservation.app
+APP_BASE_URL=https://www.comlabreservation.app
+CORS_ORIGINS=https://www.comlabreservation.app,https://comlabreservation.app
 
 DATABASE_URL="postgresql://postgres.PROJECT_REF:YOUR_PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres?pgbouncer=true&connection_limit=1&sslmode=require"
 DIRECT_URL="postgresql://postgres.PROJECT_REF:YOUR_PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require"
@@ -223,14 +226,14 @@ AI_PROVIDER=groq
 AI_API_KEY=your_groq_key
 AI_MODEL=llama-3.1-8b-instant
 AI_API_BASE_URL=
-OPENROUTER_SITE_URL=https://your-frontend-domain.com
+OPENROUTER_SITE_URL=https://www.comlabreservation.app
 OPENROUTER_APP_NAME=ComPort
 ```
 
 Frontend production example:
 
 ```env
-VITE_API_URL=https://your-backend-domain.com/api
+VITE_API_URL=https://comport-pm3ss.ondigitalocean.app/api
 ```
 
 If a reverse proxy maps the frontend and backend to the same domain, you may use:
@@ -395,13 +398,21 @@ npm run prisma:migrate:reset --workspace backend
 - Example:
 
 ```env
-VITE_API_URL=https://your-backend-domain.com/api
+VITE_API_URL=https://comport-pm3ss.ondigitalocean.app/api
 ```
 
 ### CORS or frontend/backend URL mismatch
 
-- Confirm `CLIENT_URL`, `FRONTEND_URL`, and `APP_BASE_URL` match the real frontend origin
-- If you allow multiple frontend origins, separate them with commas in `CLIENT_URL`
+- Confirm `CLIENT_URL`, `FRONTEND_URL`, and `APP_BASE_URL` are single canonical frontend URLs such as `https://www.comlabreservation.app`
+- Do not put comma-separated values in `CLIENT_URL`, `FRONTEND_URL`, or `APP_BASE_URL`
+- Add every browser origin to `CORS_ORIGINS`, including both `https://www.comlabreservation.app` and `https://comlabreservation.app` if both domains serve the frontend
+- Keep `AUTH_COOKIE_SAME_SITE=none` in production so cookie auth works cross-site
+
+### Assistant returns `400 Bad Request`
+
+- Very short greetings such as `Hi` should return a friendly assistant response after this deployment
+- If a future validation error happens, the frontend shows the backend message instead of a generic outage message
+- If the assistant returns `401`, log in again so the cross-site auth cookies are refreshed
 
 ### AI provider is missing or invalid
 

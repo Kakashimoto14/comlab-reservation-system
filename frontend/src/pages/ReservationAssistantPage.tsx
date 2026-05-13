@@ -1,7 +1,9 @@
 import { useMutation } from "@tanstack/react-query";
+import type { AxiosError } from "axios";
 import { Bot, Clock3, RefreshCw, SendHorizonal, ShieldCheck, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
+import { useNavigate } from "react-router-dom";
 
 import { assistantApi } from "../api/services";
 import { Button } from "../components/ui/Button";
@@ -16,6 +18,11 @@ type ConversationMessage = {
   mode?: "ai" | "fallback";
 };
 
+type ApiErrorBody = {
+  message?: string;
+  errors?: Record<string, string[]>;
+};
+
 const promptSuggestions = [
   "What are the available schedules this week?",
   "Which laboratories are available today?",
@@ -25,6 +32,7 @@ const promptSuggestions = [
 ];
 
 export const ReservationAssistantPage = () => {
+  const navigate = useNavigate();
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [assistantError, setAssistantError] = useState<string | null>(null);
@@ -45,7 +53,33 @@ export const ReservationAssistantPage = () => {
         }
       ]);
     },
-    onError: () => {
+    onError: (error) => {
+      const axiosError = error as AxiosError<ApiErrorBody>;
+      const statusCode = axiosError.response?.status;
+
+      if (statusCode === 401) {
+        const message = "Please log in to use the ComPort Assistant.";
+        setAssistantError(message);
+        toast.error(message);
+        navigate("/login", {
+          state: {
+            authMessage: message,
+            from: { pathname: "/assistant" }
+          }
+        });
+        return;
+      }
+
+      if (statusCode === 400) {
+        const validationMessage =
+          axiosError.response?.data?.errors?.message?.[0] ??
+          axiosError.response?.data?.message ??
+          "Please adjust your question and try again.";
+        setAssistantError(validationMessage);
+        toast.error(validationMessage);
+        return;
+      }
+
       setAssistantError("I couldn't complete that question right now. Please try again.");
       toast.error("The assistant is unavailable right now. Please try again.");
     }

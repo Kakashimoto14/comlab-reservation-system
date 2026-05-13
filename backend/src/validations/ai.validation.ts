@@ -5,7 +5,7 @@ export const reservationAssistantSchema = z.object({
     message: z
       .string({ required_error: "Message is required." })
       .trim()
-      .min(3, "Message must be at least 3 characters.")
+      .min(1, "Message is required.")
       .max(1000, "Message must be 1000 characters or fewer.")
   }),
   params: z.object({}).default({}),

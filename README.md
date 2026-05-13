@@ -767,6 +767,7 @@ AUTH_COOKIE_SAME_SITE=lax
 CLIENT_URL=http://localhost:5173
 FRONTEND_URL=http://localhost:5173
 APP_BASE_URL=http://localhost:5173
+CORS_ORIGINS=http://localhost:5173,http://localhost:5174
 RESET_TOKEN_TTL_MINUTES=30
 EMAIL_VERIFICATION_TOKEN_TTL_HOURS=24
 RESET_TOKEN_PREVIEW=true
@@ -777,7 +778,7 @@ SMTP_PORT=587
 SMTP_SECURE=false
 SMTP_USER=
 SMTP_PASS=
-SMTP_FROM="ComLab Reservation <no-reply@example.com>"
+SMTP_FROM="ComPort <no-reply@example.com>"
 SMTP_FROM_EMAIL=
 SMTP_FROM_NAME=
 AI_PROVIDER=groq
@@ -798,6 +799,8 @@ PASSWORD_RESET_RATE_LIMIT_MAX=5
 
 - `DATABASE_URL` is the Supabase pooler URL used by the running backend.
 - `DIRECT_URL` is the Supabase session pooler URL used by Prisma migrations in environments that cannot reach the direct database host.
+- `CLIENT_URL`, `FRONTEND_URL`, and `APP_BASE_URL` are single canonical frontend URLs.
+- `CORS_ORIGINS` is the comma-separated allowlist for browser origins such as `https://www.comlabreservation.app,https://comlabreservation.app`.
 - Replace `PROJECT_REF` with your actual Supabase project ref.
 - Replace `YOUR_PASSWORD` with your actual database password.
 

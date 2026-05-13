@@ -147,7 +147,7 @@ async function startServer() {
       console.info(`[startup] Backend server running on port ${env.PORT}.`);
       console.info(`[startup] Environment: ${env.NODE_ENV}.`);
       console.info("[startup] API health check available at /api/health.");
-      console.info(`[startup] Allowed client origins: ${env.CLIENT_URL}.`);
+      console.info(`[startup] Allowed CORS origins: ${env.CORS_ORIGINS}.`);
       resolve(nextServer);
     });
 

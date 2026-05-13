@@ -3,7 +3,13 @@ import { z } from "zod";
 
 dotenv.config();
 
-const clientUrlSchema = z
+const singleUrlSchema = z.string().url();
+const optionalUrlSchema = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+  z.string().url().optional()
+);
+
+const corsOriginsSchema = z
   .string()
   .min(1)
   .refine(
@@ -12,8 +18,8 @@ const clientUrlSchema = z
         .split(",")
         .map((origin) => origin.trim())
         .filter(Boolean)
-        .every((origin) => z.string().url().safeParse(origin).success),
-    "CLIENT_URL must contain one or more valid URLs separated by commas."
+        .every((origin) => singleUrlSchema.safeParse(origin).success),
+    "CORS_ORIGINS must contain one or more valid URLs separated by commas."
   );
 
 const envSchema = z.object({
@@ -30,9 +36,10 @@ const envSchema = z.object({
   REFRESH_COOKIE_NAME: z.string().min(1).default("comlab_refresh_token"),
   REFRESH_COOKIE_MAX_AGE_MS: z.coerce.number().int().positive().default(604_800_000),
   AUTH_COOKIE_SAME_SITE: z.enum(["strict", "lax", "none"]).optional(),
-  CLIENT_URL: z.string().optional(),
-  FRONTEND_URL: z.string().url().optional(),
-  APP_BASE_URL: z.string().url().optional(),
+  CLIENT_URL: optionalUrlSchema,
+  FRONTEND_URL: optionalUrlSchema,
+  APP_BASE_URL: optionalUrlSchema,
+  CORS_ORIGINS: corsOriginsSchema.optional(),
   RESET_TOKEN_TTL_MINUTES: z.coerce.number().int().positive().default(30),
   EMAIL_VERIFICATION_TOKEN_TTL_HOURS: z.coerce.number().int().positive().default(24),
   RESET_TOKEN_PREVIEW: z.coerce.boolean().optional(),
@@ -49,8 +56,8 @@ const envSchema = z.object({
   AI_PROVIDER: z.enum(["groq", "openrouter", "openai", "custom"]).optional(),
   AI_API_KEY: z.string().min(1).optional(),
   AI_MODEL: z.string().min(1).optional(),
-  AI_API_BASE_URL: z.string().url().optional(),
-  OPENROUTER_SITE_URL: z.string().url().optional(),
+  AI_API_BASE_URL: optionalUrlSchema,
+  OPENROUTER_SITE_URL: optionalUrlSchema,
   OPENROUTER_APP_NAME: z.string().min(1).optional(),
   RESERVATION_REMINDER_LEAD_MINUTES: z.coerce.number().int().positive().default(60),
   RESERVATION_REMINDER_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
@@ -89,7 +96,10 @@ if (
 const resolvedSameSite =
   parsedEnv.AUTH_COOKIE_SAME_SITE ?? (parsedEnv.NODE_ENV === "production" ? "none" : "lax");
 const resolvedFrontendUrl = parsedEnv.FRONTEND_URL ?? parsedEnv.APP_BASE_URL ?? "http://localhost:5173";
-const resolvedClientUrl = clientUrlSchema.parse(parsedEnv.CLIENT_URL ?? resolvedFrontendUrl);
+const resolvedClientUrl = parsedEnv.CLIENT_URL ?? resolvedFrontendUrl;
+const resolvedCorsOrigins = corsOriginsSchema.parse(
+  parsedEnv.CORS_ORIGINS ?? resolvedClientUrl
+);
 const hasSmtpSender = Boolean(parsedEnv.SMTP_FROM || parsedEnv.SMTP_FROM_EMAIL);
 const hasSmtpConfig = Boolean(
   parsedEnv.SMTP_HOST && parsedEnv.SMTP_PORT && hasSmtpSender
@@ -98,6 +108,7 @@ const hasSmtpConfig = Boolean(
 export const env = {
   ...parsedEnv,
   CLIENT_URL: resolvedClientUrl,
+  CORS_ORIGINS: resolvedCorsOrigins,
   FRONTEND_URL: resolvedFrontendUrl,
   APP_BASE_URL: parsedEnv.APP_BASE_URL ?? resolvedFrontendUrl,
   AUTH_COOKIE_SAME_SITE: resolvedSameSite,

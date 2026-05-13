@@ -12,7 +12,7 @@ import { ApiError } from "./utils/ApiError.js";
 
 export const app = express();
 app.set("trust proxy", 1);
-const allowedOrigins = env.CLIENT_URL.split(",")
+const allowedOrigins = env.CORS_ORIGINS.split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
 const csrfProtectedMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);

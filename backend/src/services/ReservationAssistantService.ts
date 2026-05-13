@@ -160,6 +160,14 @@ export class ReservationAssistantService {
     const normalizedMessage = this.normalizeForSearch(message);
     const range = this.resolveDateRange(normalizedMessage);
 
+    if (this.isGreeting(normalizedMessage)) {
+      return {
+        category: "general_reservation_help",
+        range,
+        laboratory: null
+      };
+    }
+
     if (!this.isReservationRelated(normalizedMessage)) {
       return {
         category: "out_of_scope",
@@ -748,7 +756,7 @@ export class ReservationAssistantService {
     context: Awaited<ReturnType<ReservationAssistantService["buildGeneralHelpContext"]>>
   ) {
     return [
-      `I can help with ComLab reservation questions. Right now the system has ${context.availableLaboratories} laboratories marked as available and ${context.scheduleCount} published AVAILABLE schedule blocks in ${context.rangeLabel}.`,
+      `Hi! I can help with ComPort reservation questions. Right now the system has ${context.availableLaboratories} laboratories marked as available and ${context.scheduleCount} published AVAILABLE schedule blocks in ${context.rangeLabel}.`,
       "",
       "Try one of these:",
       ...context.supportedQuestions.map((question) => `- ${question}`)
@@ -888,6 +896,10 @@ export class ReservationAssistantService {
 
   private normalizeForSearch(value: string) {
     return value.toLowerCase().replace(/\s+/g, " ").trim();
+  }
+
+  private isGreeting(message: string) {
+    return /^(hi|hello|hey|good morning|good afternoon|good evening)(!|\.)?$/.test(message);
   }
 
   private isReservationRelated(message: string) {

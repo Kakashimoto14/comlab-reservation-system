@@ -1,6 +1,8 @@
 import dotenv from "dotenv";
 import { z } from "zod";
 
+import { parseBooleanEnvValue } from "../utils/envBoolean.js";
+
 dotenv.config();
 
 const singleUrlSchema = z.string().url();
@@ -8,6 +10,8 @@ const optionalUrlSchema = z.preprocess(
   (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
   z.string().url().optional()
 );
+
+const booleanEnvSchema = z.preprocess(parseBooleanEnvValue, z.boolean().optional());
 
 const corsOriginsSchema = z
   .string()
@@ -42,17 +46,17 @@ const envSchema = z.object({
   CORS_ORIGINS: corsOriginsSchema.optional(),
   RESET_TOKEN_TTL_MINUTES: z.coerce.number().int().positive().default(30),
   EMAIL_VERIFICATION_TOKEN_TTL_HOURS: z.coerce.number().int().positive().default(24),
-  RESET_TOKEN_PREVIEW: z.coerce.boolean().optional(),
-  ENABLE_DEMO_BOOTSTRAP: z.coerce.boolean().optional(),
+  RESET_TOKEN_PREVIEW: booleanEnvSchema,
+  ENABLE_DEMO_BOOTSTRAP: booleanEnvSchema,
   SMTP_HOST: z.string().min(1).optional(),
   SMTP_PORT: z.coerce.number().int().positive().optional(),
-  SMTP_SECURE: z.coerce.boolean().optional(),
+  SMTP_SECURE: booleanEnvSchema,
   SMTP_USER: z.string().min(1).optional(),
   SMTP_PASS: z.string().min(1).optional(),
   SMTP_FROM: z.string().min(1).optional(),
   SMTP_FROM_EMAIL: z.string().email().optional(),
   SMTP_FROM_NAME: z.string().min(1).optional(),
-  NOTIFICATION_EMAIL_PREVIEW: z.coerce.boolean().optional(),
+  NOTIFICATION_EMAIL_PREVIEW: booleanEnvSchema,
   AI_PROVIDER: z.enum(["groq", "openrouter", "openai", "custom"]).optional(),
   AI_API_KEY: z.string().min(1).optional(),
   AI_MODEL: z.string().min(1).optional(),

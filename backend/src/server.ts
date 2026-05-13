@@ -127,6 +127,16 @@ async function startServer() {
     );
   }
 
+  console.info(
+    `[startup] Email preview mode: ${env.NOTIFICATION_EMAIL_PREVIEW ? "enabled" : "disabled"}.`
+  );
+  console.info(
+    `[startup] Reset token preview mode: ${env.RESET_TOKEN_PREVIEW ? "enabled" : "disabled"}.`
+  );
+  console.info(
+    `[startup] Demo account bootstrap: ${env.ENABLE_DEMO_BOOTSTRAP ? "enabled" : "disabled"}.`
+  );
+
   if (env.ENABLE_DEMO_BOOTSTRAP) {
     try {
       await systemBootstrapService.ensureDemoAccounts();

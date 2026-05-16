@@ -1,5 +1,5 @@
 import type { AxiosError } from "axios";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { authApi } from "../../api/services";
@@ -8,60 +8,97 @@ import { Card } from "../../components/ui/Card";
 import { EmptyState } from "../../components/ui/EmptyState";
 
 type VerificationState = "loading" | "success" | "error";
+type VerificationApiError = {
+  message?: string;
+  errors?: Record<string, string[]>;
+};
+
+const inFlightVerificationRequests = new Map<string, Promise<{ message: string }>>();
+
+const getVerificationRequest = (token: string) => {
+  const cachedRequest = inFlightVerificationRequests.get(token);
+
+  if (cachedRequest) {
+    return cachedRequest;
+  }
+
+  const nextRequest = authApi
+    .verifyEmail({ token })
+    .finally(() => inFlightVerificationRequests.delete(token));
+
+  inFlightVerificationRequests.set(token, nextRequest);
+  return nextRequest;
+};
+
+const getVerificationErrorMessage = (error: unknown) => {
+  const axiosError = error as AxiosError<VerificationApiError>;
+
+  return (
+    axiosError.response?.data?.errors?.token?.[0] ??
+    axiosError.response?.data?.message ??
+    "Unable to verify this email link right now. Please try again or request a new verification email."
+  );
+};
 
 export const VerifyEmailPage = () => {
   const [searchParams] = useSearchParams();
-  const token = searchParams.get("token");
-  const attemptedTokenRef = useRef<string | null>(null);
+  const token = searchParams.get("token")?.trim() ?? "";
   const [state, setState] = useState<VerificationState>(token ? "loading" : "error");
   const [message, setMessage] = useState<string>(
     token
       ? "Verifying your email address..."
       : "The verification token is missing. Request a new verification email to continue."
   );
+  const successMessage = "You can now log in to your ComPort account.";
 
   useEffect(() => {
-    if (!token || attemptedTokenRef.current === token) {
+    if (!token) {
+      setState("error");
+      setMessage("The verification token is missing. Request a new verification email to continue.");
       return;
     }
 
-    attemptedTokenRef.current = token;
-    let active = true;
+    let isActive = true;
 
     const verifyEmail = async () => {
-      try {
-        const response = await authApi.verifyEmail({ token });
+      setState("loading");
+      setMessage("Verifying your email address...");
 
-        if (!active) {
+      try {
+        const response = await getVerificationRequest(token);
+
+        if (!isActive) {
           return;
         }
 
         setState("success");
-        setMessage(response.message);
+        setMessage(response.message || successMessage);
       } catch (error) {
-        if (!active) {
+        if (!isActive) {
           return;
         }
 
-        const nextMessage =
-          (error as AxiosError<{ message?: string }>).response?.data?.message ??
-          "Unable to verify this email link.";
         setState("error");
-        setMessage(nextMessage);
+        setMessage(getVerificationErrorMessage(error));
       }
     };
 
     void verifyEmail();
 
     return () => {
-      active = false;
+      isActive = false;
     };
   }, [token]);
 
   if (!token) {
     return (
       <Card className="w-full max-w-md">
-        <EmptyState title="Invalid verification link" description={message} />
+        <EmptyState title="Verification failed" description={message} />
+        <div className="mt-5">
+          <Link to="/login" className="block">
+            <Button fullWidth>Back to Login</Button>
+          </Link>
+        </div>
       </Card>
     );
   }
@@ -77,15 +114,20 @@ export const VerifyEmailPage = () => {
             {state === "loading"
               ? "Checking your verification link"
               : state === "success"
-                ? "Email verified"
+                ? "Email verified successfully"
                 : "Verification failed"}
           </h2>
-          <p className="mt-3 text-sm leading-6 text-slate-600">{message}</p>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            {state === "success" ? successMessage : message}
+          </p>
+          {state === "success" && message !== successMessage ? (
+            <p className="mt-2 text-sm leading-6 text-slate-600">{message}</p>
+          ) : null}
         </div>
 
         {state === "loading" ? (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-            Please wait while we confirm your account.
+            Verifying your email address...
           </div>
         ) : null}
 
@@ -93,25 +135,18 @@ export const VerifyEmailPage = () => {
           <Link
             to="/login"
             state={{
-              authMessage: message
+              authMessage: "Email verified successfully. You can now log in to your ComPort account."
             }}
             className="block"
           >
-            <Button fullWidth>Continue to Login</Button>
+            <Button fullWidth>Go to Login</Button>
           </Link>
         ) : null}
 
         {state === "error" ? (
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <Link to="/login" className="block flex-1">
-              <Button fullWidth>Back to Login</Button>
-            </Link>
-            <Link to="/register" className="block flex-1">
-              <Button variant="secondary" fullWidth>
-                Register Again
-              </Button>
-            </Link>
-          </div>
+          <Link to="/login" className="block">
+            <Button fullWidth>Back to Login</Button>
+          </Link>
         ) : null}
       </div>
     </Card>

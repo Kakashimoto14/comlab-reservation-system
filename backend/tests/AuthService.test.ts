@@ -8,7 +8,8 @@ const createMockDb = () => {
     user: {
       findFirst: vi.fn(),
       create: vi.fn(),
-      findUnique: vi.fn()
+      findUnique: vi.fn(),
+      update: vi.fn()
     },
     emailVerificationToken: {
       deleteMany: vi.fn(),
@@ -176,5 +177,83 @@ describe("AuthService", () => {
     expect(result.previewResetUrl).toContain("/reset-password?token=");
     expect(db.passwordResetToken.create).toHaveBeenCalled();
     expect(db.activityLog.create).toHaveBeenCalled();
+  });
+
+  it("verifies a valid email verification token", async () => {
+    const db = createMockDb();
+    db.emailVerificationToken.findUnique.mockResolvedValue({
+      id: 11,
+      userId: 5,
+      tokenHash: "hashed-token",
+      expiresAt: new Date(Date.now() + 60_000),
+      usedAt: null,
+      user: {
+        id: 5,
+        firstName: "Lorraine",
+        lastName: "Mendoza",
+        email: "lorraine@student.edu",
+        emailVerifiedAt: null,
+        passwordHash: "hash",
+        role: "STUDENT",
+        status: "ACTIVE",
+        studentNumber: "24-00022",
+        department: "BSIT",
+        yearLevel: 2,
+        phone: null,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+    });
+    db.user.update.mockResolvedValue({});
+    db.emailVerificationToken.update.mockResolvedValue({});
+    db.emailVerificationToken.deleteMany.mockResolvedValue({});
+
+    const service = new AuthService(db);
+    const result = await service.verifyEmail({
+      token: "12345678901234567890-valid-token"
+    });
+
+    expect(result.message).toBe("Email verified successfully. You can now log in.");
+    expect(db.user.update).toHaveBeenCalled();
+    expect(db.emailVerificationToken.update).toHaveBeenCalled();
+    expect(db.activityLog.create).toHaveBeenCalled();
+  });
+
+  it("returns a friendly message when an already-used verification link is clicked again", async () => {
+    const db = createMockDb();
+    db.emailVerificationToken.findUnique.mockResolvedValue({
+      id: 12,
+      userId: 6,
+      tokenHash: "hashed-token",
+      expiresAt: new Date(Date.now() + 60_000),
+      usedAt: new Date(),
+      user: {
+        id: 6,
+        firstName: "Alyssa",
+        lastName: "Cruz",
+        email: "alyssa@student.edu",
+        emailVerifiedAt: new Date(),
+        passwordHash: "hash",
+        role: "STUDENT",
+        status: "ACTIVE",
+        studentNumber: "24-00001",
+        department: "BSIT",
+        yearLevel: 2,
+        phone: null,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+    });
+
+    const service = new AuthService(db);
+
+    await expect(
+      service.verifyEmail({
+        token: "12345678901234567890-valid-token"
+      })
+    ).rejects.toMatchObject({
+      statusCode: StatusCodes.CONFLICT,
+      message: "This email is already verified. You can log in to your ComPort account."
+    });
   });
 });

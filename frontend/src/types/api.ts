@@ -15,6 +15,7 @@ export type NotificationChannel = "EMAIL" | "IN_APP";
 export type NotificationType =
   | "RESERVATION_CREATED"
   | "RESERVATION_CONFIRMED"
+  | "RESERVATION_REJECTED"
   | "RESERVATION_CANCELLED"
   | "RESERVATION_REMINDER";
 export type NotificationStatus = "PENDING" | "SENT" | "FAILED";
@@ -216,13 +217,89 @@ export type ReservationAssistantCategory =
   | "available_schedules"
   | "available_laboratories"
   | "specific_laboratory"
-  | "my_upcoming_reservations"
+  | "my_reservations"
   | "reservation_rules"
+  | "laboratory_lookup"
   | "general_reservation_help"
   | "out_of_scope";
+
+export type AssistantTimeWindow = {
+  startTime: string;
+  endTime: string;
+};
+
+export type ReservationAssistantPresentation =
+  | {
+      type: "schedule-results";
+      title: string;
+      showingCount: number;
+      totalCount: number;
+      hasMore: boolean;
+      groups: Array<{
+        date: string;
+        laboratories: Array<{
+          laboratoryName: string;
+          roomCode: string;
+          building: string;
+          scheduleWindow: string;
+          availableSlots: AssistantTimeWindow[];
+        }>;
+      }>;
+    }
+  | {
+      type: "laboratory-results";
+      title: string;
+      showingCount: number;
+      totalCount: number;
+      hasMore: boolean;
+      laboratories: Array<{
+        laboratoryName: string;
+        roomCode: string;
+        building: string;
+        nextOpenWindows: Array<AssistantTimeWindow & { date: string }>;
+      }>;
+    }
+  | {
+      type: "reservation-results";
+      title: string;
+      reservations: Array<{
+        reservationCode: string;
+        status: ReservationStatus;
+        date: string;
+        startTime: string;
+        endTime: string;
+        laboratoryName: string;
+        roomCode: string;
+        reservationType: ReservationType;
+        pcNumber: string | null;
+        purpose: string;
+      }>;
+    }
+  | {
+      type: "laboratory-details";
+      title: string;
+      laboratory: {
+        name: string;
+        roomCode: string;
+        building: string;
+        location: string | null;
+        description: string;
+        status: LaboratoryStatus;
+      };
+    }
+  | {
+      type: "rules";
+      title: string;
+      items: Array<{
+        title: string;
+        detail: string;
+      }>;
+    };
 
 export type ReservationAssistantResponse = {
   reply: string;
   mode: "ai" | "fallback";
   category: ReservationAssistantCategory;
+  suggestions: string[];
+  presentation?: ReservationAssistantPresentation;
 };

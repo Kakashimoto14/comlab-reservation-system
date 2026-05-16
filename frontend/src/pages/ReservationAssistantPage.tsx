@@ -10,12 +10,17 @@ import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { PageHeader } from "../components/ui/PageHeader";
 import { Textarea } from "../components/ui/Textarea";
+import { useAuth } from "../store/AuthContext";
+import type { ReservationAssistantCategory, ReservationAssistantPresentation } from "../types/api";
+import { formatDate, formatTimeRange } from "../utils/format";
 
 type ConversationMessage = {
   id: string;
   role: "assistant" | "user";
   content: string;
-  mode?: "ai" | "fallback";
+  category?: ReservationAssistantCategory;
+  suggestions?: string[];
+  presentation?: ReservationAssistantPresentation;
 };
 
 type ApiErrorBody = {
@@ -24,20 +29,24 @@ type ApiErrorBody = {
 };
 
 const promptSuggestions = [
-  "What are the available schedules this week?",
-  "Which laboratories are available today?",
-  "Show my upcoming reservations.",
-  "What are the reservation rules?",
-  "What time slots are open this week?"
+  "May schedule ba next month?",
+  "available ba ang CL-302 bukas?",
+  "What schedules are available this week?",
+  "Ano reservation ko ngayon?",
+  "What are the reservation rules?"
 ];
+const ASSISTANT_SESSION_STORAGE_KEY = "comportAssistantConversation";
 
 export const ReservationAssistantPage = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [assistantError, setAssistantError] = useState<string | null>(null);
   const [lastSubmittedMessage, setLastSubmittedMessage] = useState<string | null>(null);
+  const [hasRestoredConversation, setHasRestoredConversation] = useState(false);
   const messageFeedEndRef = useRef<HTMLDivElement | null>(null);
+  const storageKey = user ? `${ASSISTANT_SESSION_STORAGE_KEY}:${user.id}` : null;
 
   const assistantMutation = useMutation({
     mutationFn: assistantApi.askReservationAssistant,
@@ -49,7 +58,9 @@ export const ReservationAssistantPage = () => {
           id: crypto.randomUUID(),
           role: "assistant",
           content: response.reply,
-          mode: response.mode
+          category: response.category,
+          suggestions: response.suggestions,
+          presentation: response.presentation
         }
       ]);
     },
@@ -80,8 +91,9 @@ export const ReservationAssistantPage = () => {
         return;
       }
 
-      setAssistantError("I couldn't complete that question right now. Please try again.");
-      toast.error("The assistant is unavailable right now. Please try again.");
+      const fallbackMessage = "Sorry, I couldn't reach the assistant right now. Please try again.";
+      setAssistantError(fallbackMessage);
+      toast.error(fallbackMessage);
     }
   });
 
@@ -105,6 +117,50 @@ export const ReservationAssistantPage = () => {
   useEffect(() => {
     messageFeedEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, assistantMutation.isPending, assistantError]);
+
+  useEffect(() => {
+    if (!storageKey) {
+      return;
+    }
+
+    try {
+      const rawConversation = sessionStorage.getItem(storageKey);
+
+      if (!rawConversation) {
+        setMessages([]);
+        setLastSubmittedMessage(null);
+        return;
+      }
+
+      const parsedConversation = JSON.parse(rawConversation) as {
+        messages?: ConversationMessage[];
+        lastSubmittedMessage?: string | null;
+      };
+
+      setMessages(parsedConversation.messages ?? []);
+      setLastSubmittedMessage(parsedConversation.lastSubmittedMessage ?? null);
+    } catch (error) {
+      console.error("[assistant] Failed to restore session conversation.", error);
+      setMessages([]);
+      setLastSubmittedMessage(null);
+    } finally {
+      setHasRestoredConversation(true);
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!storageKey || !hasRestoredConversation) {
+      return;
+    }
+
+    sessionStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        messages: messages.slice(-20),
+        lastSubmittedMessage
+      })
+    );
+  }, [hasRestoredConversation, lastSubmittedMessage, messages, storageKey]);
 
   const sendMessage = (message: string) => {
     const trimmedMessage = message.trim();
@@ -242,10 +298,25 @@ export const ReservationAssistantPage = () => {
                     {message.role === "user" ? "You" : "ComPort Assistant"}
                   </p>
                   <p className="whitespace-pre-line break-words">{message.content}</p>
-                  {message.role === "assistant" ? (
-                    <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                      {message.mode === "ai" ? "AI-assisted reply" : "Using system data"}
-                    </p>
+                  {message.role === "assistant" && message.presentation ? (
+                    <div className="mt-4">
+                      <AssistantPresentationCard presentation={message.presentation} />
+                    </div>
+                  ) : null}
+                  {message.role === "assistant" && message.suggestions?.length ? (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {message.suggestions.map((suggestion) => (
+                        <button
+                          key={`${message.id}-${suggestion}`}
+                          type="button"
+                          disabled={assistantMutation.isPending}
+                          className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-brand-200 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          onClick={() => sendMessage(suggestion)}
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
                   ) : null}
                 </div>
               </div>
@@ -263,7 +334,7 @@ export const ReservationAssistantPage = () => {
                       <span className="h-2 w-2 animate-pulse rounded-full bg-brand-400 [animation-delay:-0.1s]" />
                       <span className="h-2 w-2 animate-pulse rounded-full bg-brand-500" />
                     </span>
-                    <span>Checking schedules, reservations, and laboratory data...</span>
+                    <span>Thinking through your reservation question...</span>
                   </div>
                 </div>
               </div>
@@ -321,8 +392,8 @@ export const ReservationAssistantPage = () => {
               />
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-slate-500">
-                  Press Enter to send. Use Shift+Enter for a new line. Replies labeled Using
-                  system data came directly from current records.
+                  Press Enter to send. Use Shift+Enter for a new line. The assistant uses current
+                  reservation system records and asks follow-up questions when details are missing.
                 </p>
                 <Button
                   type="button"
@@ -392,6 +463,167 @@ export const ReservationAssistantPage = () => {
             </div>
           </Card>
         </div>
+      </div>
+    </div>
+  );
+};
+
+const AssistantPresentationCard = ({
+  presentation
+}: {
+  presentation: ReservationAssistantPresentation;
+}) => {
+  if (presentation.type === "schedule-results") {
+    return (
+      <div className="space-y-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">{presentation.title}</p>
+              <p className="text-xs text-slate-500">
+                Showing {presentation.showingCount} of {presentation.totalCount} available
+                schedule entries
+              </p>
+            </div>
+            {presentation.hasMore ? (
+              <span className="rounded-full bg-brand-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-700">
+                More available
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        {presentation.groups.map((group) => (
+          <div key={group.date} className="rounded-2xl border border-slate-200 bg-white p-4">
+            <p className="text-sm font-semibold text-slate-900">{formatDate(group.date)}</p>
+            <div className="mt-3 space-y-3">
+              {group.laboratories.map((laboratory) => (
+                <div key={`${group.date}-${laboratory.roomCode}`} className="rounded-2xl bg-slate-50 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {laboratory.roomCode} - {laboratory.laboratoryName}
+                      </p>
+                      <p className="text-xs text-slate-500">{laboratory.building}</p>
+                    </div>
+                    <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
+                      Published {formatTimeRange(...laboratory.scheduleWindow.split("-") as [string, string])}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {laboratory.availableSlots.map((slot) => (
+                      <span
+                        key={`${group.date}-${laboratory.roomCode}-${slot.startTime}`}
+                        className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"
+                      >
+                        {formatTimeRange(slot.startTime, slot.endTime)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (presentation.type === "laboratory-results") {
+    return (
+      <div className="space-y-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="text-sm font-semibold text-slate-900">{presentation.title}</p>
+          <p className="text-xs text-slate-500">
+            Showing {presentation.showingCount} of {presentation.totalCount} laboratories
+          </p>
+        </div>
+
+        {presentation.laboratories.map((laboratory) => (
+          <div key={laboratory.roomCode} className="rounded-2xl border border-slate-200 bg-white p-4">
+            <p className="text-sm font-semibold text-slate-900">
+              {laboratory.roomCode} - {laboratory.laboratoryName}
+            </p>
+            <p className="text-xs text-slate-500">{laboratory.building}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {laboratory.nextOpenWindows.map((slot) => (
+                <span
+                  key={`${laboratory.roomCode}-${slot.date}-${slot.startTime}`}
+                  className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"
+                >
+                  {formatDate(slot.date)} - {formatTimeRange(slot.startTime, slot.endTime)}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (presentation.type === "reservation-results") {
+    return (
+      <div className="space-y-3">
+        {presentation.reservations.map((reservation) => (
+          <div
+            key={reservation.reservationCode}
+            className="rounded-2xl border border-slate-200 bg-white p-4"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-slate-900">
+                {reservation.roomCode} - {reservation.laboratoryName}
+              </p>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-700">
+                {reservation.status}
+              </span>
+            </div>
+            <p className="mt-2 text-sm text-slate-600">
+              {formatDate(reservation.date)} - {formatTimeRange(reservation.startTime, reservation.endTime)}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">{reservation.purpose}</p>
+            {reservation.pcNumber ? (
+              <p className="mt-2 text-xs font-semibold text-slate-600">
+                PC assignment: {reservation.pcNumber}
+              </p>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (presentation.type === "laboratory-details") {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-slate-900">
+            {presentation.laboratory.roomCode} - {presentation.laboratory.name}
+          </p>
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-700">
+            {presentation.laboratory.status}
+          </span>
+        </div>
+        <p className="mt-2 text-sm text-slate-600">{presentation.laboratory.building}</p>
+        {presentation.laboratory.location ? (
+          <p className="mt-1 text-xs text-slate-500">{presentation.laboratory.location}</p>
+        ) : null}
+        <p className="mt-3 text-sm leading-6 text-slate-600">
+          {presentation.laboratory.description}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <p className="text-sm font-semibold text-slate-900">{presentation.title}</p>
+      <div className="mt-3 space-y-3">
+        {presentation.items.map((item) => (
+          <div key={item.title} className="rounded-2xl bg-slate-50 p-3">
+            <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+            <p className="mt-1 text-sm leading-6 text-slate-600">{item.detail}</p>
+          </div>
+        ))}
       </div>
     </div>
   );

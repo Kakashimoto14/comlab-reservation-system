@@ -427,6 +427,13 @@ export class ReservationService {
       });
     }
 
+    if (updatedReservation.status === "REJECTED") {
+      notificationEventBus.publish("reservation.rejected", {
+        reservationId: updatedReservation.id,
+        actorUserId: currentUser.id
+      });
+    }
+
     return updatedReservation;
   }
 

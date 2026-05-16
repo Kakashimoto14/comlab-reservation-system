@@ -44,7 +44,13 @@ export const forgotPasswordSchema = z.object({
 
 export const verifyEmailSchema = z.object({
   body: z.object({
-    token: z.string().min(20)
+    token: z
+      .string({
+        required_error: "Verification token is required."
+      })
+      .trim()
+      .min(1, "Verification token is required.")
+      .min(20, "Verification link is invalid or incomplete.")
   }),
   params: z.object({}).default({}),
   query: z.object({}).default({})

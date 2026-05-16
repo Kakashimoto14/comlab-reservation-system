@@ -10,6 +10,14 @@ const optionalUrlSchema = z.preprocess(
   (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
   z.string().url().optional()
 );
+const optionalNonEmptyStringSchema = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+  z.string().min(1).optional()
+);
+const optionalAiProviderSchema = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+  z.enum(["groq", "openrouter", "openai", "custom"]).optional()
+);
 
 const booleanEnvSchema = z.preprocess(parseBooleanEnvValue, z.boolean().optional());
 
@@ -57,9 +65,9 @@ const envSchema = z.object({
   SMTP_FROM_EMAIL: z.string().email().optional(),
   SMTP_FROM_NAME: z.string().min(1).optional(),
   NOTIFICATION_EMAIL_PREVIEW: booleanEnvSchema,
-  AI_PROVIDER: z.enum(["groq", "openrouter", "openai", "custom"]).optional(),
-  AI_API_KEY: z.string().min(1).optional(),
-  AI_MODEL: z.string().min(1).optional(),
+  AI_PROVIDER: optionalAiProviderSchema,
+  AI_API_KEY: optionalNonEmptyStringSchema,
+  AI_MODEL: optionalNonEmptyStringSchema,
   AI_API_BASE_URL: optionalUrlSchema,
   OPENROUTER_SITE_URL: optionalUrlSchema,
   OPENROUTER_APP_NAME: z.string().min(1).optional(),

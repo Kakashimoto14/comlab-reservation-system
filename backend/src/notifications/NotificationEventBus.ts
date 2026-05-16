@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 export type NotificationEventType =
   | "reservation.created"
   | "reservation.confirmed"
+  | "reservation.rejected"
   | "reservation.cancelled"
   | "reservation.reminder";
 

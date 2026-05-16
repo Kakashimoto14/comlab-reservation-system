@@ -14,6 +14,7 @@ import {
 import { assertRoleScopedUserFields } from "../validations/userRules.js";
 import { ActivityLogService } from "./ActivityLogService.js";
 import { EmailService } from "./EmailService.js";
+import { renderComportEmail } from "./emailTemplates.js";
 
 type RegisterStudentInput = {
   firstName: string;
@@ -231,7 +232,16 @@ export class AuthService {
   }
 
   async verifyEmail(input: VerifyEmailInput): Promise<AuthActionResponse> {
-    const tokenHash = this.hashToken(input.token);
+    const normalizedToken = input.token.trim();
+
+    console.info("[auth] Email verification attempt received.");
+
+    if (!normalizedToken) {
+      console.warn("[auth] Email verification failed: missing token.");
+      throw new ApiError(StatusCodes.BAD_REQUEST, "Verification token is required.");
+    }
+
+    const tokenHash = this.hashToken(normalizedToken);
 
     const verificationToken = await this.db.emailVerificationToken.findUnique({
       where: { tokenHash },
@@ -242,11 +252,24 @@ export class AuthService {
       }
     });
 
-    if (
-      !verificationToken ||
-      verificationToken.usedAt ||
-      verificationToken.expiresAt < new Date()
-    ) {
+    if (!verificationToken) {
+      console.warn("[auth] Email verification failed: invalid or expired token.");
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        "This email verification link is invalid or has already expired."
+      );
+    }
+
+    if (verificationToken.user.emailVerifiedAt || verificationToken.usedAt) {
+      console.info("[auth] Email verification skipped: account already verified.");
+      throw new ApiError(
+        StatusCodes.CONFLICT,
+        "This email is already verified. You can log in to your ComPort account."
+      );
+    }
+
+    if (verificationToken.expiresAt < new Date()) {
+      console.warn("[auth] Email verification failed: invalid or expired token.");
       throw new ApiError(
         StatusCodes.BAD_REQUEST,
         "This email verification link is invalid or has already expired."
@@ -273,6 +296,8 @@ export class AuthService {
         }
       })
     ]);
+
+    console.info("[auth] Email verification succeeded.");
 
     await this.activityLogService.logActivity({
       userId: verificationToken.userId,
@@ -794,25 +819,34 @@ export class AuthService {
     user: Prisma.UserGetPayload<{ select: typeof authUserSelect }>,
     previewResetUrl: string
   ) {
-    const subject = "Reset your ComLab password";
+    const subject = "Reset your ComPort password";
     const text = [
       `Hello ${user.firstName},`,
       "",
-      "We received a request to reset your ComLab Reservation System password.",
-      `Use this link to continue: ${previewResetUrl}`,
-      `This link expires in ${this.formatResetDurationLabel()}.`,
+      "We received a request to reset the password for your ComPort account.",
+      `Reset your password: ${previewResetUrl}`,
+      `This link will expire in ${this.formatResetDurationLabel()}.`,
       "",
-      "If you did not request this reset, you can safely ignore this email."
+      `If the button does not work, copy and paste this link into your browser: ${previewResetUrl}`,
+      "",
+      "If you did not request this password reset, you can safely ignore this email.",
+      "This is an automated message from ComPort. Please do not reply."
     ].join("\n");
-    const html = this.buildEmailTemplate({
-      title: "Reset your ComLab password",
-      greeting: `Hello ${this.escapeHtml(user.firstName)},`,
-      intro:
-        "We received a request to reset your ComLab Reservation System password.",
-      actionLabel: "Reset Password",
-      actionUrl: previewResetUrl,
-      expiryNotice: `This link expires in ${this.formatResetDurationLabel()}.`,
-      outro: "If you did not request this reset, you can safely ignore this email."
+    const html = renderComportEmail({
+      preheader: "Reset your ComPort password.",
+      eyebrow: "Password reset",
+      title: "Reset your password",
+      greeting: `Hello ${user.firstName},`,
+      intro: "We received a request to reset the password for your ComPort account.",
+      body: [
+        "Use the button below to choose a new password and regain access to your laboratory reservation portal."
+      ],
+      action: {
+        label: "Reset your password",
+        url: previewResetUrl
+      },
+      notice: `This link will expire in ${this.formatResetDurationLabel()}.`,
+      outro: "If you did not request this password reset, you can safely ignore this email."
     });
 
     await this.safeSendEmail({
@@ -831,23 +865,34 @@ export class AuthService {
     },
     verificationUrl: string
   ) {
-    const subject = "Verify your ComLab account";
+    const subject = "Verify your ComPort account";
     const text = [
       `Hello ${user.firstName},`,
       "",
-      "Welcome to the ComLab Reservation System.",
-      `Verify your email address with this link: ${verificationUrl}`,
-      `This link expires in ${this.formatVerificationDurationLabel()}.`,
+      "Welcome to ComPort.",
+      "Please verify your email address to activate your account.",
+      `Verify your email: ${verificationUrl}`,
+      `This link will expire in ${this.formatVerificationDurationLabel()}.`,
       "",
-      "If you did not create this account, you can safely ignore this email."
+      `If the button does not work, copy and paste this link into your browser: ${verificationUrl}`,
+      "",
+      "If you did not create this account, you can safely ignore this email.",
+      "This is an automated message from ComPort. Please do not reply."
     ].join("\n");
-    const html = this.buildEmailTemplate({
-      title: "Verify your ComLab account",
-      greeting: `Hello ${this.escapeHtml(user.firstName)},`,
-      intro: "Welcome to the ComLab Reservation System.",
-      actionLabel: "Verify Email",
-      actionUrl: verificationUrl,
-      expiryNotice: `This link expires in ${this.formatVerificationDurationLabel()}.`,
+    const html = renderComportEmail({
+      preheader: "Verify your ComPort account.",
+      eyebrow: "Account verification",
+      title: "Welcome to ComPort",
+      greeting: `Hello ${user.firstName},`,
+      intro: "Please verify your email address to activate your account.",
+      body: [
+        "Once verified, you can sign in and start using the ComPort laboratory reservation portal."
+      ],
+      action: {
+        label: "Verify your email",
+        url: verificationUrl
+      },
+      notice: `This link will expire in ${this.formatVerificationDurationLabel()}.`,
       outro: "If you did not create this account, you can safely ignore this email."
     });
 
@@ -894,48 +939,11 @@ export class AuthService {
     }
   }
 
-  private buildEmailTemplate(input: {
-    title: string;
-    greeting: string;
-    intro: string;
-    actionLabel: string;
-    actionUrl: string;
-    expiryNotice: string;
-    outro: string;
-  }) {
-    const actionUrl = this.escapeHtml(input.actionUrl);
-
-    return `
-      <div style="background:#f8fafc;padding:32px 16px;font-family:Arial,sans-serif;color:#0f172a;">
-        <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:20px;padding:32px;">
-          <p style="margin:0 0 8px;font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#475569;">ComLab Reservation System</p>
-          <h1 style="margin:0 0 16px;font-size:28px;line-height:1.2;color:#0f172a;">${this.escapeHtml(input.title)}</h1>
-          <p style="margin:0 0 12px;font-size:15px;line-height:1.7;color:#334155;">${input.greeting}</p>
-          <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#334155;">${this.escapeHtml(input.intro)}</p>
-          <a href="${actionUrl}" style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;padding:14px 22px;border-radius:14px;font-weight:700;">${this.escapeHtml(input.actionLabel)}</a>
-          <p style="margin:24px 0 8px;font-size:14px;line-height:1.7;color:#475569;">${this.escapeHtml(input.expiryNotice)}</p>
-          <p style="margin:0 0 8px;font-size:14px;line-height:1.7;color:#475569;">If the button does not work, copy and paste this URL into your browser:</p>
-          <p style="margin:0 0 24px;word-break:break-word;font-size:14px;line-height:1.7;color:#1d4ed8;">${actionUrl}</p>
-          <p style="margin:0;font-size:14px;line-height:1.7;color:#475569;">${this.escapeHtml(input.outro)}</p>
-        </div>
-      </div>
-    `.trim();
-  }
-
   private formatResetDurationLabel() {
     return `${env.RESET_TOKEN_TTL_MINUTES} minute${env.RESET_TOKEN_TTL_MINUTES === 1 ? "" : "s"}`;
   }
 
   private formatVerificationDurationLabel() {
     return `${env.EMAIL_VERIFICATION_TOKEN_TTL_HOURS} hour${env.EMAIL_VERIFICATION_TOKEN_TTL_HOURS === 1 ? "" : "s"}`;
-  }
-
-  private escapeHtml(value: string) {
-    return value
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
   }
 }

@@ -214,10 +214,18 @@ export type DashboardResponse = {
 };
 
 export type ReservationAssistantCategory =
+  | "current_user"
   | "available_schedules"
   | "available_laboratories"
   | "specific_laboratory"
   | "my_reservations"
+  | "notifications"
+  | "admin_stats"
+  | "approval_queue"
+  | "recent_activity"
+  | "system_info"
+  | "user_directory"
+  | "reservation_submitter"
   | "reservation_rules"
   | "laboratory_lookup"
   | "general_reservation_help"
@@ -259,22 +267,86 @@ export type ReservationAssistantPresentation =
         nextOpenWindows: Array<AssistantTimeWindow & { date: string }>;
       }>;
     }
-  | {
-      type: "reservation-results";
-      title: string;
-      reservations: Array<{
-        reservationCode: string;
+    | {
+        type: "reservation-results";
+        title: string;
+        reservations: Array<{
+          reservationCode: string;
         status: ReservationStatus;
         date: string;
         startTime: string;
         endTime: string;
         laboratoryName: string;
-        roomCode: string;
-        reservationType: ReservationType;
-        pcNumber: string | null;
-        purpose: string;
-      }>;
-    }
+          roomCode: string;
+          reservationType: ReservationType;
+          pcNumber: string | null;
+          purpose: string;
+          studentName?: string | null;
+          studentNumber?: string | null;
+          remarks?: string | null;
+          reviewedByName?: string | null;
+        }>;
+      }
+    | {
+        type: "user-profile";
+        title: string;
+        user: {
+          name: string;
+          role: UserRole;
+          email: string;
+          studentNumber: string | null;
+          yearLevel: number | null;
+          department: string | null;
+          verificationStatus: "verified" | "unverified";
+          createdAt: string;
+        };
+      }
+    | {
+        type: "notification-results";
+        title: string;
+        unreadCount: number;
+        notifications: Array<{
+          id: number;
+          subject: string;
+          message: string;
+          type: string;
+          createdAt: string;
+          readAt: string | null;
+        }>;
+      }
+    | {
+        type: "stats";
+        title: string;
+        scope: "admin" | "staff";
+        items: Array<{
+          label: string;
+          value: number;
+        }>;
+      }
+    | {
+        type: "activity-results";
+        title: string;
+        scope: "admin" | "staff";
+        activities: Array<{
+          id: number;
+          timestamp: string;
+          action: string;
+          description: string;
+          actorName: string | null;
+          actorRole: UserRole | null;
+          laboratoryRoomCode: string | null;
+        }>;
+      }
+    | {
+        type: "user-list";
+        title: string;
+        users: Array<{
+          id: number;
+          name: string;
+          role: UserRole;
+          assignedLaboratories: string[];
+        }>;
+      }
   | {
       type: "laboratory-details";
       title: string;
@@ -283,6 +355,8 @@ export type ReservationAssistantPresentation =
         roomCode: string;
         building: string;
         location: string | null;
+        capacity: number;
+        computerCount: number;
         description: string;
         status: LaboratoryStatus;
       };

@@ -1,32 +1,33 @@
 import dayjs from "dayjs";
-import type {
-  PrismaClient,
-  ReservationStatus
-} from "@prisma/client";
+import type { Prisma, PrismaClient, ReservationStatus, UserRole } from "@prisma/client";
 
 import { toDateOnly } from "../../utils/time.js";
+import { NotificationInboxService } from "../NotificationInboxService.js";
+import { StaffAccessService } from "../StaffAccessService.js";
 import type {
+  ActivitySummary,
   CalendarNote,
   CurrentUser,
+  CurrentUserContextResult,
   DateRange,
   GeneralHelpContext,
   LaboratoryAvailabilityResult,
   LaboratoryLookupResult,
   LaboratorySummary,
+  NotificationsContextResult,
+  RecentActivityContextResult,
   ReservationResultsContext,
   ReservationRule,
   ReservationSummary,
   ScheduleAvailability,
   ScheduleAvailabilityResult,
+  StaffDirectoryContextResult,
+  SystemInfoContextResult,
+  SystemStatsContextResult,
   TimeWindow
 } from "./types.js";
 
-const ACTIVE_AVAILABILITY_STATUSES: ReservationStatus[] = [
-  "PENDING",
-  "APPROVED",
-  "COMPLETED"
-];
-
+const ACTIVE_AVAILABILITY_STATUSES: ReservationStatus[] = ["PENDING", "APPROVED", "COMPLETED"];
 const MIN_OPEN_WINDOW_MINUTES = 30;
 const DEFAULT_SCHEDULE_PAGE_SIZE = 6;
 const DEFAULT_LAB_PAGE_SIZE = 5;
@@ -62,8 +63,45 @@ const RULES: ReservationRule[] = [
   }
 ];
 
+const reservationSummaryInclude = {
+  laboratory: {
+    select: {
+      name: true,
+      roomCode: true
+    }
+  },
+  pc: {
+    select: {
+      pcNumber: true
+    }
+  },
+  student: {
+    select: {
+      firstName: true,
+      lastName: true,
+      studentNumber: true
+    }
+  },
+  reviewedBy: {
+    select: {
+      firstName: true,
+      lastName: true
+    }
+  }
+} as const;
+
+type ReservationSummaryRecord = Prisma.ReservationGetPayload<{
+  include: typeof reservationSummaryInclude;
+}>;
+
 export class ScheduleLookupService {
-  constructor(private readonly db: PrismaClient) {}
+  private readonly notificationInboxService: NotificationInboxService;
+  private readonly staffAccessService: StaffAccessService;
+
+  constructor(private readonly db: PrismaClient) {
+    this.notificationInboxService = new NotificationInboxService(db);
+    this.staffAccessService = new StaffAccessService(db);
+  }
 
   async listLaboratories(): Promise<LaboratorySummary[]> {
     return this.db.laboratory.findMany({
@@ -73,6 +111,8 @@ export class ScheduleLookupService {
         roomCode: true,
         building: true,
         location: true,
+        capacity: true,
+        computerCount: true,
         description: true,
         status: true
       },
@@ -93,8 +133,49 @@ export class ScheduleLookupService {
     return laboratories.map((laboratory) => `${laboratory.name} (${laboratory.roomCode})`);
   }
 
+  async getCurrentUserContext(currentUser: CurrentUser): Promise<CurrentUserContextResult | null> {
+    const user = await this.db.user.findUnique({
+      where: { id: currentUser.id },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        role: true,
+        studentNumber: true,
+        department: true,
+        yearLevel: true,
+        emailVerifiedAt: true,
+        createdAt: true
+      }
+    });
+
+    if (!user) {
+      return null;
+    }
+
+    return {
+      id: user.id,
+      name: this.formatName(user.firstName, user.lastName),
+      email: user.email,
+      role: user.role,
+      studentNumber: user.studentNumber ?? null,
+      department: user.department ?? null,
+      yearLevel: user.yearLevel ?? null,
+      verificationStatus: user.emailVerifiedAt ? "verified" : "unverified",
+      createdAt: user.createdAt.toISOString()
+    };
+  }
+
   async getRules() {
     return RULES;
+  }
+
+  async getSystemInfo(): Promise<SystemInfoContextResult> {
+    return {
+      summary:
+        "ComPort is the ComLab reservation system for laboratory schedules, reservation requests, approvals, notifications, and role-based laboratory management."
+    };
   }
 
   async getGeneralHelpContext(range: DateRange): Promise<GeneralHelpContext> {
@@ -125,47 +206,301 @@ export class ScheduleLookupService {
 
   async getUserReservations(
     currentUser: CurrentUser,
-    range: DateRange
+    range: DateRange,
+    options?: {
+      latestOnly?: boolean;
+      upcomingOnly?: boolean;
+      statuses?: ReservationStatus[];
+      take?: number;
+      orderBy?: "asc" | "desc";
+    }
   ): Promise<ReservationResultsContext> {
     const bounds = this.toQueryBounds(range);
+    const now = dayjs().startOf("day").toDate();
     const reservations = await this.db.reservation.findMany({
       where: {
         studentId: currentUser.id,
-        reservationDate: {
-          gte: bounds.start,
-          lte: bounds.end
-        }
+        reservationDate: options?.latestOnly
+          ? undefined
+          : options?.upcomingOnly
+            ? {
+                gte: now,
+                lte: bounds.end
+              }
+            : {
+                gte: bounds.start,
+                lte: bounds.end
+              },
+        ...(options?.statuses?.length
+          ? {
+              status: {
+                in: options.statuses
+              }
+            }
+          : {})
       },
-      include: {
-        laboratory: {
-          select: {
-            name: true,
-            roomCode: true
-          }
-        },
-        pc: {
-          select: {
-            pcNumber: true
-          }
-        }
-      },
-      orderBy: [{ reservationDate: "asc" }, { startTime: "asc" }],
-      take: 12
+      include: reservationSummaryInclude,
+      orderBy:
+        options?.orderBy === "desc"
+          ? [{ reservationDate: "desc" }, { startTime: "desc" }]
+          : [{ reservationDate: "asc" }, { startTime: "asc" }],
+      take: options?.latestOnly ? 1 : options?.take ?? 12
     });
 
     return {
       rangeLabel: range.label,
-      reservations: reservations.map((reservation): ReservationSummary => ({
-        reservationCode: reservation.reservationCode,
-        status: reservation.status,
-        date: this.toIsoDate(reservation.reservationDate),
-        startTime: reservation.startTime,
-        endTime: reservation.endTime,
-        laboratoryName: reservation.laboratory.name,
-        roomCode: reservation.laboratory.roomCode,
-        reservationType: reservation.reservationType,
-        pcNumber: reservation.pc?.pcNumber ?? null,
-        purpose: reservation.purpose
+      reservations: reservations.map((reservation) => this.mapReservationSummary(reservation))
+    };
+  }
+
+  async getNotificationsContext(
+    currentUser: CurrentUser,
+    options?: { unreadOnly?: boolean; limit?: number }
+  ): Promise<NotificationsContextResult> {
+    const result = await this.notificationInboxService.listNotifications(currentUser.id, options);
+
+    return {
+      unreadCount: result.unreadCount,
+      notifications: result.items.map((notification) => ({
+        id: notification.id,
+        subject: notification.subject,
+        message: notification.message,
+        type: notification.type,
+        createdAt: notification.createdAt.toISOString(),
+        readAt: notification.readAt?.toISOString() ?? null
+      }))
+    };
+  }
+
+  async getSystemStatsForRole(currentUser: CurrentUser): Promise<SystemStatsContextResult | null> {
+    if (currentUser.role === "STUDENT") {
+      return null;
+    }
+
+    const assignedLabIds =
+      currentUser.role === "LABORATORY_STAFF"
+        ? await this.staffAccessService.getAssignedLabIds(currentUser.id)
+        : null;
+    const where =
+      currentUser.role === "ADMIN"
+        ? undefined
+        : {
+            laboratoryId: {
+              in: assignedLabIds ?? []
+            }
+          };
+
+    const [pendingCount, approvedCount, rejectedCount, completedCount, laboratoriesCount, activeUsersCount, recentReservations] =
+      await Promise.all([
+        this.db.reservation.count({
+          where: {
+            ...where,
+            status: "PENDING"
+          }
+        }),
+        this.db.reservation.count({
+          where: {
+            ...where,
+            status: "APPROVED"
+          }
+        }),
+        this.db.reservation.count({
+          where: {
+            ...where,
+            status: "REJECTED"
+          }
+        }),
+        this.db.reservation.count({
+          where: {
+            ...where,
+            status: "COMPLETED"
+          }
+        }),
+        this.db.laboratory.count({
+          where:
+            currentUser.role === "ADMIN"
+              ? undefined
+              : {
+                  id: {
+                    in: assignedLabIds ?? []
+                  }
+                }
+        }),
+        currentUser.role === "ADMIN"
+          ? this.db.user.count({
+              where: {
+                status: "ACTIVE"
+              }
+            })
+          : Promise.resolve(0),
+        this.db.reservation.findMany({
+          where,
+          include: reservationSummaryInclude,
+          orderBy: [{ createdAt: "desc" }],
+          take: 5
+        })
+      ]);
+
+    return {
+      scope: currentUser.role === "ADMIN" ? "admin" : "staff",
+      stats: [
+        { label: "Pending reservations", value: pendingCount },
+        { label: "Approved reservations", value: approvedCount },
+        { label: "Rejected reservations", value: rejectedCount },
+        { label: "Completed reservations", value: completedCount },
+        { label: "Managed laboratories", value: laboratoriesCount },
+        ...(currentUser.role === "ADMIN"
+          ? [{ label: "Active users", value: activeUsersCount }]
+          : [])
+      ],
+      recentReservations: recentReservations.map((reservation) => this.mapReservationSummary(reservation))
+    };
+  }
+
+  async getApprovalQueue(
+    currentUser: CurrentUser,
+    options?: { limit?: number }
+  ): Promise<ReservationResultsContext | null> {
+    if (currentUser.role === "STUDENT") {
+      return null;
+    }
+
+    const visibleWhere = await this.buildManagementReservationWhere(currentUser);
+    const reservations = await this.db.reservation.findMany({
+      where: {
+        ...visibleWhere,
+        status: "PENDING"
+      },
+      include: reservationSummaryInclude,
+      orderBy: [{ reservationDate: "asc" }, { startTime: "asc" }],
+      take: options?.limit ?? 8
+    });
+
+    return {
+      rangeLabel: "pending approval",
+      reservations: reservations.map((reservation) => this.mapReservationSummary(reservation))
+    };
+  }
+
+  async getReservationSubmitter(
+    currentUser: CurrentUser,
+    options?: { latest?: boolean; reservationCode?: string }
+  ): Promise<ReservationSummary | null> {
+    if (currentUser.role === "STUDENT") {
+      return null;
+    }
+
+    const visibleWhere = await this.buildManagementReservationWhere(currentUser);
+    const reservation = await this.db.reservation.findFirst({
+      where: {
+        ...visibleWhere,
+        ...(options?.reservationCode
+          ? {
+              reservationCode: options.reservationCode
+            }
+          : {})
+      },
+      include: reservationSummaryInclude,
+      orderBy: options?.reservationCode ? undefined : [{ createdAt: "desc" }]
+    });
+
+    return reservation ? this.mapReservationSummary(reservation) : null;
+  }
+
+  async getRecentActivity(
+    currentUser: CurrentUser,
+    options?: { limit?: number }
+  ): Promise<RecentActivityContextResult | null> {
+    if (currentUser.role === "STUDENT") {
+      return null;
+    }
+
+    const assignedLabIds =
+      currentUser.role === "LABORATORY_STAFF"
+        ? await this.staffAccessService.getAssignedLabIds(currentUser.id)
+        : null;
+    const activities = await this.db.activityLog.findMany({
+      where:
+        currentUser.role === "ADMIN"
+          ? undefined
+          : {
+              labId: {
+                in: assignedLabIds ?? []
+              }
+            },
+      include: {
+        user: {
+          select: {
+            firstName: true,
+            lastName: true,
+            role: true
+          }
+        },
+        laboratory: {
+          select: {
+            roomCode: true
+          }
+        }
+      },
+      orderBy: { timestamp: "desc" },
+      take: options?.limit ?? 8
+    });
+
+    return {
+      scope: currentUser.role === "ADMIN" ? "admin" : "staff",
+      activities: activities.map(
+        (activity): ActivitySummary => ({
+          id: activity.id,
+          timestamp: activity.timestamp.toISOString(),
+          action: activity.action,
+          description: activity.description,
+          actorName: activity.user
+            ? this.formatName(activity.user.firstName, activity.user.lastName)
+            : null,
+          actorRole: activity.user?.role ?? null,
+          laboratoryRoomCode: activity.laboratory?.roomCode ?? null
+        })
+      )
+    };
+  }
+
+  async getStaffDirectory(
+    currentUser: CurrentUser,
+    options?: { limit?: number }
+  ): Promise<StaffDirectoryContextResult | null> {
+    if (currentUser.role === "STUDENT") {
+      return null;
+    }
+
+    const users = await this.db.user.findMany({
+      where: {
+        status: "ACTIVE",
+        role: {
+          in: ["ADMIN", "LABORATORY_STAFF"]
+        }
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        assignedLaboratories: {
+          select: {
+            roomCode: true
+          },
+          orderBy: [{ roomCode: "asc" }]
+        }
+      },
+      orderBy: [{ role: "asc" }, { lastName: "asc" }, { firstName: "asc" }],
+      take: options?.limit ?? 12
+    });
+
+    return {
+      users: users.map((user) => ({
+        id: user.id,
+        name: this.formatName(user.firstName, user.lastName),
+        role: user.role,
+        assignedLaboratories: user.assignedLaboratories.map((laboratory) => laboratory.roomCode)
       }))
     };
   }
@@ -392,6 +727,47 @@ export class ScheduleLookupService {
     };
   }
 
+  private async buildManagementReservationWhere(currentUser: CurrentUser) {
+    if (currentUser.role === "ADMIN") {
+      return {};
+    }
+
+    const assignedLabIds = await this.staffAccessService.getAssignedLabIds(currentUser.id);
+
+    return {
+      laboratoryId: {
+        in: assignedLabIds
+      }
+    };
+  }
+
+  private mapReservationSummary(reservation: ReservationSummaryRecord): ReservationSummary {
+    return {
+      reservationCode: reservation.reservationCode,
+      status: reservation.status,
+      date: this.toIsoDate(reservation.reservationDate),
+      startTime: reservation.startTime,
+      endTime: reservation.endTime,
+      laboratoryName: reservation.laboratory.name,
+      roomCode: reservation.laboratory.roomCode,
+      reservationType: reservation.reservationType,
+      pcNumber: reservation.pc?.pcNumber ?? null,
+      purpose: reservation.purpose,
+      studentName: reservation.student
+        ? this.formatName(reservation.student.firstName, reservation.student.lastName)
+        : null,
+      studentNumber: reservation.student?.studentNumber ?? null,
+      remarks: reservation.remarks ?? null,
+      reviewedByName: reservation.reviewedBy
+        ? this.formatName(reservation.reviewedBy.firstName, reservation.reviewedBy.lastName)
+        : null
+    };
+  }
+
+  private formatName(firstName: string, lastName: string) {
+    return `${firstName} ${lastName}`.trim();
+  }
+
   private buildFreeWindows(schedule: TimeWindow, reservations: TimeWindow[]) {
     const occupiedWindows = this.mergeTimeWindows(
       reservations
@@ -510,5 +886,9 @@ export class ScheduleLookupService {
       start: dayjs(range.start).startOf("day").toDate(),
       end: dayjs(range.end).endOf("day").toDate()
     };
+  }
+
+  formatRoleLabel(role: UserRole) {
+    return role === "LABORATORY_STAFF" ? "Laboratory Staff" : role === "ADMIN" ? "Admin" : "Student";
   }
 }

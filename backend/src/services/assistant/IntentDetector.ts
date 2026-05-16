@@ -41,14 +41,27 @@ const RESERVATION_DOMAIN_KEYWORDS = [
   "linggo",
   "buwan",
   "slot",
-  "vacant schedule",
   "may schedule",
   "reservation ko",
   "ano reservation ko",
   "available ba",
-  "open slot",
   "multimedia",
   "networking"
+];
+
+const CURRENT_USER_KEYWORDS = [
+  "who am i",
+  "sino ako",
+  "what is my role",
+  "ano role ko",
+  "anong role ko",
+  "what is my email",
+  "ano email ko",
+  "anong email ko",
+  "what is my student number",
+  "student number ko",
+  "who is my account",
+  "tell me about my account"
 ];
 
 const MY_RESERVATIONS_KEYWORDS = [
@@ -58,10 +71,14 @@ const MY_RESERVATIONS_KEYWORDS = [
   "ano reservation ko",
   "show my reservation",
   "show my reservations",
-  "pending reservation",
-  "approved reservation",
-  "rejected reservation",
-  "reservation status"
+  "my upcoming reservation",
+  "my upcoming reservations",
+  "upcoming reservations",
+  "latest reservation status",
+  "reservation status ko",
+  "ano reservation ko ngayon",
+  "what are my reservations today",
+  "what is my latest reservation"
 ];
 
 const RULE_KEYWORDS = [
@@ -106,8 +123,79 @@ const LAB_AVAILABILITY_KEYWORDS = [
 
 const LAB_LOOKUP_KEYWORDS = ["where is", "location", "details", "about", "info", "what is"];
 
-const SHOW_MORE_PATTERNS = ["show more", "more please", "pakita pa", "dagdag pa", "more"];
+const NOTIFICATION_KEYWORDS = [
+  "what notifications do i have",
+  "notifications",
+  "notification",
+  "notification ko",
+  "notifications ko",
+  "any updates",
+  "updates about my reservations",
+  "updates about my reservation",
+  "reservation updates",
+  "ano notification ko"
+];
 
+const ADMIN_STATS_KEYWORDS = [
+  "how many pending reservations",
+  "ilang pending reservation",
+  "pending reservations in the whole system",
+  "whole system pending",
+  "system pending",
+  "pending reservations exist",
+  "active users count",
+  "labs count",
+  "approved reservations count",
+  "rejected reservations count"
+];
+
+const APPROVAL_QUEUE_KEYWORDS = [
+  "which reservations need approval",
+  "show reservations needing approval",
+  "reservations needing approval",
+  "need approval",
+  "needs approval",
+  "for approval",
+  "pending approval",
+  "show pending reservations"
+];
+
+const RESERVATION_SUBMITTER_KEYWORDS = [
+  "who made this reservation",
+  "who made the latest reservation",
+  "who submitted the latest reservation",
+  "who submitted this reservation",
+  "who submitted reservation",
+  "sino gumawa ng reservation",
+  "sino nagsubmit ng reservation"
+];
+
+const RECENT_ACTIVITY_KEYWORDS = [
+  "recent actions",
+  "recent activity",
+  "activity log",
+  "what recent actions happened",
+  "anong recent actions",
+  "anong recent activity"
+];
+
+const SYSTEM_INFO_KEYWORDS = [
+  "what is comport",
+  "what is comport",
+  "what is comlab",
+  "ano ang comport",
+  "ano ang comlab"
+];
+
+const USER_DIRECTORY_KEYWORDS = [
+  "who are the staff",
+  "list staff",
+  "staff list",
+  "who are the admins",
+  "who are the laboratory staff"
+];
+
+const SHOW_MORE_PATTERNS = ["show more", "more please", "pakita pa", "dagdag pa", "more"];
 const SAME_LAB_PATTERNS = ["same lab", "same laboratory", "same room", "same cl"];
 
 const STOPWORDS = new Set([
@@ -159,7 +247,6 @@ export class IntentDetector {
     );
     const isShowMore = SHOW_MORE_PATTERNS.some((pattern) => normalizedMessage === pattern);
     const range = this.dateRangeParser.parse(message, context);
-    const hasExplicitLab = matchedLaboratory !== null && matchedLaboratory !== previousQuery?.laboratory;
     const onlyTemporalOrLabFollowUp =
       Boolean(previousQuery) &&
       (isShowMore ||
@@ -167,29 +254,105 @@ export class IntentDetector {
         /^(what about|how about|sa |for |about )/.test(normalizedMessage));
 
     if (isShowMore && previousQuery) {
-      return {
-        category: previousQuery.category,
+      return this.buildIntent(previousQuery.category, {
         range: previousQuery.range,
         laboratory: previousQuery.laboratory,
         language,
-        isFollowUp: true,
-        isShowMore: true,
         normalizedMessage,
-        previousQuery
-      };
+        previousQuery,
+        isFollowUp: true,
+        isShowMore: true
+      });
     }
 
     if (this.isGreeting(normalizedMessage)) {
-      return {
-        category: "general_reservation_help",
+      return this.buildIntent("general_reservation_help", {
         range,
         laboratory: null,
         language,
-        isFollowUp: false,
-        isShowMore: false,
         normalizedMessage,
         previousQuery
-      };
+      });
+    }
+
+    if (hasAnyKeyword(normalizedMessage, CURRENT_USER_KEYWORDS)) {
+      return this.buildIntent("current_user", {
+        range,
+        laboratory: null,
+        language,
+        normalizedMessage,
+        previousQuery
+      });
+    }
+
+    if (hasAnyKeyword(normalizedMessage, NOTIFICATION_KEYWORDS)) {
+      return this.buildIntent("notifications", {
+        range,
+        laboratory: null,
+        language,
+        normalizedMessage,
+        previousQuery
+      });
+    }
+
+    if (hasAnyKeyword(normalizedMessage, RECENT_ACTIVITY_KEYWORDS)) {
+      return this.buildIntent("recent_activity", {
+        range,
+        laboratory: null,
+        language,
+        normalizedMessage,
+        previousQuery
+      });
+    }
+
+    if (hasAnyKeyword(normalizedMessage, USER_DIRECTORY_KEYWORDS)) {
+      return this.buildIntent("user_directory", {
+        range,
+        laboratory: null,
+        language,
+        normalizedMessage,
+        previousQuery
+      });
+    }
+
+    if (hasAnyKeyword(normalizedMessage, SYSTEM_INFO_KEYWORDS)) {
+      return this.buildIntent("system_info", {
+        range,
+        laboratory: null,
+        language,
+        normalizedMessage,
+        previousQuery
+      });
+    }
+
+    if (hasAnyKeyword(normalizedMessage, APPROVAL_QUEUE_KEYWORDS)) {
+      return this.buildIntent("approval_queue", {
+        range,
+        laboratory: null,
+        language,
+        normalizedMessage,
+        previousQuery
+      });
+    }
+
+    if (hasAnyKeyword(normalizedMessage, RESERVATION_SUBMITTER_KEYWORDS)) {
+      return this.buildIntent("reservation_submitter", {
+        range,
+        laboratory: null,
+        language,
+        normalizedMessage,
+        previousQuery
+      });
+    }
+
+    if (this.isAdminStatsQuestion(normalizedMessage)) {
+      return this.buildIntent("admin_stats", {
+        range,
+        laboratory: null,
+        language,
+        normalizedMessage,
+        previousQuery
+      });
     }
 
     if (
@@ -204,94 +367,84 @@ export class IntentDetector {
             ? "specific_laboratory"
             : previousQuery.category;
 
-      return {
-        category: followUpCategory,
+      return this.buildIntent(followUpCategory, {
         range: range.source === "default" ? previousQuery.range : range,
         laboratory: matchedLaboratory ?? previousQuery.laboratory,
         language,
-        isFollowUp: true,
-        isShowMore: false,
         normalizedMessage,
-        previousQuery
-      };
+        previousQuery,
+        isFollowUp: true
+      });
     }
 
-    if (hasAnyKeyword(normalizedMessage, MY_RESERVATIONS_KEYWORDS)) {
-      return {
-        category: "my_reservations",
+    if (
+      hasAnyKeyword(normalizedMessage, MY_RESERVATIONS_KEYWORDS) ||
+      (this.referencesOwnData(normalizedMessage) &&
+        normalizedMessage.includes("reservation") &&
+        !this.isAdminStatsQuestion(normalizedMessage))
+    ) {
+      return this.buildIntent("my_reservations", {
         range,
         laboratory: null,
         language,
-        isFollowUp: Boolean(previousQuery),
-        isShowMore: false,
         normalizedMessage,
-        previousQuery
-      };
+        previousQuery,
+        isFollowUp: Boolean(previousQuery)
+      });
     }
 
     if (hasAnyKeyword(normalizedMessage, RULE_KEYWORDS)) {
-      return {
-        category: "reservation_rules",
+      return this.buildIntent("reservation_rules", {
         range,
         laboratory: null,
         language,
-        isFollowUp: false,
-        isShowMore: false,
         normalizedMessage,
         previousQuery
-      };
+      });
     }
 
     if (matchedLaboratory && hasAnyKeyword(normalizedMessage, LAB_LOOKUP_KEYWORDS)) {
-      return {
-        category: "laboratory_lookup",
+      return this.buildIntent("laboratory_lookup", {
         range,
         laboratory: matchedLaboratory,
         language,
-        isFollowUp: Boolean(previousQuery),
-        isShowMore: false,
         normalizedMessage,
-        previousQuery
-      };
+        previousQuery,
+        isFollowUp: Boolean(previousQuery)
+      });
     }
 
     if (matchedLaboratory) {
-      return {
-        category: "specific_laboratory",
+      return this.buildIntent("specific_laboratory", {
         range: range.source === "default" && previousQuery ? previousQuery.range : range,
         laboratory: matchedLaboratory,
         language,
-        isFollowUp: Boolean(previousQuery),
-        isShowMore: false,
         normalizedMessage,
-        previousQuery
-      };
+        previousQuery,
+        isFollowUp: Boolean(previousQuery)
+      });
     }
 
     if (hasAnyKeyword(normalizedMessage, SCHEDULE_KEYWORDS)) {
-      return {
-        category: "available_schedules",
+      return this.buildIntent("available_schedules", {
         range,
         laboratory: previousQuery?.laboratory ?? null,
         language,
-        isFollowUp: Boolean(previousQuery),
-        isShowMore: false,
         normalizedMessage,
-        previousQuery
-      };
+        previousQuery,
+        isFollowUp: Boolean(previousQuery)
+      });
     }
 
     if (hasAnyKeyword(normalizedMessage, LAB_AVAILABILITY_KEYWORDS)) {
-      return {
-        category: "available_laboratories",
+      return this.buildIntent("available_laboratories", {
         range,
         laboratory: null,
         language,
-        isFollowUp: Boolean(previousQuery),
-        isShowMore: false,
         normalizedMessage,
-        previousQuery
-      };
+        previousQuery,
+        isFollowUp: Boolean(previousQuery)
+      });
     }
 
     if (
@@ -299,16 +452,14 @@ export class IntentDetector {
       onlyTemporalOrLabFollowUp &&
       isScheduleCategory(previousQuery.category)
     ) {
-      return {
-        category: previousQuery.category,
+      return this.buildIntent(previousQuery.category, {
         range: range.source === "default" ? previousQuery.range : range,
         laboratory: previousQuery.laboratory,
         language,
-        isFollowUp: true,
-        isShowMore: false,
         normalizedMessage,
-        previousQuery
-      };
+        previousQuery,
+        isFollowUp: true
+      });
     }
 
     if (
@@ -316,32 +467,62 @@ export class IntentDetector {
       hasAnyKeyword(normalizedMessage, SAME_LAB_PATTERNS) ||
       hasAnyKeyword(normalizedMessage, SHOW_MORE_PATTERNS)
     ) {
-      return {
-        category: "general_reservation_help",
+      return this.buildIntent("general_reservation_help", {
         range,
         laboratory: previousQuery?.laboratory ?? null,
         language,
-        isFollowUp: Boolean(previousQuery),
-        isShowMore: false,
         normalizedMessage,
-        previousQuery
-      };
+        previousQuery,
+        isFollowUp: Boolean(previousQuery)
+      });
     }
 
-    return {
-      category: "out_of_scope",
+    return this.buildIntent("out_of_scope", {
       range,
       laboratory: null,
       language,
-      isFollowUp: false,
-      isShowMore: false,
       normalizedMessage,
       previousQuery
+    });
+  }
+
+  private buildIntent(
+    category: IntentAnalysis["category"],
+    input: {
+      range: IntentAnalysis["range"];
+      laboratory: IntentAnalysis["laboratory"];
+      language: IntentAnalysis["language"];
+      normalizedMessage: IntentAnalysis["normalizedMessage"];
+      previousQuery: IntentAnalysis["previousQuery"];
+      isFollowUp?: boolean;
+      isShowMore?: boolean;
+    }
+  ): IntentAnalysis {
+    return {
+      category,
+      range: input.range,
+      laboratory: input.laboratory,
+      language: input.language,
+      isFollowUp: input.isFollowUp ?? false,
+      isShowMore: input.isShowMore ?? false,
+      normalizedMessage: input.normalizedMessage,
+      previousQuery: input.previousQuery
     };
   }
 
   private isGreeting(message: string) {
     return GREETING_PATTERNS.includes(message);
+  }
+
+  private referencesOwnData(message: string) {
+    return /\b(my|mine|ako|ko)\b/.test(message);
+  }
+
+  private isAdminStatsQuestion(message: string) {
+    return (
+      hasAnyKeyword(message, ADMIN_STATS_KEYWORDS) &&
+      (!this.referencesOwnData(message) || message.includes("whole system"))
+    );
   }
 
   private resolveLaboratory(

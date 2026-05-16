@@ -8,10 +8,18 @@ import type {
 export type AssistantLanguage = "english" | "tagalog" | "taglish";
 
 export type AssistantCategory =
+  | "current_user"
   | "available_schedules"
   | "available_laboratories"
   | "specific_laboratory"
   | "my_reservations"
+  | "notifications"
+  | "admin_stats"
+  | "approval_queue"
+  | "recent_activity"
+  | "system_info"
+  | "user_directory"
+  | "reservation_submitter"
   | "reservation_rules"
   | "laboratory_lookup"
   | "general_reservation_help"
@@ -44,6 +52,8 @@ export type LaboratorySummary = {
   roomCode: string;
   building: string;
   location: string | null;
+  capacity: number;
+  computerCount: number;
   description: string;
   status: LaboratoryStatus;
 };
@@ -77,11 +87,82 @@ export type ReservationSummary = {
   reservationType: ReservationType;
   pcNumber: string | null;
   purpose: string;
+  studentName?: string | null;
+  studentNumber?: string | null;
+  remarks?: string | null;
+  reviewedByName?: string | null;
 };
 
 export type ReservationRule = {
   title: string;
   detail: string;
+};
+
+export type CurrentUserContextResult = {
+  id: number;
+  name: string;
+  email: string;
+  role: UserRole;
+  studentNumber: string | null;
+  yearLevel: number | null;
+  department: string | null;
+  verificationStatus: "verified" | "unverified";
+  createdAt: string;
+};
+
+export type NotificationSummary = {
+  id: number;
+  subject: string;
+  message: string;
+  type: string;
+  createdAt: string;
+  readAt: string | null;
+};
+
+export type NotificationsContextResult = {
+  unreadCount: number;
+  notifications: NotificationSummary[];
+};
+
+export type SystemStatItem = {
+  label: string;
+  value: number;
+};
+
+export type SystemStatsContextResult = {
+  scope: "admin" | "staff";
+  stats: SystemStatItem[];
+  recentReservations: ReservationSummary[];
+};
+
+export type ActivitySummary = {
+  id: number;
+  timestamp: string;
+  action: string;
+  description: string;
+  actorName: string | null;
+  actorRole: UserRole | null;
+  laboratoryRoomCode: string | null;
+};
+
+export type RecentActivityContextResult = {
+  scope: "admin" | "staff";
+  activities: ActivitySummary[];
+};
+
+export type StaffDirectoryEntry = {
+  id: number;
+  name: string;
+  role: UserRole;
+  assignedLaboratories: string[];
+};
+
+export type StaffDirectoryContextResult = {
+  users: StaffDirectoryEntry[];
+};
+
+export type SystemInfoContextResult = {
+  summary: string;
 };
 
 export type AssistantConversationMessage = {
@@ -147,6 +228,43 @@ export type AssistantPresentation =
       reservations: ReservationSummary[];
     }
   | {
+      type: "user-profile";
+      title: string;
+      user: {
+        name: string;
+        role: UserRole;
+        email: string;
+        studentNumber: string | null;
+        yearLevel: number | null;
+        department: string | null;
+        verificationStatus: "verified" | "unverified";
+        createdAt: string;
+      };
+    }
+  | {
+      type: "notification-results";
+      title: string;
+      unreadCount: number;
+      notifications: NotificationSummary[];
+    }
+  | {
+      type: "stats";
+      title: string;
+      scope: "admin" | "staff";
+      items: SystemStatItem[];
+    }
+  | {
+      type: "activity-results";
+      title: string;
+      scope: "admin" | "staff";
+      activities: ActivitySummary[];
+    }
+  | {
+      type: "user-list";
+      title: string;
+      users: StaffDirectoryEntry[];
+    }
+  | {
       type: "laboratory-details";
       title: string;
       laboratory: {
@@ -154,6 +272,8 @@ export type AssistantPresentation =
         roomCode: string;
         building: string;
         location: string | null;
+        capacity: number;
+        computerCount: number;
         description: string;
         status: LaboratoryStatus;
       };

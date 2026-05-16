@@ -12,7 +12,8 @@ import { PageHeader } from "../components/ui/PageHeader";
 import { Textarea } from "../components/ui/Textarea";
 import { useAuth } from "../store/AuthContext";
 import type { ReservationAssistantCategory, ReservationAssistantPresentation } from "../types/api";
-import { formatDate, formatTimeRange } from "../utils/format";
+import { roleLabels } from "../utils/constants";
+import { formatDate, formatDateTime, formatTimeRange } from "../utils/format";
 
 type ConversationMessage = {
   id: string;
@@ -29,10 +30,10 @@ type ApiErrorBody = {
 };
 
 const promptSuggestions = [
-  "May schedule ba next month?",
-  "available ba ang CL-302 bukas?",
+  "Who am I?",
+  "What are my reservations today?",
+  "Available ba ang CL-302 bukas?",
   "What schedules are available this week?",
-  "Ano reservation ko ngayon?",
   "What are the reservation rules?"
 ];
 const ASSISTANT_SESSION_STORAGE_KEY = "comportAssistantConversation";
@@ -205,7 +206,7 @@ export const ReservationAssistantPage = () => {
     <div className="space-y-6 overflow-x-hidden">
       <PageHeader
         title="ComPort Assistant"
-        description="Ask for reservation help in plain language. Answers stay grounded in live schedules, room availability, your reservations, and the rules already enforced by the system."
+        description="Ask for reservation help in plain language. Answers stay grounded in your account, reservations, notifications, schedules, room availability, and approved system rules."
       />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(18rem,0.9fr)]">
@@ -224,7 +225,7 @@ export const ReservationAssistantPage = () => {
                   </p>
                   <p className="mt-1 text-lg font-semibold text-slate-900">ComPort Assistant</p>
                   <p className="text-xs text-slate-500">
-                    Answers stay grounded in current reservation system data.
+                    Answers are based on ComPort system records.
                   </p>
                 </div>
               </div>
@@ -257,9 +258,9 @@ export const ReservationAssistantPage = () => {
                   Start with a reservation question
                 </h2>
                 <p className="mt-3 max-w-xl text-sm leading-6 text-slate-500">
-                  Ask about schedules, available laboratories, your upcoming reservations, or the
-                  rules already enforced by the system. If data is missing, the assistant will say
-                  so instead of guessing.
+                  Ask about your account, reservations, notifications, schedules, available
+                  laboratories, or reservation rules. If the records do not confirm something, the
+                  assistant will say so instead of guessing.
                 </p>
                 <div className="mt-6 flex max-w-2xl flex-wrap justify-center gap-2">
                   {promptSuggestions.map((prompt) => (
@@ -334,7 +335,7 @@ export const ReservationAssistantPage = () => {
                       <span className="h-2 w-2 animate-pulse rounded-full bg-brand-400 [animation-delay:-0.1s]" />
                       <span className="h-2 w-2 animate-pulse rounded-full bg-brand-500" />
                     </span>
-                    <span>Thinking through your reservation question...</span>
+                    <span>Checking ComPort records...</span>
                   </div>
                 </div>
               </div>
@@ -381,7 +382,7 @@ export const ReservationAssistantPage = () => {
                 id="assistant-composer"
                 value={draft}
                 className="min-h-[7.5rem] resize-y"
-                placeholder="Ask about schedules, laboratories, reservation rules, or your upcoming reservations."
+                placeholder="Ask about your account, reservations, notifications, schedules, or laboratory availability."
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
@@ -393,7 +394,7 @@ export const ReservationAssistantPage = () => {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-slate-500">
                   Press Enter to send. Use Shift+Enter for a new line. The assistant uses current
-                  reservation system records and asks follow-up questions when details are missing.
+                  reservation system records and approved system context when details are available.
                 </p>
                 <Button
                   type="button"
@@ -426,7 +427,7 @@ export const ReservationAssistantPage = () => {
             <div className="mt-5 space-y-3 text-sm text-slate-600">
               <div className="flex items-start gap-3 rounded-2xl bg-slate-50 px-4 py-3">
                 <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
-                <p>Published schedule windows by day or week</p>
+                <p>Your account details, reservations, and notification updates</p>
               </div>
               <div className="flex items-start gap-3 rounded-2xl bg-slate-50 px-4 py-3">
                 <Bot className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
@@ -434,11 +435,11 @@ export const ReservationAssistantPage = () => {
               </div>
               <div className="flex items-start gap-3 rounded-2xl bg-slate-50 px-4 py-3">
                 <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
-                <p>Your own upcoming reservations and recent request outcomes</p>
+                <p>Published schedule windows by day, week, and specific laboratory</p>
               </div>
               <div className="flex items-start gap-3 rounded-2xl bg-slate-50 px-4 py-3">
                 <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
-                <p>Open time slots by day, week, and specific laboratory</p>
+                <p>Role-based approval queues, counts, and recent actions for staff/admin</p>
               </div>
             </div>
           </Card>
@@ -459,7 +460,8 @@ export const ReservationAssistantPage = () => {
               <span className="font-semibold text-slate-900"> CL-301</span>.
             </p>
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-6 text-slate-500">
-              Fallback replies are labeled <span className="font-semibold text-slate-700">Using system data</span>. That means the answer came directly from current records without an external AI provider.
+              Answers are based on ComPort system records and approved system context. If the data
+              is not available, the assistant will say it cannot confirm it yet.
             </div>
           </Card>
         </div>
@@ -581,11 +583,151 @@ const AssistantPresentationCard = ({
               {formatDate(reservation.date)} - {formatTimeRange(reservation.startTime, reservation.endTime)}
             </p>
             <p className="mt-1 text-xs text-slate-500">{reservation.purpose}</p>
+            {reservation.studentName ? (
+              <p className="mt-2 text-xs text-slate-500">
+                Submitted by: {reservation.studentName}
+                {reservation.studentNumber ? ` (${reservation.studentNumber})` : ""}
+              </p>
+            ) : null}
             {reservation.pcNumber ? (
               <p className="mt-2 text-xs font-semibold text-slate-600">
                 PC assignment: {reservation.pcNumber}
               </p>
             ) : null}
+            {reservation.reviewedByName ? (
+              <p className="mt-2 text-xs text-slate-500">
+                Reviewed by: {reservation.reviewedByName}
+              </p>
+            ) : null}
+            {reservation.remarks ? (
+              <p className="mt-2 text-xs text-slate-500">Remarks: {reservation.remarks}</p>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (presentation.type === "user-profile") {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-slate-900">{presentation.user.name}</p>
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-700">
+            {roleLabels[presentation.user.role]}
+          </span>
+        </div>
+        <div className="mt-3 space-y-2 text-sm text-slate-600">
+          <p>Email: {presentation.user.email}</p>
+          {presentation.user.studentNumber ? (
+            <p>Student number: {presentation.user.studentNumber}</p>
+          ) : null}
+          {presentation.user.yearLevel ? <p>Year level: {presentation.user.yearLevel}</p> : null}
+          {presentation.user.department ? <p>Department: {presentation.user.department}</p> : null}
+          <p>
+            Verification:{" "}
+            {presentation.user.verificationStatus === "verified" ? "Verified" : "Unverified"}
+          </p>
+          <p>Joined: {formatDate(presentation.user.createdAt)}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (presentation.type === "notification-results") {
+    return (
+      <div className="space-y-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="text-sm font-semibold text-slate-900">{presentation.title}</p>
+          <p className="text-xs text-slate-500">
+            {presentation.unreadCount} unread notification
+            {presentation.unreadCount === 1 ? "" : "s"}
+          </p>
+        </div>
+
+        {presentation.notifications.map((notification) => (
+          <div key={notification.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-slate-900">{notification.subject}</p>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-700">
+                {notification.readAt ? "Read" : "Unread"}
+              </span>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{notification.message}</p>
+            <p className="mt-2 text-xs text-slate-500">{formatDateTime(notification.createdAt)}</p>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (presentation.type === "stats") {
+    return (
+      <div className="space-y-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="text-sm font-semibold text-slate-900">{presentation.title}</p>
+          <p className="text-xs text-slate-500">
+            Scope: {presentation.scope === "admin" ? "Admin" : "Staff"}
+          </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          {presentation.items.map((item) => (
+            <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                {item.label}
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900">{item.value}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (presentation.type === "activity-results") {
+    return (
+      <div className="space-y-3">
+        {presentation.activities.map((activity) => (
+          <div key={activity.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-slate-900">{activity.description}</p>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-700">
+                {activity.action}
+              </span>
+            </div>
+            <div className="mt-2 space-y-1 text-xs text-slate-500">
+              {activity.actorName ? (
+                <p>
+                  Actor: {activity.actorName}
+                  {activity.actorRole ? ` (${roleLabels[activity.actorRole]})` : ""}
+                </p>
+              ) : null}
+              {activity.laboratoryRoomCode ? <p>Laboratory: {activity.laboratoryRoomCode}</p> : null}
+              <p>{formatDateTime(activity.timestamp)}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (presentation.type === "user-list") {
+    return (
+      <div className="space-y-3">
+        {presentation.users.map((user) => (
+          <div key={user.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-slate-900">{user.name}</p>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-700">
+                {roleLabels[user.role]}
+              </span>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              {user.assignedLaboratories.length
+                ? `Assigned labs: ${user.assignedLaboratories.join(", ")}`
+                : "No assigned laboratory listed"}
+            </p>
           </div>
         ))}
       </div>
@@ -607,6 +749,9 @@ const AssistantPresentationCard = ({
         {presentation.laboratory.location ? (
           <p className="mt-1 text-xs text-slate-500">{presentation.laboratory.location}</p>
         ) : null}
+        <p className="mt-2 text-xs text-slate-500">
+          Capacity: {presentation.laboratory.capacity} | Computers: {presentation.laboratory.computerCount}
+        </p>
         <p className="mt-3 text-sm leading-6 text-slate-600">
           {presentation.laboratory.description}
         </p>

@@ -20,6 +20,18 @@ const optionalAiProviderSchema = z.preprocess(
 );
 
 const booleanEnvSchema = z.preprocess(parseBooleanEnvValue, z.boolean().optional());
+const DEFAULT_LOCALHOST_ORIGINS = [
+  "http://localhost:4173",
+  "http://127.0.0.1:4173",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:5174",
+  "http://127.0.0.1:5174"
+] as const;
+const DEFAULT_PRODUCTION_ORIGINS = [
+  "https://www.comlabreservation.app",
+  "https://comlabreservation.app"
+] as const;
 
 const corsOriginsSchema = z
   .string()
@@ -38,7 +50,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(5000),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   DATABASE_URL: z.string().min(1),
-  DIRECT_URL: z.string().min(1),
+  DIRECT_URL: optionalNonEmptyStringSchema,
   JWT_SECRET: z.string().min(10),
   JWT_EXPIRES_IN: z.string().default("1d"),
   JWT_REFRESH_SECRET: z.string().min(10).default("change-me-refresh-secret"),
@@ -56,6 +68,7 @@ const envSchema = z.object({
   EMAIL_VERIFICATION_TOKEN_TTL_HOURS: z.coerce.number().int().positive().default(24),
   RESET_TOKEN_PREVIEW: booleanEnvSchema,
   ENABLE_DEMO_BOOTSTRAP: booleanEnvSchema,
+  ENABLE_BACKGROUND_WORKERS: booleanEnvSchema,
   SMTP_HOST: z.string().min(1).optional(),
   SMTP_PORT: z.coerce.number().int().positive().optional(),
   SMTP_SECURE: booleanEnvSchema,
@@ -77,8 +90,16 @@ const envSchema = z.object({
   LOGIN_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
   REGISTER_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   REGISTER_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
-  PASSWORD_RESET_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
-  PASSWORD_RESET_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5)
+  FORGOT_PASSWORD_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+  FORGOT_PASSWORD_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
+  RESET_PASSWORD_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+  RESET_PASSWORD_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
+  VERIFY_EMAIL_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+  VERIFY_EMAIL_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  RESEND_VERIFICATION_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+  RESEND_VERIFICATION_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
+  AI_ASSISTANT_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+  AI_ASSISTANT_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(12)
 });
 
 const parsedEnv = envSchema.parse(process.env);
@@ -109,9 +130,21 @@ const resolvedSameSite =
   parsedEnv.AUTH_COOKIE_SAME_SITE ?? (parsedEnv.NODE_ENV === "production" ? "none" : "lax");
 const resolvedFrontendUrl = parsedEnv.FRONTEND_URL ?? parsedEnv.APP_BASE_URL ?? "http://localhost:5173";
 const resolvedClientUrl = parsedEnv.CLIENT_URL ?? resolvedFrontendUrl;
-const resolvedCorsOrigins = corsOriginsSchema.parse(
-  parsedEnv.CORS_ORIGINS ?? resolvedClientUrl
+const configuredCorsOrigins = (parsedEnv.CORS_ORIGINS ?? "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const resolvedCorsOriginsList = Array.from(
+  new Set([
+    ...DEFAULT_PRODUCTION_ORIGINS,
+    ...(parsedEnv.NODE_ENV === "production" ? [] : DEFAULT_LOCALHOST_ORIGINS),
+    resolvedClientUrl,
+    resolvedFrontendUrl,
+    parsedEnv.APP_BASE_URL ?? "",
+    ...configuredCorsOrigins
+  ].filter(Boolean))
 );
+const resolvedCorsOrigins = corsOriginsSchema.parse(resolvedCorsOriginsList.join(","));
 const hasSmtpSender = Boolean(parsedEnv.SMTP_FROM || parsedEnv.SMTP_FROM_EMAIL);
 const hasSmtpConfig = Boolean(
   parsedEnv.SMTP_HOST && parsedEnv.SMTP_PORT && hasSmtpSender
@@ -123,9 +156,11 @@ export const env = {
   CORS_ORIGINS: resolvedCorsOrigins,
   FRONTEND_URL: resolvedFrontendUrl,
   APP_BASE_URL: parsedEnv.APP_BASE_URL ?? resolvedFrontendUrl,
+  DIRECT_URL: parsedEnv.DIRECT_URL ?? parsedEnv.DATABASE_URL,
   AUTH_COOKIE_SAME_SITE: resolvedSameSite,
   RESET_TOKEN_PREVIEW: parsedEnv.RESET_TOKEN_PREVIEW ?? parsedEnv.NODE_ENV !== "production",
   ENABLE_DEMO_BOOTSTRAP: parsedEnv.ENABLE_DEMO_BOOTSTRAP ?? false,
+  ENABLE_BACKGROUND_WORKERS: parsedEnv.ENABLE_BACKGROUND_WORKERS ?? true,
   NOTIFICATION_EMAIL_PREVIEW:
     parsedEnv.NOTIFICATION_EMAIL_PREVIEW ??
     (!hasSmtpConfig || parsedEnv.NODE_ENV !== "production")

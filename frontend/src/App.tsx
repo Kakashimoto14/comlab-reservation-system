@@ -4,8 +4,11 @@ import { Toaster } from "react-hot-toast";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { ProtectedRoute } from "./components/layout/ProtectedRoute";
+import { StartupSplash } from "./components/layout/StartupSplash";
 import { DashboardLayout } from "./layouts/DashboardLayout";
 import { AuthLayout } from "./layouts/AuthLayout";
+import { useStartupSplash } from "./hooks/useStartupSplash";
+import { LandingPage } from "./pages/public/LandingPage";
 import { AuthProvider, useAuth } from "./store/AuthContext";
 
 const LoginPage = lazy(() =>
@@ -13,9 +16,6 @@ const LoginPage = lazy(() =>
 );
 const RegisterPage = lazy(() =>
   import("./pages/public/RegisterPage").then((module) => ({ default: module.RegisterPage }))
-);
-const LandingPage = lazy(() =>
-  import("./pages/public/LandingPage").then((module) => ({ default: module.LandingPage }))
 );
 const ForgotPasswordPage = lazy(() =>
   import("./pages/public/ForgotPasswordPage").then((module) => ({
@@ -126,17 +126,15 @@ const HomeRedirect = () => {
   return <Navigate to={user.role === "STUDENT" ? "/student/dashboard" : "/dashboard"} replace />;
 };
 
-export const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
+const AppShell = () => {
+  const { initialized } = useAuth();
+  const { showSplash } = useStartupSplash(initialized);
+
+  return (
+    <>
+      {showSplash ? <StartupSplash /> : null}
       <BrowserRouter>
-        <Suspense
-          fallback={
-            <div className="flex min-h-screen items-center justify-center bg-slate-50">
-              <div className="rounded-3xl bg-white px-6 py-4 shadow-soft">Loading page...</div>
-            </div>
-          }
-        >
+        <Suspense fallback={<StartupSplash />}>
           <Routes>
             <Route path="/" element={<HomeRedirect />} />
             <Route element={<AuthLayout />}>
@@ -197,6 +195,14 @@ export const App = () => (
           </Routes>
         </Suspense>
       </BrowserRouter>
+    </>
+  );
+};
+
+export const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <AuthProvider>
+      <AppShell />
       <Toaster position="top-right" />
     </AuthProvider>
   </QueryClientProvider>

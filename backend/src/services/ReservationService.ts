@@ -141,35 +141,35 @@ export class ReservationService {
     await this.laboratoryService.ensureLaboratoryIsAvailable(input.laboratoryId);
     this.validateTimeRange(input.startTime, input.endTime);
 
-    const schedule = await this.db.schedule.findUnique({
-      where: { id: input.scheduleId }
-    });
-
-    this.scheduleService.validateScheduleRecord(schedule);
-
-    if (!schedule) {
-      throw new ApiError(StatusCodes.NOT_FOUND, "Schedule not found.");
-    }
-
-    if (schedule.laboratoryId !== input.laboratoryId) {
-      throw new ApiError(
-        StatusCodes.BAD_REQUEST,
-        "The selected schedule does not belong to this laboratory."
-      );
-    }
-
-    if (schedule.startTime > input.startTime || schedule.endTime < input.endTime) {
-      throw new ApiError(
-        StatusCodes.BAD_REQUEST,
-        `Your reservation must stay within the published schedule on ${schedule.date.toISOString().slice(0, 10)} from ${schedule.startTime} to ${schedule.endTime}.`
-      );
-    }
-
     const reservationType = input.reservationType ?? "LAB";
-    const pc = await this.resolveReservationPc(input.laboratoryId, reservationType, input.pcId);
 
     const createdReservation = await this.runTransaction(async (tx) => {
       await this.lockLaboratoryReservations(tx, input.laboratoryId);
+      const schedule = await this.lockAndLoadSchedule(tx, input.scheduleId);
+
+      this.scheduleService.validateScheduleRecord(schedule);
+
+      if (schedule.laboratoryId !== input.laboratoryId) {
+        throw new ApiError(
+          StatusCodes.BAD_REQUEST,
+          "The selected schedule does not belong to this laboratory."
+        );
+      }
+
+      if (schedule.startTime > input.startTime || schedule.endTime < input.endTime) {
+        throw new ApiError(
+          StatusCodes.BAD_REQUEST,
+          `Your reservation must stay within the published schedule on ${schedule.date.toISOString().slice(0, 10)} from ${schedule.startTime} to ${schedule.endTime}.`
+        );
+      }
+
+      const pc = await this.resolveReservationPc(
+        input.laboratoryId,
+        reservationType,
+        input.pcId,
+        tx
+      );
+
       await this.ensureNoReservationConflict(
         {
           laboratoryId: input.laboratoryId,
@@ -187,7 +187,7 @@ export class ReservationService {
           reservationCode: this.buildPendingReservationCode(),
           studentId,
           laboratoryId: input.laboratoryId,
-          scheduleId: schedule.id,
+          scheduleId: input.scheduleId,
           pcId: pc?.id ?? null,
           reservationType,
           purpose: input.purpose,
@@ -660,6 +660,29 @@ export class ReservationService {
     }
   }
 
+  private async lockAndLoadSchedule(tx: Prisma.TransactionClient, scheduleId: number) {
+    const scheduleRows = await tx.$queryRaw<Array<{ id: number }>>`
+      SELECT id
+      FROM "Schedule"
+      WHERE id = ${scheduleId}
+      FOR UPDATE
+    `;
+
+    if (!scheduleRows.length) {
+      throw new ApiError(StatusCodes.NOT_FOUND, "Schedule not found.");
+    }
+
+    const schedule = await tx.schedule.findUnique({
+      where: { id: scheduleId }
+    });
+
+    if (!schedule) {
+      throw new ApiError(StatusCodes.NOT_FOUND, "Schedule not found.");
+    }
+
+    return schedule;
+  }
+
   private buildPendingReservationCode() {
     return `PENDING-${randomUUID()}`;
   }
@@ -693,7 +716,8 @@ export class ReservationService {
   private async resolveReservationPc(
     laboratoryId: number,
     reservationType: ReservationType,
-    pcId?: number | null
+    pcId?: number | null,
+    dbClient: DbClient = this.db
   ) {
     if (reservationType === "LAB") {
       return null;
@@ -706,7 +730,7 @@ export class ReservationService {
       );
     }
 
-    const pc = await this.db.pC.findFirst({
+    const pc = await dbClient.pC.findFirst({
       where: {
         id: pcId,
         laboratoryId

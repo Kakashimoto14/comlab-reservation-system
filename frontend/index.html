@@ -9,9 +9,323 @@
     />
     <meta name="theme-color" content="#24314F" />
     <link rel="icon" type="image/png" href="/comport-logo.png" />
+    <style>
+      :root {
+        font-family: "Manrope", sans-serif;
+        color: #0f172a;
+        background: #f8fafc;
+      }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+      }
+
+      body[data-comport-startup="loading"] {
+        overflow: hidden;
+      }
+
+      #app-startup-shell {
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at top, rgba(73, 111, 182, 0.2), transparent 34%),
+          linear-gradient(180deg, rgba(248, 250, 252, 0.985), rgba(238, 243, 251, 0.99));
+        animation: startup-overlay-fade 180ms ease-out both;
+        transition: opacity 180ms ease, visibility 180ms ease;
+      }
+
+      body[data-comport-startup="ready"] #app-startup-shell {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+
+      .comport-startup-backdrop,
+      .comport-startup-orb,
+      .comport-startup-card,
+      .comport-startup-brand,
+      .comport-startup-copy,
+      .comport-startup-progress,
+      .comport-startup-dots {
+        box-sizing: border-box;
+      }
+
+      .comport-startup-backdrop {
+        position: absolute;
+        inset: 0;
+      }
+
+      .comport-startup-orb {
+        position: absolute;
+        border-radius: 9999px;
+        background: radial-gradient(circle, rgba(73, 111, 182, 0.24), rgba(73, 111, 182, 0.06) 56%, transparent 74%);
+        opacity: 0.55;
+        animation: startup-orb-drift 12s ease-in-out infinite alternate;
+      }
+
+      .comport-startup-orb-left {
+        top: 10%;
+        left: -72px;
+        width: 240px;
+        height: 240px;
+      }
+
+      .comport-startup-orb-right {
+        right: -68px;
+        bottom: 12%;
+        width: 280px;
+        height: 280px;
+      }
+
+      .comport-startup-card {
+        position: relative;
+        width: min(100%, 34rem);
+        border: 1px solid rgba(217, 227, 240, 0.96);
+        border-radius: 30px;
+        padding: 28px 24px 24px;
+        background: rgba(255, 255, 255, 0.96);
+        box-shadow: 0 32px 68px -34px rgba(27, 52, 86, 0.45);
+        animation: startup-fade-up 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+        animation-delay: 70ms;
+      }
+
+      .comport-startup-brand {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+
+      .comport-startup-logo {
+        width: 72px;
+        height: 72px;
+        border-radius: 20px;
+        border: 1px solid rgba(217, 227, 240, 0.98);
+        background: #ffffff;
+        object-fit: cover;
+        padding: 6px;
+        flex-shrink: 0;
+        animation: startup-logo-breathe 1.15s ease-in-out infinite alternate;
+      }
+
+      .comport-startup-copy {
+        min-width: 0;
+      }
+
+      .comport-startup-eyebrow {
+        margin: 0;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        color: #496fb6;
+      }
+
+      .comport-startup-title {
+        margin: 12px 0 0;
+        font-family: "Poppins", sans-serif;
+        font-size: clamp(1.85rem, 4vw, 2.35rem);
+        line-height: 1.12;
+        color: #0f172a;
+      }
+
+      .comport-startup-subtitle {
+        margin: 12px 0 0;
+        font-size: 0.98rem;
+        line-height: 1.7;
+        color: #475569;
+      }
+
+      .comport-startup-progress {
+        position: relative;
+        margin-top: 22px;
+        height: 6px;
+        overflow: hidden;
+        border-radius: 9999px;
+        background: rgba(203, 213, 225, 0.5);
+      }
+
+      .comport-startup-progress-bar {
+        position: absolute;
+        inset: 0;
+        width: 38%;
+        border-radius: 9999px;
+        background: linear-gradient(90deg, #496fb6, #7ca0d9);
+        animation: startup-progress-sweep 1.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      }
+
+      .comport-startup-dots {
+        display: flex;
+        gap: 8px;
+        margin-top: 18px;
+      }
+
+      .comport-startup-dots span {
+        width: 8px;
+        height: 8px;
+        border-radius: 9999px;
+        background: #496fb6;
+        animation: startup-dot-pulse 900ms ease-in-out infinite;
+      }
+
+      .comport-startup-dots span:nth-child(2) {
+        animation-delay: 120ms;
+      }
+
+      .comport-startup-dots span:nth-child(3) {
+        animation-delay: 240ms;
+      }
+
+      @keyframes startup-overlay-fade {
+        from {
+          opacity: 0;
+        }
+
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes startup-fade-up {
+        from {
+          opacity: 0;
+          transform: translateY(18px) scale(0.985);
+        }
+
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      @keyframes startup-orb-drift {
+        from {
+          transform: translateY(0) scale(1);
+          opacity: 0.42;
+        }
+
+        to {
+          transform: translateY(18px) scale(1.08);
+          opacity: 0.62;
+        }
+      }
+
+      @keyframes startup-logo-breathe {
+        from {
+          transform: translateY(0) scale(1);
+        }
+
+        to {
+          transform: translateY(-4px) scale(1.03);
+        }
+      }
+
+      @keyframes startup-progress-sweep {
+        from {
+          transform: translateX(-105%);
+        }
+
+        to {
+          transform: translateX(215%);
+        }
+      }
+
+      @keyframes startup-dot-pulse {
+        0%,
+        100% {
+          opacity: 0.45;
+          transform: translateY(0);
+        }
+
+        50% {
+          opacity: 1;
+          transform: translateY(-2px);
+        }
+      }
+
+      @media (max-width: 640px) {
+        #app-startup-shell {
+          padding: 20px;
+        }
+
+        .comport-startup-brand {
+          align-items: flex-start;
+        }
+
+        .comport-startup-card {
+          padding: 24px 20px 22px;
+        }
+
+        .comport-startup-logo {
+          width: 64px;
+          height: 64px;
+        }
+
+        .comport-startup-orb-left {
+          top: 8%;
+          left: -64px;
+          width: 180px;
+          height: 180px;
+        }
+
+        .comport-startup-orb-right {
+          right: -72px;
+          bottom: 10%;
+          width: 220px;
+          height: 220px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .comport-startup-orb {
+          opacity: 0.45;
+        }
+
+        #app-startup-shell,
+        .comport-startup-card,
+        .comport-startup-orb,
+        .comport-startup-logo,
+        .comport-startup-progress-bar,
+        .comport-startup-dots span {
+          animation: none;
+        }
+      }
+    </style>
     <title>ComPort</title>
   </head>
-  <body class="bg-slate-50">
+  <body class="bg-slate-50" data-comport-startup="loading">
+    <div id="app-startup-shell" aria-hidden="true">
+      <div class="comport-startup-backdrop">
+        <div class="comport-startup-orb comport-startup-orb-left"></div>
+        <div class="comport-startup-orb comport-startup-orb-right"></div>
+      </div>
+      <div class="comport-startup-card">
+        <div class="comport-startup-brand">
+          <img src="/comport-logo.png" alt="" class="comport-startup-logo" />
+          <div class="comport-startup-copy">
+            <p class="comport-startup-eyebrow">ComPort Laboratory Portal</p>
+            <h1 class="comport-startup-title">Initializing ComPort...</h1>
+            <p class="comport-startup-subtitle">
+              Preparing schedules, reservations, and secure access to your laboratory workspace.
+            </p>
+          </div>
+        </div>
+        <div class="comport-startup-progress">
+          <span class="comport-startup-progress-bar"></span>
+        </div>
+        <div class="comport-startup-dots">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

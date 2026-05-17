@@ -101,6 +101,7 @@ export class AuthController {
     if (_req.authUser) {
       await authService.logoutSession(
         _req.authUser.id,
+        _req.authUser.sessionId,
         refreshToken
       );
     } else if (refreshToken) {

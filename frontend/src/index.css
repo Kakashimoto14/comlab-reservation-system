@@ -25,87 +25,188 @@ a {
 }
 
 .comport-page-reveal {
-  opacity: 0;
-  transform: translateY(18px) scale(0.985);
-  transition:
-    opacity 420ms ease,
-    transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.comport-page-reveal.is-ready {
-  opacity: 1;
-  transform: translateY(0) scale(1);
+  animation: comport-fade-up 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: opacity, transform;
 }
 
 .comport-card-reveal {
-  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: comport-fade-up 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 120ms;
+  will-change: opacity, transform;
 }
 
-.comport-intro-overlay {
+.comport-hero-surface {
+  animation: comport-fade-up 600ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 40ms;
+  will-change: opacity, transform;
+}
+
+.comport-hero-copy > * {
+  opacity: 0;
+  transform: translateY(16px) scale(0.99);
+  animation: comport-fade-up 600ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: opacity, transform;
+}
+
+.comport-hero-copy > :nth-child(1) {
+  animation-delay: 80ms;
+}
+
+.comport-hero-copy > :nth-child(2) {
+  animation-delay: 160ms;
+}
+
+.comport-hero-copy > :nth-child(3) {
+  animation-delay: 240ms;
+}
+
+.comport-hero-copy > :nth-child(4) {
+  animation-delay: 320ms;
+}
+
+.comport-feature-card {
+  opacity: 0;
+  transform: translateY(18px) scale(0.985);
+  animation: comport-fade-up 680ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: opacity, transform;
+}
+
+.comport-feature-card:nth-child(1) {
+  animation-delay: 170ms;
+}
+
+.comport-feature-card:nth-child(2) {
+  animation-delay: 260ms;
+}
+
+.comport-feature-card:nth-child(3) {
+  animation-delay: 350ms;
+}
+
+.comport-ambient-orb {
+  position: absolute;
+  z-index: 0;
+  border-radius: 9999px;
+  pointer-events: none;
+  opacity: 0.5;
+  background: radial-gradient(circle, rgba(73, 111, 182, 0.26), rgba(73, 111, 182, 0.05) 55%, transparent 72%);
+  animation: comport-orb-drift 11s ease-in-out infinite alternate;
+  will-change: opacity, transform;
+}
+
+.comport-ambient-orb-left {
+  top: 88px;
+  left: -56px;
+  width: 220px;
+  height: 220px;
+}
+
+.comport-ambient-orb-right {
+  right: -48px;
+  bottom: 104px;
+  width: 240px;
+  height: 240px;
+  animation-delay: 1.2s;
+  animation-duration: 13s;
+}
+
+@media (max-width: 640px) {
+  .comport-ambient-orb-left {
+    top: 72px;
+    left: -52px;
+    width: 160px;
+    height: 160px;
+  }
+
+  .comport-ambient-orb-right {
+    right: -56px;
+    bottom: 72px;
+    width: 180px;
+    height: 180px;
+  }
+}
+
+.comport-startup-shell {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: 80;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
   background:
-    radial-gradient(circle at top, rgba(73, 111, 182, 0.22), transparent 38%),
-    linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(238, 243, 251, 0.98));
-  backdrop-filter: blur(8px);
+    radial-gradient(circle at top, rgba(73, 111, 182, 0.2), transparent 34%),
+    linear-gradient(180deg, rgba(248, 250, 252, 0.985), rgba(238, 243, 251, 0.99));
+  animation: comport-overlay-fade 180ms ease-out both;
 }
 
-.comport-intro-panel {
-  width: min(100%, 32rem);
-  border: 1px solid rgba(217, 227, 240, 0.95);
-  border-radius: 28px;
-  padding: 28px 24px;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 28px 60px -30px rgba(27, 52, 86, 0.45);
+.comport-startup-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
 }
 
-.comport-intro-emblem {
+.comport-startup-orb {
+  position: absolute;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(73, 111, 182, 0.24), rgba(73, 111, 182, 0.06) 56%, transparent 74%);
+  opacity: 0.55;
+  animation: comport-orb-drift 12s ease-in-out infinite alternate;
+  will-change: opacity, transform;
+}
+
+.comport-startup-orb-left {
+  top: 10%;
+  left: -72px;
+  width: 240px;
+  height: 240px;
+}
+
+.comport-startup-orb-right {
+  right: -68px;
+  bottom: 12%;
+  width: 280px;
+  height: 280px;
+  animation-delay: 1.4s;
+  animation-duration: 13.6s;
+}
+
+.comport-startup-card {
+  position: relative;
+  width: min(100%, 34rem);
+  border: 1px solid rgba(217, 227, 240, 0.96);
+  border-radius: 30px;
+  padding: 28px 24px 24px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 32px 68px -34px rgba(27, 52, 86, 0.45);
+  animation: comport-fade-up 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 70ms;
+  will-change: opacity, transform;
+}
+
+.comport-startup-brand {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 18px;
 }
 
-.comport-intro-logo {
-  width: 64px;
-  height: 64px;
+.comport-startup-logo {
+  width: 72px;
+  height: 72px;
   border-radius: 20px;
-  border: 1px solid rgba(217, 227, 240, 0.95);
+  border: 1px solid rgba(217, 227, 240, 0.98);
   background: #ffffff;
   object-fit: cover;
   padding: 6px;
   animation: comport-logo-breathe 1.15s ease-in-out infinite alternate;
+  flex-shrink: 0;
 }
 
-.comport-intro-icon-shell {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 58px;
-  height: 58px;
-  border-radius: 18px;
-  background: linear-gradient(135deg, rgba(73, 111, 182, 0.16), rgba(73, 111, 182, 0.05));
-  color: #355692;
+.comport-startup-copy {
+  min-width: 0;
 }
 
-.comport-intro-cpu {
-  position: absolute;
-  right: 9px;
-  bottom: 9px;
-  color: #496fb6;
-  animation: comport-icon-float 1.05s ease-in-out infinite alternate;
-}
-
-.comport-intro-copy {
-  margin-top: 24px;
-}
-
-.comport-intro-eyebrow {
+.comport-startup-eyebrow {
   margin: 0;
   font-size: 11px;
   font-weight: 700;
@@ -114,22 +215,22 @@ a {
   color: #496fb6;
 }
 
-.comport-intro-title {
-  margin: 14px 0 0;
+.comport-startup-title {
+  margin: 12px 0 0;
   font-family: "Poppins", sans-serif;
-  font-size: clamp(1.9rem, 4vw, 2.4rem);
+  font-size: clamp(1.85rem, 4vw, 2.35rem);
   line-height: 1.12;
   color: #0f172a;
 }
 
-.comport-intro-subtitle {
+.comport-startup-subtitle {
   margin: 12px 0 0;
   font-size: 0.98rem;
-  line-height: 1.75;
+  line-height: 1.7;
   color: #475569;
 }
 
-.comport-intro-progress {
+.comport-startup-progress {
   position: relative;
   margin-top: 22px;
   height: 6px;
@@ -138,23 +239,23 @@ a {
   background: rgba(203, 213, 225, 0.5);
 }
 
-.comport-intro-progress::after {
-  content: "";
+.comport-startup-progress-bar {
   position: absolute;
   inset: 0;
   width: 38%;
-  border-radius: inherit;
+  border-radius: 9999px;
   background: linear-gradient(90deg, #496fb6, #7ca0d9);
   animation: comport-progress-sweep 1.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform, opacity;
 }
 
-.comport-intro-dots {
+.comport-startup-dots {
   display: flex;
   gap: 8px;
   margin-top: 18px;
 }
 
-.comport-intro-dots span {
+.comport-startup-dots span {
   width: 8px;
   height: 8px;
   border-radius: 9999px;
@@ -162,12 +263,55 @@ a {
   animation: comport-dot-pulse 900ms ease-in-out infinite;
 }
 
-.comport-intro-dots span:nth-child(2) {
+.comport-startup-dots span:nth-child(2) {
   animation-delay: 120ms;
 }
 
-.comport-intro-dots span:nth-child(3) {
+.comport-startup-dots span:nth-child(3) {
   animation-delay: 240ms;
+}
+
+body[data-comport-startup="loading"] {
+  overflow: hidden;
+}
+
+body[data-comport-startup="ready"] #app-startup-shell {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .comport-startup-shell {
+    padding: 20px;
+  }
+
+  .comport-startup-brand {
+    align-items: flex-start;
+  }
+
+  .comport-startup-card {
+    padding: 24px 20px 22px;
+  }
+
+  .comport-startup-logo {
+    width: 64px;
+    height: 64px;
+  }
+
+  .comport-startup-orb-left {
+    top: 8%;
+    left: -64px;
+    width: 180px;
+    height: 180px;
+  }
+
+  .comport-startup-orb-right {
+    right: -72px;
+    bottom: 10%;
+    width: 220px;
+    height: 220px;
+  }
 }
 
 @keyframes comport-logo-breathe {
@@ -180,13 +324,47 @@ a {
   }
 }
 
-@keyframes comport-icon-float {
+@keyframes comport-fade-up {
   from {
-    transform: translateY(0);
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
   }
 
   to {
-    transform: translateY(-3px);
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes comport-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes comport-overlay-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes comport-orb-drift {
+  from {
+    transform: translateY(0) scale(1);
+    opacity: 0.42;
+  }
+
+  to {
+    transform: translateY(18px) scale(1.08);
+    opacity: 0.62;
   }
 }
 
@@ -215,21 +393,35 @@ a {
 
 @media (prefers-reduced-motion: reduce) {
   .comport-page-reveal,
-  .comport-page-reveal.is-ready,
-  .comport-card-reveal {
+  .comport-card-reveal,
+  .comport-hero-surface,
+  .comport-hero-copy > *,
+  .comport-feature-card,
+  .comport-startup-card {
     opacity: 1;
     transform: none;
-    transition: none;
+    animation: comport-fade 180ms ease-out both;
   }
 
-  .comport-intro-overlay {
-    display: none;
-  }
-
-  .comport-intro-logo,
-  .comport-intro-cpu,
-  .comport-intro-progress::after,
-  .comport-intro-dots span {
+  .comport-ambient-orb {
+    opacity: 0.34;
     animation: none;
+  }
+
+  .comport-startup-orb,
+  .comport-startup-logo,
+  .comport-startup-progress-bar,
+  .comport-startup-dots span {
+    animation: none;
+  }
+
+  .comport-startup-progress-bar {
+    transform: none;
+    opacity: 1;
+  }
+
+  .comport-startup-dots span {
+    opacity: 0.65;
+    transform: none;
   }
 }

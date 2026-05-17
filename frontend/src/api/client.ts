@@ -1,6 +1,8 @@
 import axios from "axios";
 import type { AxiosError, InternalAxiosRequestConfig } from "axios";
 
+type AuthFailureListener = () => void;
+
 const normalizeApiUrl = (value: string) => {
   let normalized = value.trim();
 
@@ -48,12 +50,14 @@ export const apiBaseUrl = baseURL;
 export const apiClient = axios.create({
   baseURL,
   withCredentials: true,
+  timeout: 15_000,
   headers: {
     "Content-Type": "application/json"
   }
 });
 
 let refreshRequest: Promise<void> | null = null;
+const authFailureListeners = new Set<AuthFailureListener>();
 
 type RetriableRequestConfig = InternalAxiosRequestConfig & {
   _retry?: boolean;
@@ -65,6 +69,20 @@ const shouldBypassRefresh = (config?: RetriableRequestConfig) => {
   return ["/auth/login", "/auth/register", "/auth/refresh", "/auth/logout"].some((path) =>
     url.includes(path)
   );
+};
+
+const notifyAuthFailure = () => {
+  authFailureListeners.forEach((listener) => {
+    listener();
+  });
+};
+
+export const subscribeToAuthFailures = (listener: AuthFailureListener) => {
+  authFailureListeners.add(listener);
+
+  return () => {
+    authFailureListeners.delete(listener);
+  };
 };
 
 apiClient.interceptors.response.use(
@@ -99,6 +117,7 @@ apiClient.interceptors.response.use(
       await refreshRequest;
       return apiClient(originalRequest);
     } catch (refreshError) {
+      notifyAuthFailure();
       return Promise.reject(refreshError);
     }
   }

@@ -51,8 +51,10 @@ const shutdown = async (signal: string, exitCode = 0, error?: unknown) => {
     console.info(`[shutdown] Received ${signal}. Closing backend server.`);
   }
 
-  reservationReminderService.stop();
-  notificationService.unregister();
+  if (env.ENABLE_BACKGROUND_WORKERS) {
+    reservationReminderService.stop();
+    notificationService.unregister();
+  }
 
   try {
     await closeServer();
@@ -148,9 +150,13 @@ async function startServer() {
     console.info("[startup] Demo account bootstrap skipped.");
   }
 
-  notificationService.register();
-  reservationReminderService.start();
-  console.info("[startup] Notification handlers and reminder worker started.");
+  if (env.ENABLE_BACKGROUND_WORKERS) {
+    notificationService.register();
+    reservationReminderService.start();
+    console.info("[startup] Notification handlers and reminder worker started.");
+  } else {
+    console.info("[startup] Background workers are disabled for this process.");
+  }
 
   server = await new Promise<Server>((resolve, reject) => {
     const nextServer = app.listen(env.PORT, "0.0.0.0", () => {

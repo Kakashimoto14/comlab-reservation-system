@@ -65,6 +65,8 @@ type AuthSessionMeta = {
   userAgent?: string | null;
 };
 
+type DbClient = PrismaClient | Prisma.TransactionClient;
+
 type AuthResponse = {
   accessToken: string;
   refreshToken: string;
@@ -595,58 +597,76 @@ export class AuthService {
       throw new ApiError(StatusCodes.UNAUTHORIZED, "Session expired. Please log in again.");
     }
 
-    const session = await this.db.authSession.findUnique({
-      where: { id: payload.sid },
-      include: {
-        user: {
-          select: publicUserSelect
+    const tokenHash = this.hashRefreshToken(refreshToken);
+    const { rotatedTokens, user, sessionId, userId } = await this.db.$transaction(async (tx) => {
+      await this.lockSessionRow(tx, payload.sid);
+
+      const session = await tx.authSession.findUnique({
+        where: { id: payload.sid },
+        include: {
+          user: {
+            select: publicUserSelect
+          }
         }
+      });
+
+      if (!session) {
+        throw new ApiError(StatusCodes.UNAUTHORIZED, "Session not found. Please log in again.");
       }
-    });
 
-    if (!session) {
-      throw new ApiError(StatusCodes.UNAUTHORIZED, "Session not found. Please log in again.");
-    }
+      const isValidToken = session.tokenHash === tokenHash;
+      const isExpired = session.expiresAt <= new Date();
+      const isRevoked = Boolean(session.revokedAt);
+      const isActive = session.user.status === "ACTIVE";
+      const isVerified = Boolean(session.user.emailVerifiedAt);
 
-    const isValidToken = session.tokenHash === this.hashRefreshToken(refreshToken);
-    const isExpired = session.expiresAt <= new Date();
-    const isRevoked = Boolean(session.revokedAt);
-    const isActive = session.user.status === "ACTIVE";
-    const isVerified = Boolean(session.user.emailVerifiedAt);
+      if (
+        !isValidToken ||
+        isExpired ||
+        isRevoked ||
+        !isActive ||
+        !isVerified ||
+        session.userId !== payload.id
+      ) {
+        await this.safeRevokeSession(session.id, tx);
+        throw new ApiError(StatusCodes.UNAUTHORIZED, "Session expired. Please log in again.");
+      }
 
-    if (
-      !isValidToken ||
-      isExpired ||
-      isRevoked ||
-      !isActive ||
-      !isVerified ||
-      session.userId !== payload.id
-    ) {
-      await this.safeRevokeSession(session.id);
-      throw new ApiError(StatusCodes.UNAUTHORIZED, "Session expired. Please log in again.");
-    }
+      const rotatedTokens = await this.rotateSession(
+        session.id,
+        session.userId,
+        tokenHash,
+        {
+          email: session.user.email,
+          role: session.user.role,
+          sessionMeta
+        },
+        tx
+      );
 
-    const rotatedTokens = await this.rotateSession(session.id, session.userId, {
-      email: session.user.email,
-      role: session.user.role,
-      sessionMeta
+      return {
+        rotatedTokens,
+        user: session.user,
+        sessionId: session.id,
+        userId: session.userId
+      };
     });
 
     await this.activityLogService.logActivity({
-      userId: session.userId,
+      userId,
       action: "REFRESH_SESSION",
       entityType: "AUTH_SESSION",
-      entityId: session.id,
-      description: `${session.user.firstName} ${session.user.lastName} refreshed their session.`
+      entityId: sessionId,
+      description: `${user.firstName} ${user.lastName} refreshed their session.`
     });
 
     return {
       ...rotatedTokens,
-      user: session.user
+      user
     };
   }
 
-  async logoutSession(userId: number, refreshToken?: string | null) {
+  async logoutSession(userId: number, sessionId?: number | null, refreshToken?: string | null) {
     const user = await this.db.user.findUnique({
       where: { id: userId },
       select: {
@@ -658,6 +678,10 @@ export class AuthService {
 
     if (!user) {
       throw new ApiError(StatusCodes.NOT_FOUND, "User account not found.");
+    }
+
+    if (typeof sessionId === "number") {
+      await this.revokeSessionById(sessionId);
     }
 
     if (refreshToken) {
@@ -702,9 +726,10 @@ export class AuthService {
 
   private async createSessionTokens(
     userId: number,
-    input: { email: string; role: UserRole; sessionMeta?: AuthSessionMeta }
+    input: { email: string; role: UserRole; sessionMeta?: AuthSessionMeta },
+    dbClient: DbClient = this.db
   ) {
-    await this.db.authSession.deleteMany({
+    await dbClient.authSession.deleteMany({
       where: {
         userId,
         OR: [{ expiresAt: { lt: new Date() } }, { revokedAt: { not: null } }]
@@ -714,7 +739,7 @@ export class AuthService {
     const provisionalToken = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + env.REFRESH_COOKIE_MAX_AGE_MS);
 
-    const session = await this.db.authSession.create({
+    const session = await dbClient.authSession.create({
       data: {
         userId,
         tokenHash: this.hashRefreshToken(provisionalToken),
@@ -730,7 +755,7 @@ export class AuthService {
       sid: session.id
     });
 
-    await this.db.authSession.update({
+    await dbClient.authSession.update({
       where: { id: session.id },
       data: {
         tokenHash: this.hashRefreshToken(refreshToken)
@@ -751,24 +776,46 @@ export class AuthService {
   private async rotateSession(
     sessionId: number,
     userId: number,
+    currentTokenHash: string,
     input: {
       email: string;
       role: UserRole;
       sessionMeta?: AuthSessionMeta;
-    }
+    },
+    dbClient: DbClient = this.db
   ) {
-    await this.db.authSession.update({
-      where: { id: sessionId },
+    const revokeResult = await dbClient.authSession.updateMany({
+      where: {
+        id: sessionId,
+        tokenHash: currentTokenHash,
+        revokedAt: null
+      },
       data: {
         revokedAt: new Date()
       }
     });
 
-    return this.createSessionTokens(userId, input);
+    if (revokeResult.count !== 1) {
+      throw new ApiError(StatusCodes.UNAUTHORIZED, "Session expired. Please log in again.");
+    }
+
+    return this.createSessionTokens(userId, input, dbClient);
   }
 
-  private async revokeSessionByTokenHash(tokenHash: string) {
-    await this.db.authSession.updateMany({
+  private async revokeSessionById(sessionId: number, dbClient: DbClient = this.db) {
+    await dbClient.authSession.updateMany({
+      where: {
+        id: sessionId,
+        revokedAt: null
+      },
+      data: {
+        revokedAt: new Date()
+      }
+    });
+  }
+
+  private async revokeSessionByTokenHash(tokenHash: string, dbClient: DbClient = this.db) {
+    await dbClient.authSession.updateMany({
       where: {
         tokenHash,
         revokedAt: null
@@ -779,8 +826,8 @@ export class AuthService {
     });
   }
 
-  private async safeRevokeSession(sessionId: number) {
-    await this.db.authSession.updateMany({
+  private async safeRevokeSession(sessionId: number, dbClient: DbClient = this.db) {
+    await dbClient.authSession.updateMany({
       where: {
         id: sessionId,
         revokedAt: null
@@ -789,6 +836,15 @@ export class AuthService {
         revokedAt: new Date()
       }
     });
+  }
+
+  private async lockSessionRow(tx: Prisma.TransactionClient, sessionId: number) {
+    await tx.$queryRaw`
+      SELECT id
+      FROM "AuthSession"
+      WHERE id = ${sessionId}
+      FOR UPDATE
+    `;
   }
 
   private hashToken(token: string) {

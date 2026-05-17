@@ -33,6 +33,7 @@ const createMockDb = () => {
     activityLog: {
       create: vi.fn()
     },
+    $queryRaw: vi.fn(),
     $transaction: vi.fn()
   } as any;
 
@@ -176,6 +177,41 @@ describe("AuthService", () => {
     expect(result.message).toContain("If an account exists");
     expect(result.previewResetUrl).toContain("/reset-password?token=");
     expect(db.passwordResetToken.create).toHaveBeenCalled();
+    expect(db.activityLog.create).toHaveBeenCalled();
+  });
+
+  it("revokes the active session on logout even without a refresh cookie", async () => {
+    const db = createMockDb();
+    db.user.findUnique.mockResolvedValue({
+      id: 9,
+      firstName: "Marco",
+      lastName: "Staff",
+      email: "staff@comlab.edu",
+      emailVerifiedAt: new Date(),
+      passwordHash: "hash",
+      role: "LABORATORY_STAFF",
+      status: "ACTIVE",
+      studentNumber: null,
+      department: "ICS",
+      yearLevel: null,
+      phone: null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    const service = new AuthService(db);
+    const result = await service.logoutSession(9, 41, null);
+
+    expect(result.message).toBe("Logged out successfully.");
+    expect(db.authSession.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 41,
+        revokedAt: null
+      },
+      data: {
+        revokedAt: expect.any(Date)
+      }
+    });
     expect(db.activityLog.create).toHaveBeenCalled();
   });
 

@@ -1,13 +1,12 @@
 node_modules
 dist
-build
 .env
 .env.*
 !.env.example
-.DS_Store
 coverage
-.vite
 *.log
 *.tsbuildinfo
-backend/generated
-frontend/.vite
+npm
+npx
+tsx
+comlab-backend@1.0.0

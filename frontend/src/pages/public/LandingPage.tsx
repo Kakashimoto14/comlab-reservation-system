@@ -1,20 +1,17 @@
 import { ArrowRight, Building2, CalendarRange, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import { ComPortIntroOverlay } from "../../components/layout/ComPortIntroOverlay";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
-import { useSessionIntro } from "../../hooks/useSessionIntro";
 
 export const LandingPage = () => {
-  const { showIntro, isReady, prefersReducedMotion } = useSessionIntro();
-  const revealClass = `comport-page-reveal ${isReady || prefersReducedMotion ? "is-ready" : ""}`;
-
   return (
     <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(73,111,182,0.18),_transparent_30%),linear-gradient(180deg,_#f8fafc,_#eef3fb)] px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
       <div className="pointer-events-none absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(73,111,182,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(73,111,182,0.08)_1px,transparent_1px)] [background-size:36px_36px]" />
-      <div className={`relative z-10 mx-auto max-w-7xl ${revealClass}`}>
-        <header className="flex flex-col gap-4 rounded-xl border border-white/70 bg-white/85 px-5 py-4 shadow-soft backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <div className="comport-ambient-orb comport-ambient-orb-left" aria-hidden="true" />
+      <div className="comport-ambient-orb comport-ambient-orb-right" aria-hidden="true" />
+      <div className="relative z-10 mx-auto max-w-7xl comport-page-reveal">
+        <header className="comport-hero-surface flex flex-col gap-4 rounded-xl border border-white/80 bg-white/92 px-5 py-4 shadow-soft sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex min-w-0 items-center gap-4">
             <img
               src="/comport-logo.png"
@@ -39,7 +36,7 @@ export const LandingPage = () => {
         </header>
 
         <section className="grid gap-10 py-12 sm:py-14 lg:grid-cols-[1.12fr_0.88fr] lg:items-center lg:py-16">
-          <div className="min-w-0">
+          <div className="comport-hero-copy min-w-0">
             <span className="inline-flex rounded-full bg-brand-100 px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-brand-700">
               ComPort Campus Workflow
             </span>
@@ -62,22 +59,22 @@ export const LandingPage = () => {
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Card className="bg-gradient-to-br from-brand-800 to-brand-600 text-white">
+          <div className="comport-feature-grid grid gap-4 sm:grid-cols-2">
+            <Card className="comport-feature-card bg-gradient-to-br from-brand-800 to-brand-600 text-white">
               <Building2 className="h-8 w-8" />
               <h3 className="mt-6 text-xl font-semibold leading-tight">Laboratory Management</h3>
               <p className="mt-3 text-sm leading-6 text-brand-100">
                 Manage rooms, capacities, devices, statuses, and ready-to-deploy operational details.
               </p>
             </Card>
-            <Card className="bg-white">
+            <Card className="comport-feature-card bg-white">
               <CalendarRange className="h-8 w-8 text-accent" />
               <h3 className="mt-6 text-xl font-semibold leading-tight text-slate-900">Reservation Workflow</h3>
               <p className="mt-3 text-sm leading-6 text-slate-500">
                 Students request, staff review, and the system prevents invalid scheduling conflicts.
               </p>
             </Card>
-            <Card className="bg-white sm:col-span-2">
+            <Card className="comport-feature-card bg-white sm:col-span-2">
               <ShieldCheck className="h-8 w-8 text-success" />
               <h3 className="mt-6 text-xl font-semibold leading-tight text-slate-900">Role-Based Security</h3>
               <p className="mt-3 text-sm leading-6 text-slate-500">
@@ -87,8 +84,6 @@ export const LandingPage = () => {
           </div>
         </section>
       </div>
-
-      {showIntro ? <ComPortIntroOverlay /> : null}
     </div>
   );
 };

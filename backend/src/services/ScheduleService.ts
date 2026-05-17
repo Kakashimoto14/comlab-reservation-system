@@ -131,7 +131,14 @@ export class ScheduleService {
   async updateSchedule(id: number, input: ScheduleInput, currentUser: CurrentUser) {
     const schedule = await this.db.schedule.findUnique({
       where: { id },
-      include: { laboratory: true, reservations: { select: { id: true } } }
+      select: {
+        id: true,
+        laboratoryId: true,
+        date: true,
+        startTime: true,
+        endTime: true,
+        status: true
+      }
     });
 
     if (!schedule) {
@@ -146,23 +153,35 @@ export class ScheduleService {
 
     await this.laboratoryService.ensureLaboratoryIsAvailable(input.laboratoryId);
     this.validateTimeRange(input.startTime, input.endTime);
-    const hasReservations = schedule.reservations.length > 0;
-    const hasMutation =
-      input.laboratoryId !== schedule.laboratoryId ||
-      toDateOnly(input.date).getTime() !== schedule.date.getTime() ||
-      input.startTime !== schedule.startTime ||
-      input.endTime !== schedule.endTime ||
-      input.status !== schedule.status;
-
-    if (hasReservations && hasMutation) {
-      throw new ApiError(
-        StatusCodes.BAD_REQUEST,
-        "Schedules with reservation history cannot be modified."
-      );
-    }
 
     const updatedSchedule = await this.runTransaction(async (tx) => {
-      await this.lockLaboratories(tx, [schedule.laboratoryId, input.laboratoryId]);
+      const currentSchedule = await this.lockAndLoadSchedule(tx, id);
+
+      if (!currentSchedule) {
+        throw new ApiError(StatusCodes.NOT_FOUND, "Schedule not found.");
+      }
+
+      const hasMutation =
+        input.laboratoryId !== currentSchedule.laboratoryId ||
+        toDateOnly(input.date).getTime() !== currentSchedule.date.getTime() ||
+        input.startTime !== currentSchedule.startTime ||
+        input.endTime !== currentSchedule.endTime ||
+        input.status !== currentSchedule.status;
+
+      const reservationCount = await tx.reservation.count({
+        where: {
+          scheduleId: id
+        }
+      });
+
+      if (reservationCount > 0 && hasMutation) {
+        throw new ApiError(
+          StatusCodes.BAD_REQUEST,
+          "Schedules with reservation history cannot be modified."
+        );
+      }
+
+      await this.lockLaboratories(tx, [currentSchedule.laboratoryId, input.laboratoryId]);
       await this.ensureNoOverlap(
         input.laboratoryId,
         input.date,
@@ -202,8 +221,9 @@ export class ScheduleService {
   async deleteSchedule(id: number, currentUser: CurrentUser) {
     const schedule = await this.db.schedule.findUnique({
       where: { id },
-      include: {
-        reservations: true
+      select: {
+        id: true,
+        laboratoryId: true
       }
     });
 
@@ -213,14 +233,28 @@ export class ScheduleService {
 
     await this.staffAccessService.ensureCanManageLab(currentUser, schedule.laboratoryId);
 
-    if (schedule.reservations.length > 0) {
-      throw new ApiError(
-        StatusCodes.BAD_REQUEST,
-        "Schedules with reservation history cannot be deleted."
-      );
-    }
+    await this.runTransaction(async (tx) => {
+      const currentSchedule = await this.lockAndLoadSchedule(tx, id);
 
-    await this.db.schedule.delete({ where: { id } });
+      if (!currentSchedule) {
+        throw new ApiError(StatusCodes.NOT_FOUND, "Schedule not found.");
+      }
+
+      const reservationCount = await tx.reservation.count({
+        where: {
+          scheduleId: id
+        }
+      });
+
+      if (reservationCount > 0) {
+        throw new ApiError(
+          StatusCodes.BAD_REQUEST,
+          "Schedules with reservation history cannot be deleted."
+        );
+      }
+
+      await tx.schedule.delete({ where: { id } });
+    });
 
     await this.activityLogService.logActivity({
       userId: currentUser.id,
@@ -326,6 +360,23 @@ export class ScheduleService {
       WHERE id IN (${Prisma.join(uniqueLaboratoryIds)})
       FOR UPDATE
     `;
+  }
+
+  private async lockAndLoadSchedule(tx: Prisma.TransactionClient, scheduleId: number) {
+    const scheduleRows = await tx.$queryRaw<Array<{ id: number }>>`
+      SELECT id
+      FROM "Schedule"
+      WHERE id = ${scheduleId}
+      FOR UPDATE
+    `;
+
+    if (!scheduleRows.length) {
+      return null;
+    }
+
+    return tx.schedule.findUnique({
+      where: { id: scheduleId }
+    });
   }
 
   private runTransaction<T>(callback: (tx: Prisma.TransactionClient) => Promise<T>) {

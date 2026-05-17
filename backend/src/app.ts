@@ -12,9 +12,11 @@ import { ApiError } from "./utils/ApiError.js";
 
 export const app = express();
 app.set("trust proxy", 1);
-const allowedOrigins = env.CORS_ORIGINS.split(",")
+const allowedOrigins = new Set(
+  env.CORS_ORIGINS.split(",")
   .map((origin) => origin.trim())
-  .filter(Boolean);
+  .filter(Boolean)
+);
 const csrfProtectedMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 const resolveRequestOrigin = (value?: string | null) => {
@@ -39,7 +41,9 @@ app.use(
         return;
       }
 
-      if (allowedOrigins.includes(origin)) {
+      const normalizedOrigin = resolveRequestOrigin(origin);
+
+      if (normalizedOrigin && allowedOrigins.has(normalizedOrigin)) {
         callback(null, true);
         return;
       }
@@ -57,8 +61,24 @@ app.use((req, _res, next) => {
 
   const requestOrigin =
     resolveRequestOrigin(req.get("origin")) ?? resolveRequestOrigin(req.get("referer"));
+  const hasAuthCookies = Boolean(
+    req.cookies?.[env.AUTH_COOKIE_NAME] || req.cookies?.[env.REFRESH_COOKIE_NAME]
+  );
+  const usesAuthorizationHeader = Boolean(req.get("authorization"));
 
-  if (!requestOrigin || allowedOrigins.includes(requestOrigin)) {
+  if (!requestOrigin) {
+    if (!hasAuthCookies || usesAuthorizationHeader) {
+      return next();
+    }
+
+    return next(
+      new ApiError(StatusCodes.FORBIDDEN, "Invalid request origin.", {
+        origin: ["Browser requests that rely on auth cookies must include an allowed origin."]
+      })
+    );
+  }
+
+  if (allowedOrigins.has(requestOrigin)) {
     return next();
   }
 

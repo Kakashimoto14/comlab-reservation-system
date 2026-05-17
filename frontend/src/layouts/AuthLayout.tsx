@@ -1,15 +1,10 @@
 import { Outlet } from "react-router-dom";
-import { ComPortIntroOverlay } from "../components/layout/ComPortIntroOverlay";
-import { useSessionIntro } from "../hooks/useSessionIntro";
 
 export const AuthLayout = () => {
-  const { showIntro, isReady, prefersReducedMotion } = useSessionIntro();
-  const revealClass = `comport-page-reveal ${isReady || prefersReducedMotion ? "is-ready" : ""}`;
-
   return (
     <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(73,111,182,0.16),_transparent_38%),linear-gradient(135deg,_#f8fafc,_#eef3fb)]">
       <div className="pointer-events-none absolute inset-0 opacity-40 [background-image:linear-gradient(rgba(73,111,182,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(73,111,182,0.08)_1px,transparent_1px)] [background-size:34px_34px]" />
-      <div className={`relative z-10 mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-6 sm:px-6 lg:grid lg:grid-cols-[1.15fr_0.85fr] lg:gap-10 lg:px-8 lg:py-8 ${revealClass}`}>
+      <div className="relative z-10 mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-6 sm:px-6 lg:grid lg:grid-cols-[1.15fr_0.85fr] lg:gap-10 lg:px-8 lg:py-8 comport-page-reveal">
         <div className="flex items-center justify-center py-10 lg:py-20">
           <div className="max-w-xl">
             <div className="flex items-center gap-4">
@@ -48,14 +43,12 @@ export const AuthLayout = () => {
             </div>
           </div>
         </div>
-        <div className={`flex items-center justify-center ${revealClass}`}>
+        <div className="flex items-center justify-center">
           <div className="w-full comport-card-reveal">
             <Outlet />
           </div>
         </div>
       </div>
-
-      {showIntro ? <ComPortIntroOverlay /> : null}
     </div>
   );
 };

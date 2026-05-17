@@ -945,7 +945,7 @@ The backend remains an Express API. Supabase is used only as the PostgreSQL data
 - Run `npx prisma migrate deploy` during backend startup or release
 - Use the exposed backend health endpoint `/api/health` for readiness checks
 
-Deployment-specific environment examples, local preview setup, production SMTP and AI guidance, and a step-by-step verification checklist are documented in [docs/DEPLOYMENT.md](/C:/Users/Lorraine/Desktop/comlab-reservation-system/docs/DEPLOYMENT.md).
+Deployment-specific environment examples, local preview setup, production SMTP and AI guidance, and a step-by-step verification checklist are documented in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ---
 

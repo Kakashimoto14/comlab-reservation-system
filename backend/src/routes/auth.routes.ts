@@ -29,11 +29,29 @@ const registerRateLimit = createRateLimiter({
   maxRequests: env.REGISTER_RATE_LIMIT_MAX,
   message: "Too many registration attempts. Please wait a moment before submitting again."
 });
-const passwordResetRateLimit = createRateLimiter({
-  keyPrefix: "auth-password-reset",
-  windowMs: env.PASSWORD_RESET_RATE_LIMIT_WINDOW_MS,
-  maxRequests: env.PASSWORD_RESET_RATE_LIMIT_MAX,
+const forgotPasswordRateLimit = createRateLimiter({
+  keyPrefix: "auth-forgot-password",
+  windowMs: env.FORGOT_PASSWORD_RATE_LIMIT_WINDOW_MS,
+  maxRequests: env.FORGOT_PASSWORD_RATE_LIMIT_MAX,
   message: "Too many password reset attempts. Please wait before trying again."
+});
+const resetPasswordRateLimit = createRateLimiter({
+  keyPrefix: "auth-reset-password",
+  windowMs: env.RESET_PASSWORD_RATE_LIMIT_WINDOW_MS,
+  maxRequests: env.RESET_PASSWORD_RATE_LIMIT_MAX,
+  message: "Too many password reset attempts. Please wait before trying again."
+});
+const verifyEmailRateLimit = createRateLimiter({
+  keyPrefix: "auth-verify-email",
+  windowMs: env.VERIFY_EMAIL_RATE_LIMIT_WINDOW_MS,
+  maxRequests: env.VERIFY_EMAIL_RATE_LIMIT_MAX,
+  message: "Too many verification attempts. Please wait a moment before trying again."
+});
+const resendVerificationRateLimit = createRateLimiter({
+  keyPrefix: "auth-resend-verification",
+  windowMs: env.RESEND_VERIFICATION_RATE_LIMIT_WINDOW_MS,
+  maxRequests: env.RESEND_VERIFICATION_RATE_LIMIT_MAX,
+  message: "Too many verification requests. Please wait before requesting another email."
 });
 
 router.post(
@@ -46,25 +64,25 @@ router.post("/login", loginRateLimit, validate(loginSchema), asyncHandler(AuthCo
 router.post("/refresh", asyncHandler(AuthController.refresh));
 router.post(
   "/verify-email",
-  passwordResetRateLimit,
+  verifyEmailRateLimit,
   validate(verifyEmailSchema),
   asyncHandler(AuthController.verifyEmail)
 );
 router.post(
   "/resend-verification",
-  passwordResetRateLimit,
+  resendVerificationRateLimit,
   validate(resendVerificationSchema),
   asyncHandler(AuthController.resendVerification)
 );
 router.post(
   "/forgot-password",
-  passwordResetRateLimit,
+  forgotPasswordRateLimit,
   validate(forgotPasswordSchema),
   asyncHandler(AuthController.forgotPassword)
 );
 router.post(
   "/reset-password",
-  passwordResetRateLimit,
+  resetPasswordRateLimit,
   validate(resetPasswordSchema),
   asyncHandler(AuthController.resetPassword)
 );

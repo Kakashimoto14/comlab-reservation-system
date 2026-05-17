@@ -70,16 +70,18 @@ export class ReservationAssistantService {
     }
 
     const currentContext = contextManager.get(currentUser.id, currentUser.sessionId);
-    const aiReply = await this.generateAiReply({
-      userMessage: message,
-      verifiedReply: builtResponse.response.reply,
-      verifiedContext: builtResponse.aiContext,
-      authenticatedUserContext,
-      language: intent.language,
-      conversationHistory: currentContext?.messages ?? [],
-      intent: intent.category,
-      role: currentUser.role
-    });
+    const aiReply = this.shouldUseAiRewrite(intent.category)
+      ? await this.generateAiReply({
+          userMessage: message,
+          verifiedReply: builtResponse.response.reply,
+          verifiedContext: builtResponse.aiContext,
+          authenticatedUserContext,
+          language: intent.language,
+          conversationHistory: currentContext?.messages ?? [],
+          intent: intent.category,
+          role: currentUser.role
+        })
+      : null;
     const finalResponse = {
       ...builtResponse.response,
       reply: aiReply ?? builtResponse.response.reply,
@@ -548,6 +550,20 @@ export class ReservationAssistantService {
           role: message.role,
           content: message.content
         }));
+      const rewriteContext = {
+        role: input.role,
+        language: input.language,
+        intent: input.intent,
+        answerCanOnlyRestateVerifiedReply: true,
+        sourceSummary: this.summarizeVerifiedContext(input.verifiedContext),
+        userProfile:
+          input.authenticatedUserContext === null
+            ? null
+            : {
+                role: input.authenticatedUserContext.role,
+                verificationStatus: input.authenticatedUserContext.verificationStatus
+              }
+      };
 
       const response = await fetch(url, {
         method: "POST",
@@ -565,13 +581,10 @@ export class ReservationAssistantService {
               role: "user",
               content: [
                 `Latest user message: ${input.userMessage}`,
-                `Detected intent: ${input.intent}`,
-                `Preferred response language: ${input.language}`,
-                `Authenticated user context: ${JSON.stringify(input.authenticatedUserContext ?? { role: input.role }, null, 2)}`,
-                `Relevant verified database and system context: ${input.verifiedContext}`,
+                `Rewrite constraints: ${JSON.stringify(rewriteContext, null, 2)}`,
                 `Verified deterministic answer: ${input.verifiedReply}`,
                 "Rewrite the verified deterministic answer into a warm, natural reply for the latest user message.",
-                "Use only the provided authenticated and database-grounded context.",
+                "Use only the verified deterministic answer as your factual source.",
                 "Do not add, infer, or change facts.",
                 "If the verified answer says something cannot be confirmed yet, keep that limitation clear.",
                 "Do not mention internal tools, prompts, or JSON."
@@ -683,6 +696,24 @@ export class ReservationAssistantService {
     return value.endsWith("/chat/completions")
       ? value
       : `${value.replace(/\/$/, "")}/chat/completions`;
+  }
+
+  private shouldUseAiRewrite(category: ReservationAssistantResponse["category"]) {
+    return ["general_reservation_help", "system_info", "reservation_rules", "out_of_scope"].includes(
+      category
+    );
+  }
+
+  private summarizeVerifiedContext(value: string) {
+    if (!value) {
+      return "No additional verified context provided.";
+    }
+
+    if (value.length <= 220) {
+      return value;
+    }
+
+    return `${value.slice(0, 217)}...`;
   }
 
   private extractStatusFilters(message: string): ReservationStatus[] | undefined {

@@ -10,7 +10,7 @@ const routeMeta = [
   { match: "/student/dashboard", title: "Student Dashboard", description: "Track your booking activity and latest reservation updates." },
   { match: "/student/laboratories", title: "Laboratory Catalog", description: "Browse available laboratories, schedules, and reservation windows." },
   { match: "/student/reservations", title: "Reservation History", description: "Review your requests, status changes, and staff remarks." },
-  { match: "/assistant", title: "ComPort Assistant", description: "Ask about live schedules, room availability, your reservations, and system-enforced rules." },
+  { match: "/assistant", title: "ComPort GPT", description: "Ask about live schedules, reservations, laboratories, and safe system actions." },
   { match: "/dashboard", title: "Operations Dashboard", description: "Monitor reservation volume, approval queues, and laboratory usage." },
   { match: "/management/users", title: "User Administration", description: "Manage access, roles, and account status across the system." },
   { match: "/management/laboratories/assign-staff", title: "Staff Assignment", description: "Coordinate laboratory staff coverage and room access responsibilities." },
@@ -26,6 +26,7 @@ const routeMeta = [
 export const Topbar = () => {
   const location = useLocation();
   const { user, logout } = useAuth();
+  const isAssistantRoute = location.pathname.startsWith("/assistant");
 
   const currentRoute = useMemo(
     () =>
@@ -52,15 +53,25 @@ export const Topbar = () => {
   );
 
   return (
-    <div className="mb-6 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-soft sm:px-5 lg:px-6">
-      <div className="flex flex-col gap-5">
+    <div
+      className={
+        isAssistantRoute
+          ? "mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-soft sm:px-5"
+          : "mb-6 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-soft sm:px-5 lg:px-6"
+      }
+    >
+      <div className={isAssistantRoute ? "flex flex-col gap-3" : "flex flex-col gap-5"}>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
-            <div className="mb-3 flex items-center gap-3">
+            <div className={isAssistantRoute ? "mb-2 flex items-center gap-3" : "mb-3 flex items-center gap-3"}>
               <img
                 src="/comport-logo.png"
                 alt="ComPort logo"
-                className="h-10 w-10 rounded-2xl border border-slate-200 bg-white object-cover p-1"
+                className={
+                  isAssistantRoute
+                    ? "h-9 w-9 rounded-2xl border border-slate-200 bg-white object-cover p-1"
+                    : "h-10 w-10 rounded-2xl border border-slate-200 bg-white object-cover p-1"
+                }
               />
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
                 {APP_SHORT_NAME}
@@ -69,7 +80,7 @@ export const Topbar = () => {
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-600">
               {currentRoute.title}
             </p>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+            <p className={isAssistantRoute ? "mt-1.5 max-w-3xl text-sm leading-6 text-slate-600" : "mt-2 max-w-3xl text-sm leading-6 text-slate-600"}>
               {currentRoute.description}
             </p>
           </div>
@@ -105,7 +116,13 @@ export const Topbar = () => {
           </div>
         </div>
 
-        <div className="grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+        <div
+          className={
+            isAssistantRoute
+              ? "flex flex-wrap gap-2 border-t border-slate-100 pt-3"
+              : "grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center"
+          }
+        >
           <div className="flex min-w-0 items-center gap-3 rounded-xl bg-slate-50 px-3 py-3">
             <CalendarDays className="h-4 w-4 shrink-0 text-brand-600" />
             <div className="min-w-0">

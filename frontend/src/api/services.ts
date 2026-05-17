@@ -273,6 +273,21 @@ export const assistantApi = {
       { message }
     );
     return data;
+  },
+  confirmPendingAction: async (actionId: string, confirmation?: string) => {
+    const { data } = await apiClient.post<ReservationAssistantResponse>(
+      `/ai/reservation-assistant/actions/${actionId}/confirm`,
+      {
+        confirmation
+      }
+    );
+    return data;
+  },
+  cancelPendingAction: async (actionId: string) => {
+    const { data } = await apiClient.post<ReservationAssistantResponse>(
+      `/ai/reservation-assistant/actions/${actionId}/cancel`
+    );
+    return data;
   }
 };
 

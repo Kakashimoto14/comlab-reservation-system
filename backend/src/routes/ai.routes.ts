@@ -6,7 +6,11 @@ import { authenticate } from "../middleware/auth.js";
 import { createRateLimiter } from "../middleware/rateLimit.js";
 import { validate } from "../middleware/validate.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { reservationAssistantSchema } from "../validations/ai.validation.js";
+import {
+  assistantActionIdSchema,
+  confirmAssistantActionSchema,
+  reservationAssistantSchema
+} from "../validations/ai.validation.js";
 
 const router = Router();
 const assistantRateLimit = createRateLimiter({
@@ -22,6 +26,20 @@ router.post(
   assistantRateLimit,
   validate(reservationAssistantSchema),
   asyncHandler(AiController.askReservationAssistant)
+);
+router.post(
+  "/reservation-assistant/actions/:actionId/confirm",
+  authenticate,
+  assistantRateLimit,
+  validate(confirmAssistantActionSchema),
+  asyncHandler(AiController.confirmPendingAssistantAction)
+);
+router.post(
+  "/reservation-assistant/actions/:actionId/cancel",
+  authenticate,
+  assistantRateLimit,
+  validate(assistantActionIdSchema),
+  asyncHandler(AiController.cancelPendingAssistantAction)
 );
 
 export default router;

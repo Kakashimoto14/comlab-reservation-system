@@ -11,3 +11,21 @@ export const reservationAssistantSchema = z.object({
   params: z.object({}).default({}),
   query: z.object({}).default({})
 });
+
+export const assistantActionIdSchema = z.object({
+  body: z.object({}).default({}),
+  params: z.object({
+    actionId: z.string().uuid()
+  }),
+  query: z.object({}).default({})
+});
+
+export const confirmAssistantActionSchema = z.object({
+  body: z.object({
+    confirmation: z.string().trim().min(1).max(100).optional()
+  }),
+  params: z.object({
+    actionId: z.string().uuid()
+  }),
+  query: z.object({}).default({})
+});

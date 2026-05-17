@@ -50,6 +50,7 @@ describe("DateRangeParser", () => {
         resultOffset: 6,
         hasMore: true
       },
+      pendingActionId: null,
       updatedAt: Date.now()
     });
 

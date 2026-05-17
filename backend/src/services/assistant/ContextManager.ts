@@ -43,7 +43,11 @@ export class ContextManager {
     category: AssistantQuerySnapshot["category"],
     query: AssistantQuerySnapshot | null
   ) {
-    const context = this.ensureContext(userId, sessionId, query?.language ?? "english");
+    const context = this.ensureContext(
+      userId,
+      sessionId,
+      query?.language ?? this.get(userId, sessionId)?.language ?? "english"
+    );
     context.messages = this.trimMessages([
       ...context.messages,
       {
@@ -54,6 +58,16 @@ export class ContextManager {
       }
     ]);
     context.activeQuery = query;
+    context.updatedAt = Date.now();
+  }
+
+  getPendingActionId(userId: number, sessionId: number) {
+    return this.get(userId, sessionId)?.pendingActionId ?? null;
+  }
+
+  setPendingActionId(userId: number, sessionId: number, actionId: string | null) {
+    const context = this.ensureContext(userId, sessionId, "english");
+    context.pendingActionId = actionId;
     context.updatedAt = Date.now();
   }
 
@@ -72,6 +86,7 @@ export class ContextManager {
       language,
       messages: [],
       activeQuery: null,
+      pendingActionId: null,
       updatedAt: Date.now()
     };
     this.contexts.set(key, created);

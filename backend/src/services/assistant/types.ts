@@ -2,6 +2,7 @@ import type {
   LaboratoryStatus,
   ReservationStatus,
   ReservationType,
+  ScheduleStatus,
   UserRole
 } from "@prisma/client";
 
@@ -13,6 +14,7 @@ export type AssistantCategory =
   | "available_laboratories"
   | "specific_laboratory"
   | "my_reservations"
+  | "visible_reservations"
   | "notifications"
   | "admin_stats"
   | "approval_queue"
@@ -22,7 +24,16 @@ export type AssistantCategory =
   | "reservation_submitter"
   | "reservation_rules"
   | "laboratory_lookup"
+  | "laboratory_catalog"
+  | "usage_analytics"
+  | "assigned_laboratory"
+  | "role_capabilities"
   | "general_reservation_help"
+  | "action_preview"
+  | "action_completed"
+  | "action_cancelled"
+  | "clarification"
+  | "permission_denied"
   | "out_of_scope";
 
 export type CurrentUser = {
@@ -77,6 +88,7 @@ export type CalendarNote = {
 };
 
 export type ReservationSummary = {
+  id?: number;
   reservationCode: string;
   status: ReservationStatus;
   date: string;
@@ -188,7 +200,134 @@ export type AssistantConversationContext = {
   language: AssistantLanguage;
   messages: AssistantConversationMessage[];
   activeQuery: AssistantQuerySnapshot | null;
+  pendingActionId: string | null;
   updatedAt: number;
+};
+
+export type AssistantCapabilityMatrix = {
+  role: UserRole;
+  read: string[];
+  write: string[];
+  denied: string[];
+  notes: string[];
+};
+
+export type AssistantConfirmationLevel = "LOW" | "MEDIUM" | "HIGH";
+
+export type AssistantActionType =
+  | "CREATE_RESERVATION"
+  | "CANCEL_RESERVATION"
+  | "APPROVE_RESERVATION"
+  | "BULK_APPROVE_RESERVATIONS"
+  | "REJECT_RESERVATION"
+  | "BULK_REJECT_RESERVATIONS"
+  | "CREATE_SCHEDULE"
+  | "CREATE_BULK_SCHEDULE"
+  | "UPDATE_SCHEDULE"
+  | "DELETE_SCHEDULE"
+  | "CREATE_LABORATORY"
+  | "UPDATE_LABORATORY"
+  | "DEACTIVATE_LABORATORY"
+  | "DELETE_LABORATORY";
+
+export type AssistantScheduleDraftEntry = {
+  laboratoryId: number;
+  laboratoryName: string;
+  roomCode: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  status: ScheduleStatus;
+};
+
+export type AssistantLaboratoryDraftInput = {
+  name: string;
+  roomCode: string;
+  building: string;
+  location?: string;
+  capacity: number;
+  computerCount: number;
+  description: string;
+  status: LaboratoryStatus;
+  imageUrl?: string;
+  custodianId?: number | null;
+};
+
+export type AssistantPendingActionPayload =
+  | {
+      kind: "create-reservation";
+      input: {
+        scheduleId: number;
+        laboratoryId: number;
+        reservationType: ReservationType;
+        pcId?: number | null;
+        purpose: string;
+        startTime: string;
+        endTime: string;
+      };
+    }
+  | {
+      kind: "cancel-reservation";
+      reservationId: number;
+    }
+  | {
+      kind: "review-reservations";
+      reservationIds: number[];
+      reviewStatus: "APPROVED" | "REJECTED";
+      remarks?: string | null;
+    }
+  | {
+      kind: "create-schedules";
+      entries: AssistantScheduleDraftEntry[];
+    }
+  | {
+      kind: "update-laboratory";
+      laboratoryId: number;
+      input: AssistantLaboratoryDraftInput;
+    }
+  | {
+      kind: "create-laboratory";
+      input: AssistantLaboratoryDraftInput;
+    }
+  | {
+      kind: "delete-laboratory";
+      laboratoryId: number;
+    };
+
+export type AssistantPendingActionRecord = {
+  actionId: string;
+  actionType: AssistantActionType;
+  requestedByUserId: number;
+  requestedByRole: UserRole;
+  sessionId: number;
+  targetRecords: {
+    reservationIds?: number[];
+    reservationCodes?: string[];
+    laboratoryIds?: number[];
+    laboratoryRoomCodes?: string[];
+    scheduleKeys?: string[];
+  };
+  affectedCount: number;
+  title: string;
+  summary: string;
+  warnings: string[];
+  requiredConfirmationLevel: AssistantConfirmationLevel;
+  confirmationPhrase: string | null;
+  expiresAt: number;
+  language: AssistantLanguage;
+  payload: AssistantPendingActionPayload;
+};
+
+export type AssistantPendingActionCard = {
+  actionId: string;
+  actionType: AssistantActionType;
+  title: string;
+  summary: string;
+  affectedCount: number;
+  warnings: string[];
+  requiredConfirmationLevel: AssistantConfirmationLevel;
+  confirmationPhrase: string | null;
+  expiresAt: string;
 };
 
 export type AssistantPresentation =
@@ -279,6 +418,51 @@ export type AssistantPresentation =
       };
     }
   | {
+      type: "laboratory-catalog";
+      title: string;
+      laboratories: Array<{
+        id: number;
+        name: string;
+        roomCode: string;
+        building: string;
+        status: LaboratoryStatus;
+        capacity: number;
+        computerCount: number;
+        assignedStaffName: string | null;
+      }>;
+    }
+  | {
+      type: "assigned-laboratory";
+      title: string;
+      laboratory:
+        | {
+            id: number;
+            name: string;
+            roomCode: string;
+            building: string;
+            status: LaboratoryStatus;
+          }
+        | null;
+    }
+  | {
+      type: "summary";
+      title: string;
+      items: Array<{
+        label: string;
+        value: string;
+      }>;
+      notes?: string[];
+    }
+  | {
+      type: "capabilities";
+      title: string;
+      role: UserRole;
+      read: string[];
+      write: string[];
+      denied: string[];
+      notes: string[];
+    }
+  | {
       type: "rules";
       title: string;
       items: ReservationRule[];
@@ -290,6 +474,7 @@ export type ReservationAssistantResponse = {
   category: AssistantCategory;
   suggestions: string[];
   presentation?: AssistantPresentation;
+  pendingAction?: AssistantPendingActionCard;
 };
 
 export type IntentAnalysis = {

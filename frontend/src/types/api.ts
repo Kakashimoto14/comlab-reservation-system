@@ -219,6 +219,7 @@ export type ReservationAssistantCategory =
   | "available_laboratories"
   | "specific_laboratory"
   | "my_reservations"
+  | "visible_reservations"
   | "notifications"
   | "admin_stats"
   | "approval_queue"
@@ -228,8 +229,46 @@ export type ReservationAssistantCategory =
   | "reservation_submitter"
   | "reservation_rules"
   | "laboratory_lookup"
+  | "laboratory_catalog"
+  | "usage_analytics"
+  | "assigned_laboratory"
+  | "role_capabilities"
   | "general_reservation_help"
+  | "action_preview"
+  | "action_completed"
+  | "action_cancelled"
+  | "clarification"
+  | "permission_denied"
   | "out_of_scope";
+
+export type AssistantConfirmationLevel = "LOW" | "MEDIUM" | "HIGH";
+export type AssistantActionType =
+  | "CREATE_RESERVATION"
+  | "CANCEL_RESERVATION"
+  | "APPROVE_RESERVATION"
+  | "BULK_APPROVE_RESERVATIONS"
+  | "REJECT_RESERVATION"
+  | "BULK_REJECT_RESERVATIONS"
+  | "CREATE_SCHEDULE"
+  | "CREATE_BULK_SCHEDULE"
+  | "UPDATE_SCHEDULE"
+  | "DELETE_SCHEDULE"
+  | "CREATE_LABORATORY"
+  | "UPDATE_LABORATORY"
+  | "DEACTIVATE_LABORATORY"
+  | "DELETE_LABORATORY";
+
+export type AssistantPendingAction = {
+  actionId: string;
+  actionType: AssistantActionType;
+  title: string;
+  summary: string;
+  affectedCount: number;
+  warnings: string[];
+  requiredConfirmationLevel: AssistantConfirmationLevel;
+  confirmationPhrase: string | null;
+  expiresAt: string;
+};
 
 export type AssistantTimeWindow = {
   startTime: string;
@@ -362,6 +401,51 @@ export type ReservationAssistantPresentation =
       };
     }
   | {
+      type: "laboratory-catalog";
+      title: string;
+      laboratories: Array<{
+        id: number;
+        name: string;
+        roomCode: string;
+        building: string;
+        status: LaboratoryStatus;
+        capacity: number;
+        computerCount: number;
+        assignedStaffName: string | null;
+      }>;
+    }
+  | {
+      type: "assigned-laboratory";
+      title: string;
+      laboratory:
+        | {
+            id: number;
+            name: string;
+            roomCode: string;
+            building: string;
+            status: LaboratoryStatus;
+          }
+        | null;
+    }
+  | {
+      type: "summary";
+      title: string;
+      items: Array<{
+        label: string;
+        value: string;
+      }>;
+      notes?: string[];
+    }
+  | {
+      type: "capabilities";
+      title: string;
+      role: UserRole;
+      read: string[];
+      write: string[];
+      denied: string[];
+      notes: string[];
+    }
+  | {
       type: "rules";
       title: string;
       items: Array<{
@@ -376,4 +460,5 @@ export type ReservationAssistantResponse = {
   category: ReservationAssistantCategory;
   suggestions: string[];
   presentation?: ReservationAssistantPresentation;
+  pendingAction?: AssistantPendingAction;
 };

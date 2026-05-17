@@ -1,6 +1,15 @@
 import { useMutation } from "@tanstack/react-query";
 import type { AxiosError } from "axios";
-import { Bot, Clock3, RefreshCw, SendHorizonal, ShieldCheck, Sparkles } from "lucide-react";
+import {
+  Bot,
+  CheckCircle2,
+  Clock3,
+  RefreshCw,
+  SendHorizonal,
+  ShieldCheck,
+  Sparkles,
+  XCircle
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
@@ -8,10 +17,17 @@ import { useNavigate } from "react-router-dom";
 import { assistantApi } from "../api/services";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
+import { Input } from "../components/ui/Input";
 import { PageHeader } from "../components/ui/PageHeader";
 import { Textarea } from "../components/ui/Textarea";
 import { useAuth } from "../store/AuthContext";
-import type { ReservationAssistantCategory, ReservationAssistantPresentation } from "../types/api";
+import type {
+  AssistantPendingAction,
+  ReservationAssistantCategory,
+  ReservationAssistantPresentation,
+  ReservationAssistantResponse,
+  UserRole
+} from "../types/api";
 import { roleLabels } from "../utils/constants";
 import { formatDate, formatDateTime, formatTimeRange } from "../utils/format";
 
@@ -22,6 +38,7 @@ type ConversationMessage = {
   category?: ReservationAssistantCategory;
   suggestions?: string[];
   presentation?: ReservationAssistantPresentation;
+  pendingAction?: AssistantPendingAction;
 };
 
 type ApiErrorBody = {
@@ -29,14 +46,33 @@ type ApiErrorBody = {
   errors?: Record<string, string[]>;
 };
 
-const promptSuggestions = [
-  "Who am I?",
-  "What are my reservations today?",
-  "Available ba ang CL-302 bukas?",
-  "What schedules are available this week?",
-  "What are the reservation rules?"
-];
+type ResolvedActionStatus = "confirmed" | "cancelled";
+
 const ASSISTANT_SESSION_STORAGE_KEY = "comportAssistantConversation";
+
+const promptSuggestionsByRole: Record<UserRole, string[]> = {
+  STUDENT: [
+    "Who am I?",
+    "Ano reservation ko ngayon?",
+    "Available ba CL-302 bukas?",
+    "Reserve CL-302 tomorrow 9-10 for programming.",
+    "What are the reservation rules?"
+  ],
+  LABORATORY_STAFF: [
+    "Who am I?",
+    "Show reservations needing approval.",
+    "Show my lab schedule this week.",
+    "Create schedule for my lab this week 8-5.",
+    "Summarize today's reservations."
+  ],
+  ADMIN: [
+    "Who am I?",
+    "Show system summary.",
+    "How many pending reservations?",
+    "Create schedules for all active labs next week 8-5.",
+    "Add laboratory CL-304."
+  ]
+};
 
 export const ReservationAssistantPage = () => {
   const navigate = useNavigate();
@@ -46,55 +82,106 @@ export const ReservationAssistantPage = () => {
   const [assistantError, setAssistantError] = useState<string | null>(null);
   const [lastSubmittedMessage, setLastSubmittedMessage] = useState<string | null>(null);
   const [hasRestoredConversation, setHasRestoredConversation] = useState(false);
+  const [resolvedActionIds, setResolvedActionIds] = useState<Record<string, ResolvedActionStatus>>({});
   const messageFeedEndRef = useRef<HTMLDivElement | null>(null);
   const storageKey = user ? `${ASSISTANT_SESSION_STORAGE_KEY}:${user.id}` : null;
+  const promptSuggestions = user ? promptSuggestionsByRole[user.role] : promptSuggestionsByRole.STUDENT;
+
+  const appendAssistantResponse = (response: ReservationAssistantResponse) => {
+    setAssistantError(null);
+    setMessages((currentMessages) => [
+      ...currentMessages,
+      {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: response.reply,
+        category: response.category,
+        suggestions: response.suggestions,
+        presentation: response.presentation,
+        pendingAction: response.pendingAction
+      }
+    ]);
+  };
+
+  const handleAssistantError = (error: unknown, fallbackMessage: string) => {
+    const axiosError = error as AxiosError<ApiErrorBody>;
+    const statusCode = axiosError.response?.status;
+
+    if (statusCode === 401) {
+      const message = "Please log in to use ComPort GPT.";
+      setAssistantError(message);
+      toast.error(message);
+      navigate("/login", {
+        state: {
+          authMessage: message,
+          from: { pathname: "/assistant" }
+        }
+      });
+      return;
+    }
+
+    if (statusCode === 400) {
+      const validationMessage =
+        axiosError.response?.data?.errors?.message?.[0] ??
+        axiosError.response?.data?.message ??
+        fallbackMessage;
+      setAssistantError(validationMessage);
+      toast.error(validationMessage);
+      return;
+    }
+
+    setAssistantError(fallbackMessage);
+    toast.error(fallbackMessage);
+  };
 
   const assistantMutation = useMutation({
     mutationFn: assistantApi.askReservationAssistant,
-    onSuccess: (response) => {
-      setAssistantError(null);
-      setMessages((currentMessages) => [
-        ...currentMessages,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: response.reply,
-          category: response.category,
-          suggestions: response.suggestions,
-          presentation: response.presentation
-        }
-      ]);
+    onSuccess: appendAssistantResponse,
+    onError: (error) => {
+      handleAssistantError(
+        error,
+        "Sorry, I couldn't complete that request. Please try again."
+      );
+    }
+  });
+
+  const confirmActionMutation = useMutation({
+    mutationFn: ({
+      actionId,
+      confirmation
+    }: {
+      actionId: string;
+      confirmation?: string;
+    }) => assistantApi.confirmPendingAction(actionId, confirmation),
+    onSuccess: (response, variables) => {
+      appendAssistantResponse(response);
+      setResolvedActionIds((current) => ({
+        ...current,
+        [variables.actionId]: "confirmed"
+      }));
     },
     onError: (error) => {
-      const axiosError = error as AxiosError<ApiErrorBody>;
-      const statusCode = axiosError.response?.status;
+      handleAssistantError(
+        error,
+        "Sorry, I couldn't complete that request. Please try again."
+      );
+    }
+  });
 
-      if (statusCode === 401) {
-        const message = "Please log in to use the ComPort Assistant.";
-        setAssistantError(message);
-        toast.error(message);
-        navigate("/login", {
-          state: {
-            authMessage: message,
-            from: { pathname: "/assistant" }
-          }
-        });
-        return;
-      }
-
-      if (statusCode === 400) {
-        const validationMessage =
-          axiosError.response?.data?.errors?.message?.[0] ??
-          axiosError.response?.data?.message ??
-          "Please adjust your question and try again.";
-        setAssistantError(validationMessage);
-        toast.error(validationMessage);
-        return;
-      }
-
-      const fallbackMessage = "Sorry, I couldn't reach the assistant right now. Please try again.";
-      setAssistantError(fallbackMessage);
-      toast.error(fallbackMessage);
+  const cancelActionMutation = useMutation({
+    mutationFn: ({ actionId }: { actionId: string }) => assistantApi.cancelPendingAction(actionId),
+    onSuccess: (response, variables) => {
+      appendAssistantResponse(response);
+      setResolvedActionIds((current) => ({
+        ...current,
+        [variables.actionId]: "cancelled"
+      }));
+    },
+    onError: (error) => {
+      handleAssistantError(
+        error,
+        "Sorry, I couldn't complete that request. Please try again."
+      );
     }
   });
 
@@ -103,10 +190,10 @@ export const ReservationAssistantPage = () => {
     const descriptionTag = document.querySelector('meta[name="description"]');
     const previousDescription = descriptionTag?.getAttribute("content") ?? "";
 
-    document.title = "ComPort Assistant | ComPort";
+    document.title = "ComPort GPT | ComPort";
     descriptionTag?.setAttribute(
       "content",
-      "ComPort Assistant provides grounded help for laboratory schedules, reservation status, room availability, and reservation rules."
+      "ComPort GPT is the role-aware assistant for grounded reservation answers, schedule checks, previews, and safe confirmed actions."
     );
 
     return () => {
@@ -117,7 +204,13 @@ export const ReservationAssistantPage = () => {
 
   useEffect(() => {
     messageFeedEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, assistantMutation.isPending, assistantError]);
+  }, [
+    messages,
+    assistantMutation.isPending,
+    confirmActionMutation.isPending,
+    cancelActionMutation.isPending,
+    assistantError
+  ]);
 
   useEffect(() => {
     if (!storageKey) {
@@ -130,20 +223,24 @@ export const ReservationAssistantPage = () => {
       if (!rawConversation) {
         setMessages([]);
         setLastSubmittedMessage(null);
+        setResolvedActionIds({});
         return;
       }
 
       const parsedConversation = JSON.parse(rawConversation) as {
         messages?: ConversationMessage[];
         lastSubmittedMessage?: string | null;
+        resolvedActionIds?: Record<string, ResolvedActionStatus>;
       };
 
       setMessages(parsedConversation.messages ?? []);
       setLastSubmittedMessage(parsedConversation.lastSubmittedMessage ?? null);
+      setResolvedActionIds(parsedConversation.resolvedActionIds ?? {});
     } catch (error) {
       console.error("[assistant] Failed to restore session conversation.", error);
       setMessages([]);
       setLastSubmittedMessage(null);
+      setResolvedActionIds({});
     } finally {
       setHasRestoredConversation(true);
     }
@@ -158,15 +255,21 @@ export const ReservationAssistantPage = () => {
       storageKey,
       JSON.stringify({
         messages: messages.slice(-20),
-        lastSubmittedMessage
+        lastSubmittedMessage,
+        resolvedActionIds
       })
     );
-  }, [hasRestoredConversation, lastSubmittedMessage, messages, storageKey]);
+  }, [hasRestoredConversation, lastSubmittedMessage, messages, resolvedActionIds, storageKey]);
 
   const sendMessage = (message: string) => {
     const trimmedMessage = message.trim();
 
-    if (!trimmedMessage || assistantMutation.isPending) {
+    if (
+      !trimmedMessage ||
+      assistantMutation.isPending ||
+      confirmActionMutation.isPending ||
+      cancelActionMutation.isPending
+    ) {
       return;
     }
 
@@ -192,7 +295,12 @@ export const ReservationAssistantPage = () => {
   };
 
   const retryLastQuestion = () => {
-    if (!lastSubmittedMessage || assistantMutation.isPending) {
+    if (
+      !lastSubmittedMessage ||
+      assistantMutation.isPending ||
+      confirmActionMutation.isPending ||
+      cancelActionMutation.isPending
+    ) {
       return;
     }
 
@@ -205,8 +313,8 @@ export const ReservationAssistantPage = () => {
   return (
     <div className="space-y-6 overflow-x-hidden">
       <PageHeader
-        title="ComPort Assistant"
-        description="Ask for reservation help in plain language. Answers stay grounded in your account, reservations, notifications, schedules, room availability, and approved system rules."
+        title="ComPort GPT"
+        description="Ask in English, Tagalog, or Taglish. ComPort GPT stays grounded in your authenticated role, system records, and safe confirmed workflows."
       />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(18rem,0.9fr)]">
@@ -221,21 +329,21 @@ export const ReservationAssistantPage = () => {
                 />
                 <div>
                   <p className="text-sm font-semibold uppercase tracking-[0.2em] text-brand-700">
-                    AI Reservation Assistant
+                    Role-Aware AI Assistant
                   </p>
-                  <p className="mt-1 text-lg font-semibold text-slate-900">ComPort Assistant</p>
+                  <p className="mt-1 text-lg font-semibold text-slate-900">ComPort GPT</p>
                   <p className="text-xs text-slate-500">
-                    Answers are based on ComPort system records.
+                    Answers and actions stay grounded in ComPort system records.
                   </p>
                 </div>
               </div>
 
               <div className="flex flex-wrap gap-2 text-xs font-semibold">
                 <span className="rounded-full bg-white px-3 py-1.5 text-slate-600 shadow-soft">
-                  Live schedule context
+                  {user ? roleLabels[user.role] : "Role-aware"}
                 </span>
                 <span className="rounded-full bg-white px-3 py-1.5 text-slate-600 shadow-soft">
-                  Reservation-aware replies
+                  Draft + confirm actions
                 </span>
               </div>
             </div>
@@ -245,7 +353,11 @@ export const ReservationAssistantPage = () => {
             className="flex-1 space-y-4 overflow-y-auto px-5 py-5 sm:px-6"
             role="log"
             aria-live="polite"
-            aria-busy={assistantMutation.isPending}
+            aria-busy={
+              assistantMutation.isPending ||
+              confirmActionMutation.isPending ||
+              cancelActionMutation.isPending
+            }
           >
             {!messages.length && !assistantMutation.isPending ? (
               <div className="flex min-h-[22rem] flex-col items-center justify-center text-center">
@@ -255,12 +367,12 @@ export const ReservationAssistantPage = () => {
                   className="h-20 w-20 rounded-3xl border border-slate-200 bg-white object-cover p-1 shadow-soft"
                 />
                 <h2 className="mt-5 text-2xl font-semibold text-slate-900">
-                  Start with a reservation question
+                  Start with a ComPort question
                 </h2>
                 <p className="mt-3 max-w-xl text-sm leading-6 text-slate-500">
-                  Ask about your account, reservations, notifications, schedules, available
-                  laboratories, or reservation rules. If the records do not confirm something, the
-                  assistant will say so instead of guessing.
+                  Ask about identity, reservations, laboratory availability, schedules, approval
+                  queues, summaries, or safe admin and staff actions. If the records do not confirm
+                  something, ComPort GPT will say so instead of guessing.
                 </p>
                 <div className="mt-6 flex max-w-2xl flex-wrap justify-center gap-2">
                   {promptSuggestions.map((prompt) => (
@@ -296,9 +408,36 @@ export const ReservationAssistantPage = () => {
                         : "mb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400"
                     }
                   >
-                    {message.role === "user" ? "You" : "ComPort Assistant"}
+                    {message.role === "user" ? "You" : "ComPort GPT"}
                   </p>
                   <p className="whitespace-pre-line break-words">{message.content}</p>
+                  {message.role === "assistant" && message.pendingAction ? (
+                    <div className="mt-4">
+                      <PendingActionCard
+                        action={message.pendingAction}
+                        resolvedStatus={resolvedActionIds[message.pendingAction.actionId]}
+                        isConfirming={
+                          confirmActionMutation.isPending &&
+                          confirmActionMutation.variables?.actionId === message.pendingAction.actionId
+                        }
+                        isCancelling={
+                          cancelActionMutation.isPending &&
+                          cancelActionMutation.variables?.actionId === message.pendingAction.actionId
+                        }
+                        onConfirm={(confirmation) =>
+                          confirmActionMutation.mutate({
+                            actionId: message.pendingAction!.actionId,
+                            confirmation
+                          })
+                        }
+                        onCancel={() =>
+                          cancelActionMutation.mutate({
+                            actionId: message.pendingAction!.actionId
+                          })
+                        }
+                      />
+                    </div>
+                  ) : null}
                   {message.role === "assistant" && message.presentation ? (
                     <div className="mt-4">
                       <AssistantPresentationCard presentation={message.presentation} />
@@ -310,7 +449,11 @@ export const ReservationAssistantPage = () => {
                         <button
                           key={`${message.id}-${suggestion}`}
                           type="button"
-                          disabled={assistantMutation.isPending}
+                          disabled={
+                            assistantMutation.isPending ||
+                            confirmActionMutation.isPending ||
+                            cancelActionMutation.isPending
+                          }
                           className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-brand-200 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
                           onClick={() => sendMessage(suggestion)}
                         >
@@ -327,7 +470,7 @@ export const ReservationAssistantPage = () => {
               <div className="flex justify-start">
                 <div className="max-w-[90%] rounded-3xl rounded-bl-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 shadow-soft sm:max-w-[85%]">
                   <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                    ComPort Assistant
+                    ComPort GPT
                   </p>
                   <div className="flex items-center gap-2">
                     <span className="flex gap-1">
@@ -335,7 +478,7 @@ export const ReservationAssistantPage = () => {
                       <span className="h-2 w-2 animate-pulse rounded-full bg-brand-400 [animation-delay:-0.1s]" />
                       <span className="h-2 w-2 animate-pulse rounded-full bg-brand-500" />
                     </span>
-                    <span>Checking ComPort records...</span>
+                    <span>ComPort GPT is checking system records...</span>
                   </div>
                 </div>
               </div>
@@ -368,7 +511,11 @@ export const ReservationAssistantPage = () => {
                 <button
                   key={prompt}
                   type="button"
-                  disabled={assistantMutation.isPending}
+                  disabled={
+                    assistantMutation.isPending ||
+                    confirmActionMutation.isPending ||
+                    cancelActionMutation.isPending
+                  }
                   className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-left text-xs font-semibold text-slate-600 transition hover:border-brand-200 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={() => sendMessage(prompt)}
                 >
@@ -382,7 +529,7 @@ export const ReservationAssistantPage = () => {
                 id="assistant-composer"
                 value={draft}
                 className="min-h-[7.5rem] resize-y"
-                placeholder="Ask about your account, reservations, notifications, schedules, or laboratory availability."
+                placeholder="Ask in English, Tagalog, or Taglish. Example: approve all pending today, available ba CL-302 bukas, or reserve CL-302 tomorrow 9-10."
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
@@ -393,8 +540,8 @@ export const ReservationAssistantPage = () => {
               />
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-slate-500">
-                  Press Enter to send. Use Shift+Enter for a new line. The assistant uses current
-                  reservation system records and approved system context when details are available.
+                  Press Enter to send. Shift+Enter adds a new line. Risky actions stay in draft
+                  mode until you explicitly confirm them.
                 </p>
                 <Button
                   type="button"
@@ -403,7 +550,7 @@ export const ReservationAssistantPage = () => {
                   onClick={() => sendMessage(draft)}
                 >
                   <SendHorizonal className="mr-2 h-4 w-4" />
-                  Send to ComPort Assistant
+                  Send to ComPort GPT
                 </Button>
               </div>
             </div>
@@ -417,30 +564,25 @@ export const ReservationAssistantPage = () => {
                 <Sparkles className="h-5 w-5" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">Best Questions</h2>
+                <h2 className="text-lg font-semibold text-slate-900">Suggested Prompts</h2>
                 <p className="text-sm text-slate-500">
-                  The assistant is strongest when you ask about current system records.
+                  Suggestions adapt to your current authenticated role.
                 </p>
               </div>
             </div>
 
             <div className="mt-5 space-y-3 text-sm text-slate-600">
-              <div className="flex items-start gap-3 rounded-2xl bg-slate-50 px-4 py-3">
-                <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
-                <p>Your account details, reservations, and notification updates</p>
-              </div>
-              <div className="flex items-start gap-3 rounded-2xl bg-slate-50 px-4 py-3">
-                <Bot className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
-                <p>Laboratory availability for a date or room code</p>
-              </div>
-              <div className="flex items-start gap-3 rounded-2xl bg-slate-50 px-4 py-3">
-                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
-                <p>Published schedule windows by day, week, and specific laboratory</p>
-              </div>
-              <div className="flex items-start gap-3 rounded-2xl bg-slate-50 px-4 py-3">
-                <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
-                <p>Role-based approval queues, counts, and recent actions for staff/admin</p>
-              </div>
+              {promptSuggestions.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  className="flex w-full items-start gap-3 rounded-2xl bg-slate-50 px-4 py-3 text-left transition hover:bg-slate-100"
+                  onClick={() => sendMessage(prompt)}
+                >
+                  <Bot className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+                  <span>{prompt}</span>
+                </button>
+              ))}
             </div>
           </Card>
 
@@ -450,22 +592,131 @@ export const ReservationAssistantPage = () => {
                 <ShieldCheck className="h-5 w-5" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">Scope Guardrails</h2>
-                <p className="text-sm text-slate-500">Reliable answers start with matchable data.</p>
+                <h2 className="text-lg font-semibold text-slate-900">Safety Flow</h2>
+                <p className="text-sm text-slate-500">
+                  Draft first, confirm second, then execute.
+                </p>
               </div>
             </div>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              ComPort Assistant does not guess missing data and it does not answer unrelated
-              questions. If a laboratory name cannot be matched, try the exact room code such as
-              <span className="font-semibold text-slate-900"> CL-301</span>.
-            </p>
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-6 text-slate-500">
-              Answers are based on ComPort system records and approved system context. If the data
-              is not available, the assistant will say it cannot confirm it yet.
+            <div className="mt-4 space-y-3 text-sm text-slate-600">
+              <div className="flex items-start gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+                <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+                <p>ComPort GPT prepares a preview before it changes reservations, schedules, or laboratories.</p>
+              </div>
+              <div className="flex items-start gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                <p>Low and medium risk actions need explicit confirmation. High risk actions require an exact typed phrase.</p>
+              </div>
+              <div className="flex items-start gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+                <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+                <p>No database change happens before confirmation, and unsafe or unauthorized actions are blocked.</p>
+              </div>
             </div>
           </Card>
         </div>
       </div>
+    </div>
+  );
+};
+
+const PendingActionCard = ({
+  action,
+  resolvedStatus,
+  isConfirming,
+  isCancelling,
+  onConfirm,
+  onCancel
+}: {
+  action: AssistantPendingAction;
+  resolvedStatus?: ResolvedActionStatus;
+  isConfirming: boolean;
+  isCancelling: boolean;
+  onConfirm: (confirmation?: string) => void;
+  onCancel: () => void;
+}) => {
+  const [typedConfirmation, setTypedConfirmation] = useState("");
+  const requiresTypedConfirmation = action.requiredConfirmationLevel === "HIGH";
+  const isResolved = Boolean(resolvedStatus);
+  const isBusy = isConfirming || isCancelling;
+
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">{action.title}</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Expires {formatDateTime(action.expiresAt)}
+          </p>
+        </div>
+        <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-700">
+          {action.requiredConfirmationLevel}
+        </span>
+      </div>
+
+      <div className="mt-4 space-y-3 text-sm text-slate-600">
+        <div className="rounded-2xl bg-slate-50 px-4 py-3">
+          <p>{action.summary}</p>
+        </div>
+        <p>
+          Affected records: <span className="font-semibold text-slate-900">{action.affectedCount}</span>
+        </p>
+        {action.warnings.length ? (
+          <div className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
+            {action.warnings.map((warning) => (
+              <p key={warning}>{warning}</p>
+            ))}
+          </div>
+        ) : null}
+        {requiresTypedConfirmation && action.confirmationPhrase ? (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Required confirmation phrase
+            </p>
+            <div className="rounded-2xl bg-slate-900 px-4 py-3 text-xs font-semibold tracking-[0.16em] text-white">
+              {action.confirmationPhrase}
+            </div>
+            {!isResolved ? (
+              <Input
+                value={typedConfirmation}
+                placeholder="Type the exact phrase"
+                onChange={(event) => setTypedConfirmation(event.target.value)}
+              />
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      {isResolved ? (
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
+          {resolvedStatus === "confirmed" ? "Action sent for execution" : "Action cancelled"}
+        </div>
+      ) : (
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+          <Button
+            type="button"
+            className="w-full justify-center sm:w-auto"
+            disabled={
+              isBusy ||
+              (requiresTypedConfirmation &&
+                typedConfirmation.trim() !== action.confirmationPhrase)
+            }
+            onClick={() =>
+              onConfirm(requiresTypedConfirmation ? typedConfirmation.trim() : undefined)
+            }
+          >
+            {isConfirming ? "Confirming..." : "Confirm"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full justify-center sm:w-auto"
+            disabled={isBusy}
+            onClick={onCancel}
+          >
+            {isCancelling ? "Cancelling..." : "Cancel"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 };
@@ -755,6 +1006,110 @@ const AssistantPresentationCard = ({
         <p className="mt-3 text-sm leading-6 text-slate-600">
           {presentation.laboratory.description}
         </p>
+      </div>
+    );
+  }
+
+  if (presentation.type === "laboratory-catalog") {
+    return (
+      <div className="space-y-3">
+        {presentation.laboratories.map((laboratory) => (
+          <div key={laboratory.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-slate-900">
+                {laboratory.roomCode} - {laboratory.name}
+              </p>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-700">
+                {laboratory.status}
+              </span>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">{laboratory.building}</p>
+            <p className="mt-2 text-xs text-slate-500">
+              Capacity: {laboratory.capacity} | Computers: {laboratory.computerCount}
+            </p>
+            <p className="mt-2 text-xs text-slate-500">
+              Assigned staff: {laboratory.assignedStaffName ?? "None"}
+            </p>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (presentation.type === "assigned-laboratory") {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        {presentation.laboratory ? (
+          <>
+            <p className="text-sm font-semibold text-slate-900">
+              {presentation.laboratory.roomCode} - {presentation.laboratory.name}
+            </p>
+            <p className="mt-2 text-xs text-slate-500">{presentation.laboratory.building}</p>
+            <p className="mt-2 text-xs text-slate-500">
+              Status: {presentation.laboratory.status}
+            </p>
+          </>
+        ) : (
+          <p className="text-sm text-slate-600">No assigned laboratory found.</p>
+        )}
+      </div>
+    );
+  }
+
+  if (presentation.type === "summary") {
+    return (
+      <div className="space-y-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="text-sm font-semibold text-slate-900">{presentation.title}</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {presentation.items.map((item) => (
+            <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                {item.label}
+              </p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{item.value}</p>
+            </div>
+          ))}
+        </div>
+        {presentation.notes?.length ? (
+          <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+            {presentation.notes.map((note) => (
+              <p key={note}>{note}</p>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (presentation.type === "capabilities") {
+    return (
+      <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-slate-900">{presentation.title}</p>
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-700">
+            {roleLabels[presentation.role]}
+          </span>
+        </div>
+        <div className="space-y-2 text-sm text-slate-600">
+          <p className="font-semibold text-slate-900">Read access</p>
+          {presentation.read.map((item) => (
+            <p key={item}>{item}</p>
+          ))}
+        </div>
+        <div className="space-y-2 text-sm text-slate-600">
+          <p className="font-semibold text-slate-900">Write access</p>
+          {presentation.write.map((item) => (
+            <p key={item}>{item}</p>
+          ))}
+        </div>
+        <div className="space-y-2 text-sm text-slate-600">
+          <p className="font-semibold text-slate-900">Blocked access</p>
+          {presentation.denied.map((item) => (
+            <p key={item}>{item}</p>
+          ))}
+        </div>
       </div>
     );
   }

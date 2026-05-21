@@ -22,17 +22,12 @@ import { ResponseFormatter } from "./assistant/ResponseFormatter.js";
 import { normalizeAssistantText } from "./assistant/text.js";
 import type {
   AssistantActionType,
-<<<<<<< HEAD
-  AssistantBulkScheduleDraftSlots,
-=======
   AssistantActiveFlow,
->>>>>>> codex/AI_Improvements
   AssistantCategory,
   AssistantConfirmationLevel,
   AssistantPendingActionCard,
   AssistantPendingActionPayload,
   AssistantPendingActionRecord,
-  AssistantPendingDraft,
   AssistantPresentation,
   AssistantQuerySnapshot,
   CurrentUser,
@@ -105,11 +100,6 @@ type ScheduleDraftEntry = {
   status: ScheduleStatus;
 };
 
-type ScheduleLaboratorySelection =
-  | { kind: "ready"; laboratories: LaboratorySummary[]; usedAllActiveLabs: boolean }
-  | { kind: "missing" }
-  | { kind: "denied"; message: string };
-
 export class ReservationAssistantService {
   private readonly tools: AssistantToolService;
   private readonly intentDetector: IntentDetector;
@@ -162,22 +152,13 @@ export class ReservationAssistantService {
       return this.finalizeResponse(currentUser, inlineActionResponse.response, inlineActionResponse.query);
     }
 
-<<<<<<< HEAD
-    const pendingDraftResponse = await this.tryContinuePendingDraft(
-      currentUser,
-=======
     const activeFlowResponse = await this.tryContinueActiveFlow(
       currentUser,
       message,
->>>>>>> codex/AI_Improvements
       intent,
       laboratories
     );
 
-<<<<<<< HEAD
-    if (pendingDraftResponse) {
-      return this.finalizeResponse(currentUser, pendingDraftResponse.response, pendingDraftResponse.query);
-=======
     if (activeFlowResponse) {
       return this.finalizeResponse(currentUser, activeFlowResponse.response, activeFlowResponse.query);
     }
@@ -185,7 +166,6 @@ export class ReservationAssistantService {
     if (intent.category === "reservation_guide") {
       const guideResponse = this.buildReservationGuideResponse(currentUser, intent);
       return this.finalizeResponse(currentUser, guideResponse.response, guideResponse.query);
->>>>>>> codex/AI_Improvements
     }
 
     const draftedAction = await this.tryDraftWriteAction(
@@ -814,43 +794,9 @@ export class ReservationAssistantService {
       };
     }
 
-    if (normalized === "edit draft" || normalized.startsWith("edit draft ")) {
-      const language = this.inferLanguage(currentUser);
-      return {
-        response: {
-          reply: this.pick(language, {
-            english: "Tell me what to change in the draft, such as the date range, laboratories, or time range.",
-            tagalog: "Sabihin mo kung ano ang babaguhin sa draft, gaya ng date range, laboratories, o time range.",
-            taglish: "Sabihin mo kung ano ang i-edit sa draft, like date range, laboratories, or time range."
-          }),
-          category: "clarification",
-          suggestions: ["Cancel", "Create bulk schedule next week 8-5."]
-        },
-        query: contextManager.get(currentUser.id, currentUser.sessionId)?.activeQuery ?? null
-      };
-    }
-
     return null;
   }
 
-<<<<<<< HEAD
-  private async tryContinuePendingDraft(
-    currentUser: CurrentUser,
-    intent: ReturnType<IntentDetector["detect"]>,
-    laboratories: LaboratorySummary[]
-  ): Promise<HandledResponse | null> {
-    const pendingDraft = contextManager.getPendingDraft(currentUser.id, currentUser.sessionId);
-
-    if (!pendingDraft || pendingDraft.kind !== "CREATE_BULK_SCHEDULE") {
-      return null;
-    }
-
-    if (
-      pendingDraft.requestedByUserId !== currentUser.id ||
-      pendingDraft.sessionId !== currentUser.sessionId
-    ) {
-      contextManager.updatePendingDraft(currentUser.id, currentUser.sessionId, null);
-=======
   private async tryContinueActiveFlow(
     currentUser: CurrentUser,
     message: string,
@@ -961,261 +907,10 @@ export class ReservationAssistantService {
     flow: AssistantActiveFlow
   ): Promise<HandledResponse | null> {
     if (intent.category === "available_laboratories") {
->>>>>>> codex/AI_Improvements
       return null;
     }
 
     const normalized = intent.normalizedMessage;
-<<<<<<< HEAD
-
-    if (CANCEL_SYNONYMS.has(normalized)) {
-      contextManager.updatePendingDraft(currentUser.id, currentUser.sessionId, null);
-
-      return {
-        response: {
-          reply: this.pick(pendingDraft.language, {
-            english: "Okay, I cancelled the pending bulk schedule details. No schedule draft was created.",
-            tagalog: "Sige, kinansela ko ang pending bulk schedule details. Walang schedule draft na ginawa.",
-            taglish: "Sige, kinansela ko ang pending bulk schedule details. Walang schedule draft na ginawa."
-          }),
-          category: "action_cancelled",
-          suggestions: this.roleAwareSuggestions(currentUser.role, pendingDraft.language)
-        },
-        query: intent.previousQuery
-      };
-    }
-
-    const slotExtraction = await this.extractBulkScheduleSlots(
-      currentUser,
-      intent,
-      laboratories,
-      pendingDraft
-    );
-    if (slotExtraction.deniedMessage) {
-      return this.permissionDeniedResponse(currentUser, intent.language, slotExtraction.deniedMessage);
-    }
-
-    const mergedSlots = slotExtraction.slots;
-    const missingFields = this.getMissingBulkScheduleFields(mergedSlots);
-
-    if (missingFields.length) {
-      contextManager.updatePendingDraft(currentUser.id, currentUser.sessionId, {
-        ...pendingDraft,
-        language: intent.language,
-        slots: mergedSlots,
-        missingFields
-      });
-
-      return this.bulkScheduleClarificationResponse(
-        currentUser,
-        intent.language,
-        missingFields[0],
-        intent
-      );
-    }
-
-    contextManager.updatePendingDraft(currentUser.id, currentUser.sessionId, null);
-
-    return this.prepareBulkScheduleDraft(currentUser, intent, mergedSlots);
-  }
-
-  private async extractBulkScheduleSlots(
-    currentUser: CurrentUser,
-    intent: ReturnType<IntentDetector["detect"]>,
-    laboratories: LaboratorySummary[],
-    pendingDraft?: AssistantPendingDraft
-  ): Promise<{ slots: AssistantBulkScheduleDraftSlots; deniedMessage?: string }> {
-    const normalizedMessage = intent.normalizedMessage;
-    const previousSlots = pendingDraft?.slots;
-    const timeRange = this.extractTimeRange(normalizedMessage);
-    const laboratorySelection = await this.extractScheduleLaboratorySelection(
-      currentUser,
-      intent,
-      laboratories
-    );
-
-    if (laboratorySelection.kind === "denied") {
-      return {
-        slots: {
-          sourceMessage: `${previousSlots?.sourceMessage ?? ""} ${normalizedMessage}`.trim(),
-          laboratories: previousSlots?.laboratories,
-          usedAllActiveLabs: previousSlots?.usedAllActiveLabs,
-          range: intent.range.source === "default" ? previousSlots?.range : intent.range,
-          startTime: timeRange?.startTime ?? previousSlots?.startTime,
-          endTime: timeRange?.endTime ?? previousSlots?.endTime
-        },
-        deniedMessage: laboratorySelection.message
-      };
-    }
-
-    return {
-      slots: {
-        sourceMessage: `${previousSlots?.sourceMessage ?? ""} ${normalizedMessage}`.trim(),
-        laboratories:
-          laboratorySelection.kind === "ready"
-            ? laboratorySelection.laboratories
-            : previousSlots?.laboratories,
-        usedAllActiveLabs:
-          laboratorySelection.kind === "ready"
-            ? laboratorySelection.usedAllActiveLabs
-            : previousSlots?.usedAllActiveLabs,
-        range: intent.range.source === "default" ? previousSlots?.range : intent.range,
-        startTime: timeRange?.startTime ?? previousSlots?.startTime,
-        endTime: timeRange?.endTime ?? previousSlots?.endTime
-      }
-    };
-  }
-
-  private async extractScheduleLaboratorySelection(
-    currentUser: CurrentUser,
-    intent: ReturnType<IntentDetector["detect"]>,
-    laboratories: LaboratorySummary[]
-  ): Promise<ScheduleLaboratorySelection> {
-    const normalizedMessage = intent.normalizedMessage;
-
-    if (this.isAllLabsScheduleRequest(normalizedMessage)) {
-      if (currentUser.role !== "ADMIN") {
-        return {
-          kind: "denied",
-          message: "Only admins can create schedules for all active laboratories."
-        };
-      }
-
-      const activeLaboratories = (laboratories.length ? laboratories : await this.tools.listLaboratories())
-        .filter((laboratory) => laboratory.status === "AVAILABLE");
-
-      return {
-        kind: "ready",
-        laboratories: activeLaboratories,
-        usedAllActiveLabs: true
-      };
-    }
-
-    const roomCodes = this.extractRoomCodes(normalizedMessage);
-
-    if (roomCodes.length) {
-      const availableLaboratories = laboratories.length ? laboratories : await this.tools.listLaboratories();
-      const selectedLaboratories = roomCodes
-        .map((roomCode) => availableLaboratories.find((laboratory) => laboratory.roomCode === roomCode))
-        .filter((laboratory): laboratory is LaboratorySummary => Boolean(laboratory));
-
-      if (selectedLaboratories.length !== roomCodes.length) {
-        return {
-          kind: "denied",
-          message: "I couldn't find one of those laboratory room codes in the current records."
-        };
-      }
-
-      const inactive = selectedLaboratories.find((laboratory) => laboratory.status !== "AVAILABLE");
-
-      if (inactive) {
-        return {
-          kind: "denied",
-          message: `${inactive.roomCode} is not active right now, so I cannot include it in a schedule draft.`
-        };
-      }
-
-      if (currentUser.role === "LABORATORY_STAFF") {
-        const managed = await this.tools.getManagedLaboratories(currentUser);
-        const outsideScope = selectedLaboratories.find(
-          (laboratory) => !managed.some((managedLaboratory) => managedLaboratory.id === laboratory.id)
-        );
-
-        if (outsideScope) {
-          return {
-            kind: "denied",
-            message: "You can only create schedule drafts for laboratories assigned to your staff account."
-          };
-        }
-      }
-
-      return {
-        kind: "ready",
-        laboratories: selectedLaboratories,
-        usedAllActiveLabs: false
-      };
-    }
-
-    if (intent.laboratory) {
-      if (intent.laboratory.status !== "AVAILABLE") {
-        return {
-          kind: "denied",
-          message: `${intent.laboratory.roomCode} is not active right now, so I cannot include it in a schedule draft.`
-        };
-      }
-
-      return {
-        kind: "ready",
-        laboratories: [intent.laboratory],
-        usedAllActiveLabs: false
-      };
-    }
-
-    if (currentUser.role === "LABORATORY_STAFF" && this.referencesAssignedLab(normalizedMessage)) {
-      const managed = await this.tools.getManagedLaboratories(currentUser);
-
-      if (!managed.length) {
-        return {
-          kind: "denied",
-          message: "No laboratory is assigned to your staff account yet."
-        };
-      }
-
-      const availableLaboratories = laboratories.length ? laboratories : await this.tools.listLaboratories();
-      const selectedLaboratories = availableLaboratories.filter((laboratory) =>
-        managed.some((managedLaboratory) => managedLaboratory.id === laboratory.id)
-      );
-
-      return {
-        kind: "ready",
-        laboratories: selectedLaboratories,
-        usedAllActiveLabs: false
-      };
-    }
-
-    return { kind: "missing" };
-  }
-
-  private getMissingBulkScheduleFields(slots: AssistantBulkScheduleDraftSlots) {
-    const missingFields: AssistantPendingDraft["missingFields"] = [];
-
-    if (!slots.laboratories?.length) {
-      missingFields.push("laboratories");
-    }
-
-    if (!slots.range) {
-      missingFields.push("dateRange");
-    }
-
-    if (!slots.startTime || !slots.endTime) {
-      missingFields.push("timeRange");
-    }
-
-    return missingFields;
-  }
-
-  private bulkScheduleClarificationResponse(
-    currentUser: CurrentUser,
-    language: AssistantPendingActionRecord["language"],
-    missingField: AssistantPendingDraft["missingFields"][number],
-    intent: ReturnType<IntentDetector["detect"]>
-  ): HandledResponse {
-    const replyByField: Record<typeof missingField, string> = {
-      laboratories:
-        "Which laboratory should I use? You can enter a room code like CL-301 or say all active labs.",
-      dateRange:
-        "What date range should I use? You can say next week, this week, or May 26-29.",
-      timeRange:
-        "What start and end time should I use? For example: 08:00 to 17:00, 8am to 5pm, or 8-5."
-    };
-
-    return this.clarificationResponse(
-      currentUser,
-      language,
-      replyByField[missingField],
-      intent
-    );
-=======
     const filledSlots = {
       ...flow.collectedSlots,
       ...(flow.filledSlots ?? {})
@@ -1332,7 +1027,6 @@ export class ReservationAssistantService {
         `for ${purpose}`
       ].join(" ")
     });
->>>>>>> codex/AI_Improvements
   }
 
   private async draftReservationCreation(
@@ -1819,11 +1513,6 @@ export class ReservationAssistantService {
       );
     }
 
-<<<<<<< HEAD
-    const slotExtraction = await this.extractBulkScheduleSlots(currentUser, intent, []);
-    if (slotExtraction.deniedMessage) {
-      return this.permissionDeniedResponse(currentUser, intent.language, slotExtraction.deniedMessage);
-=======
     const timeRange = this.extractTimeRange(intent.normalizedMessage);
 
     if (!timeRange) {
@@ -1841,29 +1530,14 @@ export class ReservationAssistantService {
         "What start and end time should I use for the schedule? For example: 08:00 to 17:00.",
         intent
       );
->>>>>>> codex/AI_Improvements
     }
 
-    const slots = slotExtraction.slots;
-    const missingFields = this.getMissingBulkScheduleFields(slots);
+    const targetLaboratories = await this.resolveScheduleTargetLaboratories(currentUser, intent);
 
-    if (missingFields.length) {
-      contextManager.setPendingDraft(currentUser.id, currentUser.sessionId, {
-        kind: "CREATE_BULK_SCHEDULE",
-        requestedByUserId: currentUser.id,
-        requestedByRole: currentUser.role,
-        sessionId: currentUser.sessionId,
-        language: intent.language,
-        slots,
-        missingFields
-      });
-
-      return this.bulkScheduleClarificationResponse(currentUser, intent.language, missingFields[0], intent);
+    if (targetLaboratories.kind === "denied") {
+      return this.permissionDeniedResponse(currentUser, intent.language, targetLaboratories.message);
     }
 
-<<<<<<< HEAD
-    contextManager.updatePendingDraft(currentUser.id, currentUser.sessionId, null);
-=======
     if (targetLaboratories.kind === "clarify") {
       this.rememberScheduleFlow(currentUser, intent, {
         range: intent.range,
@@ -1875,26 +1549,8 @@ export class ReservationAssistantService {
 
       return this.clarificationResponse(currentUser, intent.language, targetLaboratories.message, intent);
     }
->>>>>>> codex/AI_Improvements
 
-    return this.prepareBulkScheduleDraft(currentUser, intent, slots);
-  }
-
-  private async prepareBulkScheduleDraft(
-    currentUser: CurrentUser,
-    intent: ReturnType<IntentDetector["detect"]>,
-    slots: AssistantBulkScheduleDraftSlots
-  ): Promise<HandledResponse> {
-    const timeRange =
-      slots.startTime && slots.endTime
-        ? { startTime: slots.startTime, endTime: slots.endTime }
-        : null;
-    const targetLaboratories = {
-      laboratories: slots.laboratories ?? [],
-      usedAllActiveLabs: slots.usedAllActiveLabs ?? false
-    };
-    const range = slots.range ?? intent.range;
-    const dates = this.collectScheduleDates(range, slots.sourceMessage);
+    const dates = this.collectScheduleDates(intent.range, intent.normalizedMessage);
 
     if (!dates.length) {
       return this.clarificationResponse(
@@ -1903,21 +1559,6 @@ export class ReservationAssistantService {
         "I couldn't determine which date or weekdays to use for the schedule draft yet.",
         intent
       );
-    }
-
-    if (!timeRange || !targetLaboratories.laboratories.length) {
-      const missingFields = this.getMissingBulkScheduleFields(slots);
-      contextManager.setPendingDraft(currentUser.id, currentUser.sessionId, {
-        kind: "CREATE_BULK_SCHEDULE",
-        requestedByUserId: currentUser.id,
-        requestedByRole: currentUser.role,
-        sessionId: currentUser.sessionId,
-        language: intent.language,
-        slots,
-        missingFields
-      });
-
-      return this.bulkScheduleClarificationResponse(currentUser, intent.language, missingFields[0], intent);
     }
 
     const entries = targetLaboratories.laboratories.flatMap((laboratory) =>
@@ -2023,39 +1664,19 @@ export class ReservationAssistantService {
         reply: this.pick(intent.language, {
           english:
             action.requiredConfirmationLevel === "HIGH"
-              ? `I prepared a bulk schedule draft for ${targetLaboratories.usedAllActiveLabs ? "all active laboratories" : uniqueRoomCodes.join(", ")}. Please review the laboratories, dates, time range, total blocks, and warnings before confirming.`
+              ? "I prepared the bulk schedule draft. Please review the count and warnings, then type the required confirmation phrase to continue."
               : "I prepared the schedule draft. Review the summary below, then confirm when you're ready.",
           tagalog:
             action.requiredConfirmationLevel === "HIGH"
-              ? `Naihanda ko na ang bulk schedule draft para sa ${targetLaboratories.usedAllActiveLabs ? "lahat ng active laboratories" : uniqueRoomCodes.join(", ")}. Pakisuri ang laboratories, dates, time range, total blocks, at warnings bago mag-confirm.`
+              ? "Naihanda ko na ang bulk schedule draft. Pakisuri ang count at warnings, tapos i-type ang required confirmation phrase para magpatuloy."
               : "Naihanda ko na ang schedule draft. Suriin ang summary sa ibaba, tapos i-confirm kapag handa ka na.",
           taglish:
             action.requiredConfirmationLevel === "HIGH"
-              ? `Prepared na ang bulk schedule draft for ${targetLaboratories.usedAllActiveLabs ? "all active laboratories" : uniqueRoomCodes.join(", ")}. Paki-review ang laboratories, dates, time range, total blocks, and warnings bago mag-confirm.`
+              ? "Prepared na ang bulk schedule draft. Paki-review ang count at warnings, tapos i-type ang required confirmation phrase para magpatuloy."
               : "Prepared na ang schedule draft. Review ang summary sa ibaba, tapos confirm kapag ready ka na."
         }),
         category: "action_preview",
         suggestions: this.confirmationSuggestions(action),
-        presentation: {
-          type: "summary",
-          title: validEntries.length === 1 ? "Schedule draft" : "Bulk schedule draft",
-          items: [
-            { label: "Laboratories", value: uniqueRoomCodes.join(", ") },
-            {
-              label: "Dates",
-              value:
-                dates.length === 1
-                  ? dates[0]
-                  : `${dates[0]} to ${dates[dates.length - 1]} (${dates.length} days)`
-            },
-            { label: "Start time", value: timeRange.startTime },
-            { label: "End time", value: timeRange.endTime },
-            { label: "Total schedule blocks", value: String(validEntries.length) }
-          ],
-          notes: warnings.length
-            ? warnings.slice(0, 8)
-            : ["No overlapping schedules were found for the requested draft."]
-        },
         pendingAction: this.toPendingActionCard(action)
       },
       query: intent.previousQuery
@@ -3227,7 +2848,6 @@ I can guide you now. Which laboratory would you like to reserve? You can type a 
 
     const action = pendingActionStore.create(record);
     contextManager.setPendingActionId(currentUser.id, currentUser.sessionId, action.actionId);
-    contextManager.updatePendingDraft(currentUser.id, currentUser.sessionId, null);
 
     return action;
   }
@@ -3247,16 +2867,6 @@ I can guide you now. Which laboratory would you like to reserve? You can type a 
   }
 
   private confirmationSuggestions(action: AssistantPendingActionRecord) {
-    if (action.actionType === "CREATE_SCHEDULE" || action.actionType === "CREATE_BULK_SCHEDULE") {
-      if (action.requiredConfirmationLevel === "HIGH") {
-        return action.confirmationPhrase
-          ? [action.confirmationPhrase, "Cancel", "Edit Draft"]
-          : ["Cancel", "Edit Draft"];
-      }
-
-      return ["Confirm Create Schedule", "Cancel", "Edit Draft"];
-    }
-
     if (action.requiredConfirmationLevel === "HIGH") {
       return action.confirmationPhrase ? [action.confirmationPhrase, "Cancel"] : ["Cancel"];
     }
@@ -3563,43 +3173,6 @@ I can guide you now. Which laboratory would you like to reserve? You can type a 
       : `${normalized.slice(0, 2)}-${normalized.slice(2)}`;
   }
 
-  private extractRoomCodes(message: string) {
-    return [
-      ...new Set(
-        Array.from(message.matchAll(/\bcl[-\s]?\d{3}\b/gi)).map((match) => {
-          const normalized = match[0].toUpperCase().replace(/\s+/g, "");
-          return normalized.includes("-")
-            ? normalized
-            : `${normalized.slice(0, 2)}-${normalized.slice(2)}`;
-        })
-      )
-    ];
-  }
-
-  private isAllLabsScheduleRequest(message: string) {
-    return (
-      /\ball active labs?\b/.test(message) ||
-      /\ball active laboratories\b/.test(message) ||
-      /\ball labs?\b/.test(message) ||
-      /\ball laboratories\b/.test(message) ||
-      /\bevery labs?\b/.test(message) ||
-      /\bevery laboratory\b/.test(message) ||
-      /\blahat ng active labs?\b/.test(message) ||
-      /\blahat ng active laborator/.test(message) ||
-      /\blahat ng labs?\b/.test(message) ||
-      /\blahat ng laborator/.test(message)
-    );
-  }
-
-  private referencesAssignedLab(message: string) {
-    return (
-      message.includes("my lab") ||
-      message.includes("assigned lab") ||
-      message.includes("lab ko") ||
-      message.includes("laboratory ko")
-    );
-  }
-
   private extractCapacity(message: string) {
     const match = message.match(/capacity(?:\s+to)?\s+(\d{1,3})|(\d{1,3})\s+capacity/);
     return match ? Number(match[1] ?? match[2]) : null;
@@ -3636,21 +3209,6 @@ I can guide you now. Which laboratory would you like to reserve? You can type a 
   }
 
   private extractTimeRange(message: string): ParsedTimeRange | null {
-    const explicitStartEnd = message.match(
-      /\bstart(?:\s+time)?(?:\s+is)?\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?(?:\s+the)?\s+end(?:\s+time)?(?:\s+is)?\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/
-    );
-
-    if (explicitStartEnd) {
-      return this.buildParsedTimeRange(
-        Number(explicitStartEnd[1]),
-        explicitStartEnd[2] ? Number(explicitStartEnd[2]) : 0,
-        explicitStartEnd[3] ?? null,
-        Number(explicitStartEnd[4]),
-        explicitStartEnd[5] ? Number(explicitStartEnd[5]) : 0,
-        explicitStartEnd[6] ?? null
-      );
-    }
-
     const match = message.match(
       /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|to|hanggang|until)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/
     );
@@ -3659,35 +3217,17 @@ I can guide you now. Which laboratory would you like to reserve? You can type a 
       return null;
     }
 
-    return this.buildParsedTimeRange(
+    const start = this.toTimeString(
       Number(match[1]),
       match[2] ? Number(match[2]) : 0,
       match[3] ?? null,
-      Number(match[4]),
-      match[5] ? Number(match[5]) : 0,
-      match[6] ?? null
-    );
-  }
-
-  private buildParsedTimeRange(
-    startHour: number,
-    startMinute: number,
-    startMeridiem: string | null,
-    endHour: number,
-    endMinute: number,
-    endMeridiem: string | null
-  ): ParsedTimeRange | null {
-    const start = this.toTimeString(
-      startHour,
-      startMinute,
-      startMeridiem,
       undefined
     );
     const startHours = Number.parseInt(start.slice(0, 2), 10);
     const end = this.toTimeString(
-      endHour,
-      endMinute,
-      endMeridiem,
+      Number(match[4]),
+      match[5] ? Number(match[5]) : 0,
+      match[6] ?? null,
       startHours
     );
 

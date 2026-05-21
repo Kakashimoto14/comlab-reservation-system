@@ -30,8 +30,8 @@ export const LaboratoriesPage = () => {
   return (
     <div>
       <PageHeader
-        title="Laboratories"
-        description="Explore available computer laboratories, room capacities, and room descriptions before reserving."
+        title="Reserve Laboratory"
+        description="Choose a computer laboratory, review its details, and start a reservation request from the available schedules."
       />
 
       <div className="relative mb-6 max-w-md">
@@ -89,7 +89,7 @@ export const LaboratoriesPage = () => {
                 </div>
                 <div className="mt-6 flex gap-3">
                   <Link to={`/student/laboratories/${laboratory.id}`}>
-                    <Button variant="outline">View Details</Button>
+                    <Button variant="outline">View Schedules</Button>
                   </Link>
                   <Link to={`/student/laboratories/${laboratory.id}/reserve`}>
                     <Button>Reserve Now</Button>

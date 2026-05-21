@@ -215,11 +215,39 @@ export class DateRangeParser {
     previousRange: DateRange | null
   ): DateRange | null {
     const monthRangeMatch = message.match(
-      /\b([a-z]+)\s+(\d{1,2})\s*(?:-|to)\s*(\d{1,2})(?:,\s*(\d{4}))?\b/
+      /\b([a-z]+)\s+(\d{1,2})\s*(?:-|to|until|hanggang)\s*(?:([a-z]+)\s+)?(\d{1,2})(?:,\s*(\d{4}))?\b/
     );
 
     if (monthRangeMatch) {
-      const [, monthToken, startDayRaw, endDayRaw, explicitYearRaw] = monthRangeMatch;
+      const [, monthToken, startDayRaw, endMonthToken, endDayRaw, explicitYearRaw] = monthRangeMatch;
+      const monthIndex = MONTH_INDEX_BY_NAME.get(monthToken);
+      const endMonthIndex = endMonthToken ? MONTH_INDEX_BY_NAME.get(endMonthToken) : monthIndex;
+
+      if (monthIndex !== undefined && endMonthIndex !== undefined) {
+        const year =
+          explicitYearRaw !== undefined
+            ? Number.parseInt(explicitYearRaw, 10)
+            : previousRange?.year ?? new Date().getFullYear();
+        const startDay = Number.parseInt(startDayRaw, 10);
+        const endDay = Number.parseInt(endDayRaw, 10);
+        const label =
+          monthIndex === endMonthIndex
+            ? `${MONTH_NAMES[monthIndex]} ${startDay}-${endDay}`
+            : `${MONTH_NAMES[monthIndex]} ${startDay} to ${MONTH_NAMES[endMonthIndex]} ${endDay}`;
+
+        return this.buildValidatedRange(
+          new Date(year, monthIndex, startDay),
+          new Date(year, endMonthIndex, endDay),
+          label,
+          "range"
+        );
+      }
+    }
+
+    const singleMonthDateMatch = message.match(/\b([a-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\b/);
+
+    if (singleMonthDateMatch) {
+      const [, monthToken, dayRaw, explicitYearRaw] = singleMonthDateMatch;
       const monthIndex = MONTH_INDEX_BY_NAME.get(monthToken);
 
       if (monthIndex !== undefined) {
@@ -227,14 +255,13 @@ export class DateRangeParser {
           explicitYearRaw !== undefined
             ? Number.parseInt(explicitYearRaw, 10)
             : previousRange?.year ?? new Date().getFullYear();
-        const startDay = Number.parseInt(startDayRaw, 10);
-        const endDay = Number.parseInt(endDayRaw, 10);
+        const day = Number.parseInt(dayRaw, 10);
 
         return this.buildValidatedRange(
-          new Date(year, monthIndex, startDay),
-          new Date(year, monthIndex, endDay),
-          `${MONTH_NAMES[monthIndex]} ${startDay}-${endDay}`,
-          "range"
+          new Date(year, monthIndex, day),
+          new Date(year, monthIndex, day),
+          `${MONTH_NAMES[monthIndex]} ${day}`,
+          "day"
         );
       }
     }

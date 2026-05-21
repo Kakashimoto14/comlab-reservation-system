@@ -201,6 +201,7 @@ export type AssistantConversationContext = {
   messages: AssistantConversationMessage[];
   activeQuery: AssistantQuerySnapshot | null;
   pendingActionId: string | null;
+  pendingDraft: AssistantPendingDraft | null;
   updatedAt: number;
 };
 
@@ -213,6 +214,28 @@ export type AssistantCapabilityMatrix = {
 };
 
 export type AssistantConfirmationLevel = "LOW" | "MEDIUM" | "HIGH";
+
+export type AssistantBulkScheduleDraftSlots = {
+  laboratories?: LaboratorySummary[];
+  usedAllActiveLabs?: boolean;
+  range?: DateRange;
+  startTime?: string;
+  endTime?: string;
+  sourceMessage: string;
+};
+
+export type AssistantPendingDraft = {
+  kind: "CREATE_BULK_SCHEDULE";
+  requestedByUserId: number;
+  requestedByRole: UserRole;
+  sessionId: number;
+  language: AssistantLanguage;
+  slots: AssistantBulkScheduleDraftSlots;
+  missingFields: Array<"laboratories" | "dateRange" | "timeRange">;
+  createdAt: number;
+  updatedAt: number;
+  expiresAt: number;
+};
 
 export type AssistantActionType =
   | "CREATE_RESERVATION"

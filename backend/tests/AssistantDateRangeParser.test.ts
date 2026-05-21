@@ -51,6 +51,7 @@ describe("DateRangeParser", () => {
         hasMore: true
       },
       pendingActionId: null,
+      pendingDraft: null,
       updatedAt: Date.now()
     });
 

@@ -1,905 +1,1179 @@
-# ComPort System Manuscript
+# ComPort: ComLab Reservation System
 
-ComPort, short for the ComLab Reservation System, is a full-stack web platform for managing computer laboratory operations, schedule publishing, and student reservations in an academic environment. This document is written for two audiences:
+ComPort is the system name used throughout the codebase for this academic computer laboratory reservation and management platform.
 
-- End-users such as administrators, laboratory staff, faculty coordinators, and students
-- Programmers, evaluators, and panel members who need a technical understanding of the system
+## Abstract and System Overview
 
----
+ComPort is a full-stack web application for managing academic computer laboratories, published laboratory schedules, and student reservation requests. The system is designed for three implemented roles: `ADMIN`, `LABORATORY_STAFF`, and `STUDENT`. It centralizes account management, laboratory setup, schedule publication, whole-laboratory or per-PC reservations, reservation review, calendar blocking, reports, notifications, and profile management.
+
+From the repository, the system solves a practical campus problem: laboratory schedules and reservations must be organized, conflict-checked, and reviewed within role-based rules rather than handled manually. The backend enforces these rules through Express controllers, service classes, Prisma data access, and validation middleware, while the frontend provides role-specific pages for students, staff, and administrators. The codebase also includes email verification, password reset, in-app notifications, server-sent event streaming, optional SMTP email delivery, and an authenticated reservation assistant with deterministic fallback behavior when no external AI provider is configured.
 
 ## Table of Contents
 
-1. [Project Overview](#1-project-overview)
-2. [System Architecture and Tech Stack](#2-system-architecture-and-tech-stack)
-3. [Role-Based Access and Permissions](#3-role-based-access-and-permissions)
-4. [Comprehensive User Manual](#4-comprehensive-user-manual)
-5. [Developer Guide (Local Setup)](#5-developer-guide-local-setup)
-6. [System Modules and Data Model Summary](#6-system-modules-and-data-model-summary)
+- [Abstract and System Overview](#abstract-and-system-overview)
+- [Introduction](#introduction)
+- [Project Objectives](#project-objectives)
+- [Scope and Limitations](#scope-and-limitations)
+- [Target Users and User Roles](#target-users-and-user-roles)
+- [System Features](#system-features)
+- [Technology Stack](#technology-stack)
+- [System Architecture](#system-architecture)
+- [Object-Oriented Programming Concepts](#object-oriented-programming-concepts)
+- [APIs and Endpoints](#apis-and-endpoints)
+- [External APIs and Integrations](#external-apis-and-integrations)
+- [Database Design](#database-design)
+- [System Modules](#system-modules)
+- [User Flows](#user-flows)
+- [Data Flow Diagram](#data-flow-diagram)
+- [Use Cases](#use-cases)
+- [User Manual](#user-manual)
+- [Admin Manual](#admin-manual)
+- [Laboratory Staff Manual](#laboratory-staff-manual)
+- [Student Manual](#student-manual)
+- [Installation and Setup Guide](#installation-and-setup-guide)
+- [Environment Variables](#environment-variables)
+- [Project Structure](#project-structure)
+- [Security Features](#security-features)
+- [Validation and Error Handling](#validation-and-error-handling)
+- [Testing and Quality Assurance](#testing-and-quality-assurance)
+- [Deployment Guide](#deployment-guide)
+- [System Limitations](#system-limitations)
+- [Future Enhancements](#future-enhancements)
+- [Defense and Presentation Reviewer Guide](#defense-and-presentation-reviewer-guide)
+- [Glossary of Terms](#glossary-of-terms)
+- [References](#references)
 
----
+## Introduction
 
-## 1. Project Overview
+Academic computer laboratories need more than a simple booking form. They require user accounts, role-based permissions, published schedule windows, room and workstation status tracking, reservation approval workflows, and clear operational visibility for staff and administrators. The repository shows that ComPort was built to address those needs in a structured web system.
 
-### 1.1 What is ComPort?
+At a high level, students can register, verify their email, log in, browse available laboratories, and submit reservation requests. Laboratory staff and administrators can publish schedules, review requests, manage room readiness, and monitor operational activity. Administrators also have dedicated pages for user management, staff assignment, and calendar control. The resulting application is suitable for technical presentation because both the interface layer and the backend business rules are visible in the repository.
 
-ComPort is a reservation and laboratory management platform designed for academic computer laboratories. It replaces manual reservation handling, unstructured schedule posting, and inconsistent approval workflows with a centralized, role-based, auditable web system.
+## Project Objectives
 
-The system supports:
+### General Objective
 
-- Student self-registration and secure login
-- Public laboratory browsing and schedule visibility
-- Reservation requests for either an entire laboratory or a specific computer unit
-- Reservation approval, rejection, cancellation, and completion workflows
-- Administrator control over users, laboratories, staff assignments, and calendar events
-- Laboratory staff management for assigned rooms, schedules, reservations, and PC status
-- Real-time and in-app notification support
-- Activity logging for accountability and reporting
+To provide a centralized, role-based web system for academic computer laboratory reservation, schedule publication, and laboratory operations management.
 
-### 1.2 Problems the System Solves
+### Specific Objectives
 
-Before systems like ComPort, laboratory reservation handling is often affected by:
+1. To support secure authentication with email verification, password reset, session refresh, and logout.
+2. To allow students to register accounts and submit reservation requests for either an entire laboratory or a specific PC.
+3. To enable administrators and laboratory staff to publish and maintain laboratory schedules.
+4. To prevent invalid or conflicting reservations through validation and conflict-checking rules.
+5. To allow authorized reviewers to approve, reject, complete, and monitor reservations.
+6. To manage laboratories, PC records, staff assignments, and management calendar events.
+7. To provide dashboards, reports, notifications, and activity logs for operational visibility.
+8. To expose an authenticated assistant interface that can answer role-aware questions and prepare draft actions using system data.
 
-- Manual scheduling and paper-based reservation forms
-- Double-booking and overlapping reservations
-- Lack of role separation between administrators, staff, and students
-- No consistent audit trail for laboratory actions
-- Difficulty tracking available rooms, computers, and schedule blocks
-- Poor visibility into reservation history and operational status
+## Scope and Limitations
 
-ComPort solves these problems by enforcing structured workflows and validation rules at both the interface and backend levels.
+### Scope
 
-### 1.3 Core Features
+The repository explicitly shows support for the following:
 
-The current codebase implements the following core capabilities:
+- A React single-page application with public authentication pages and protected role-based dashboards.
+- Three implemented roles: `ADMIN`, `LABORATORY_STAFF`, and `STUDENT`.
+- Student self-registration with email verification before login.
+- Password reset and in-session password change.
+- Laboratory creation, editing, deletion, and staff assignment.
+- Automatic PC record synchronization based on `computerCount`.
+- Schedule creation, editing, deletion, and overlap prevention.
+- Reservation creation for either `LAB` or `PC`.
+- Reservation approval, rejection, completion, and student-side cancellation of pending requests.
+- Management calendar events (`MAINTENANCE`, `HOLIDAY`) plus derived schedule and reservation calendar views.
+- In-app notifications, notification read tracking, and server-sent event streaming.
+- CSV export for reservation management and reports pages.
+- Role-scoped dashboards and reports.
+- An authenticated reservation assistant with optional external AI integration and deterministic fallback replies.
 
-- Secure authentication with cookie-based sessions and refresh-session rotation
-- Student registration with strong password rules
-- Admin-managed user creation, updating, activation, and deactivation
-- Laboratory creation, editing, deletion, and staff assignment
-- Automatic PC record generation based on declared computer count
-- Schedule publishing with overlap detection
-- Reservation submission within published time windows only
-- Whole-lab and PC-specific reservation handling
-- Conflict prevention across schedules, laboratory reservations, and PC reservations
-- Reservation review and completion workflows for administrators and laboratory staff
-- Dashboard summaries for each role
-- Notification inbox and live notification stream
-- Activity logging and CSV-based reporting support
+### Limitations
 
-### 1.4 Intended Users
+The following limitations are visible in the repository or are marked when not explicitly shown:
 
-ComPort serves three main operational user groups:
+- The implemented role set is fixed to `ADMIN`, `LABORATORY_STAFF`, and `STUDENT`.
+- Multi-factor authentication is not explicitly shown in the repository.
+- Social login or third-party identity providers are not explicitly shown in the repository.
+- A dedicated file storage service for laboratory images is not explicitly shown in the repository. The code accepts image URLs or base64 data URLs.
+- Server-side pagination for most list endpoints is not explicitly shown in the repository. Several pages filter and paginate data on the frontend after fetching records.
+- End-to-end browser tests and CI/CD pipeline configuration are not explicitly shown in the repository.
+- A standalone public laboratory catalog route in the frontend is not explicitly shown in the repository, although the backend does expose optional-auth laboratory listing endpoints.
 
-- `ADMIN`
-- `LABORATORY_STAFF`
-- `STUDENT`
+## Target Users and User Roles
 
-For backward compatibility in some middleware and route checks, the alias `CUSTODIAN` is normalized internally to `LABORATORY_STAFF`. The active role stored in the database is `LABORATORY_STAFF`.
+| Role | Description | Permissions | Main Pages and Modules | Restrictions |
+| --- | --- | --- | --- | --- |
+| `ADMIN` | Full system manager responsible for users, laboratories, schedules, reservations, and calendar events. | Can create and update users, activate or deactivate accounts, manage laboratories, assign staff, manage schedules, review and complete reservations, view dashboards and reports, and manage calendar events. | `/dashboard`, `/management/users`, `/management/laboratories`, `/management/laboratories/assign-staff`, `/management/schedules`, `/management/reservations`, `/management/reports`, `/management/calendar`, `/profile`, `/assistant` | Cannot bypass backend validation rules such as duplicate room codes, schedule overlap prevention, or deletion restrictions tied to history. |
+| `LABORATORY_STAFF` | Operational laboratory staff assigned to one or more laboratories. | Can view the assigned laboratory, manage schedules for the assigned laboratory, review reservations for the assigned laboratory, update PC status, view availability of other laboratories, view reports, and access the assistant. | `/dashboard`, `/management/laboratories`, `/management/schedules`, `/management/reservations`, `/management/reports`, `/profile`, `/assistant` | Cannot manage users, cannot manage calendar events, and cannot manage laboratories outside assigned scope. |
+| `STUDENT` | End user who requests laboratory or PC reservations. | Can register, verify email, log in, browse available laboratories, inspect room details and schedules, submit reservation requests, view personal reservation history, cancel pending reservations, manage profile, view notifications, and use the assistant within student scope. | `/student/dashboard`, `/student/laboratories`, `/student/laboratories/:id`, `/student/laboratories/:id/reserve`, `/student/reservations`, `/profile`, `/assistant` | Cannot manage users, schedules, laboratories, calendar events, or review other users' reservations. |
 
----
+Notes:
 
-## 2. System Architecture and Tech Stack
+- The middleware accepts the alias `CUSTODIAN`, but normalizes it to `LABORATORY_STAFF`.
+- Public visitors are not modeled as a stored database role. Public access is limited to routes such as `/`, `/login`, `/register`, `/forgot-password`, `/reset-password`, and `/verify-email`.
 
-### 2.1 Architecture Overview
+## System Features
 
-ComPort follows a modern client-server architecture:
+| Feature | Description | Related Roles | Related Pages or Routes | Notes |
+| --- | --- | --- | --- | --- |
+| Student self-registration | Students can create accounts with validated names, email, student number, department, year level, phone number, and strong password rules. | `STUDENT` | Frontend: `/register`; API: `POST /api/auth/register` | Email verification is required before login. |
+| Email verification | New accounts receive a verification token and must verify before authenticating. | `STUDENT` | Frontend: `/verify-email`; API: `POST /api/auth/verify-email`, `POST /api/auth/resend-verification` | In preview mode, verification URLs are returned in the response. |
+| Login and session refresh | Authenticated access uses JWT access and refresh tokens stored in `HttpOnly` cookies, with session records stored in the database. | All roles | Frontend: `/login`; API: `POST /api/auth/login`, `POST /api/auth/refresh`, `POST /api/auth/logout`, `GET /api/auth/me` | Refresh logic is handled in `frontend/src/api/client.ts`. |
+| Password recovery and change password | Users can request a reset link, reset via token, and change password while logged in. | All roles | Frontend: `/forgot-password`, `/reset-password`, `/profile`; API: `POST /api/auth/forgot-password`, `POST /api/auth/reset-password`, `POST /api/auth/change-password` | Reset and verification email delivery depends on SMTP or preview mode. |
+| Laboratory catalog | Students and unauthenticated backend callers can fetch available laboratories; admins and staff can fetch all laboratory records. | Public, `STUDENT`, `ADMIN`, `LABORATORY_STAFF` | Frontend: `/student/laboratories`; API: `GET /api/laboratories`, `GET /api/laboratories/:id` | Controller logic hides unavailable labs from students and unauthenticated requests. |
+| Laboratory details and weekly schedule view | Users can inspect room description, building, capacity, computer count, custodian, upcoming schedules, and reservation windows. | `STUDENT` | Frontend: `/student/laboratories/:id`, `/student/laboratories/:id/reserve`; API: `GET /api/laboratories/:id` | `WeeklyScheduleGrid` is used for date-focused schedule viewing. |
+| Reservation request submission | Students can reserve either a whole laboratory or a specific PC within a published schedule window. | `STUDENT` | Frontend: `/student/laboratories/:id/reserve`; API: `POST /api/reservations` | Reservation type is `LAB` or `PC`. |
+| Reservation conflict checking | The backend blocks overlapping room reservations, invalid time ranges, unavailable PCs, and out-of-schedule requests. | `STUDENT`, reviewers | `backend/src/services/ReservationService.ts` | Conflict checks run both on create and on approval. |
+| Student reservation history and cancellation | Students can view all of their reservations and cancel only pending requests. | `STUDENT` | Frontend: `/student/reservations`; API: `GET /api/reservations`, `PATCH /api/reservations/:id/cancel` | Cancelled reservations remain in history. |
+| Schedule management | Authorized users can create, edit, filter, and delete schedules while respecting overlap rules and history restrictions. | `ADMIN`, `LABORATORY_STAFF` | Frontend: `/management/schedules`; API: `GET/POST/PUT/DELETE /api/schedules` and staff schedule routes | Staff scope is restricted to the assigned laboratory. |
+| Laboratory management | Admins can create, edit, and delete laboratory records, including image URL or uploaded data URL, capacity, and computer count. | `ADMIN` | Frontend: `/management/laboratories`; API: `POST/PUT/DELETE /api/laboratories` | Deletion is blocked when reservation or calendar history exists. |
+| Automatic PC synchronization | PC records are auto-created or updated when `computerCount` changes. | `ADMIN` | `backend/src/services/LaboratoryService.ts` | Historical PCs may be set to `MAINTENANCE` instead of deleted. |
+| PC status management | Staff can update PC availability inside the assigned lab; admins can update any laboratory PC. | `ADMIN`, `LABORATORY_STAFF` | Frontend: `/management/laboratories`; API: `PUT /api/laboratories/:id/pcs/:pcId/status`, `PUT /api/staff/my-lab/pcs/:id/status` | Allowed values are `AVAILABLE`, `OCCUPIED`, and `MAINTENANCE`. |
+| Reservation review and completion | Admins and staff can approve, reject, remark, and complete reservations. | `ADMIN`, `LABORATORY_STAFF` | Frontend: `/management/reservations`; API: `PATCH /api/reservations/:id/review`, `PATCH /api/reservations/:id/complete`, `PUT /api/staff/my-lab/reservation/:id` | Staff review is limited to the assigned laboratory. |
+| Staff assignment | Admins can assign, reassign, or unassign laboratory custodians. | `ADMIN` | Frontend: `/management/laboratories/assign-staff`; API: `GET /api/laboratories/assignments`, `GET /api/laboratories/staff-options`, `PUT /api/laboratories/:id/custodian` | Only active `LABORATORY_STAFF` accounts can be assigned. |
+| Management calendar | Admins can create maintenance and holiday events and view derived schedule/reservation events. | `ADMIN` | Frontend: `/management/calendar`; API: `GET/POST/PUT/DELETE /api/calendar` | Calendar view merges editable custom events with derived schedules and reservations. |
+| Dashboards and analytics | Role-based dashboards show totals, recent activity, recent reservations, or trends depending on the role. | All roles | Frontend: `/dashboard`, `/student/dashboard`; API: `GET /api/dashboard` | Dashboard payload shape changes by role. |
+| Reports and CSV export | Reservation data can be filtered, summarized, charted, and exported to CSV. | `ADMIN`, `LABORATORY_STAFF` | Frontend: `/management/reports`, `/management/reservations` | Report export is implemented in the frontend with CSV utilities. |
+| Notifications | The system stores in-app notifications, tracks unread counts, marks notifications as read, and supports live notification streaming. | All authenticated roles | UI: `NotificationCenter`; API: `GET /api/notifications`, `PATCH /api/notifications/:id/read`, `POST /api/notifications/mark-all-read`, `GET /api/notifications/stream` | Live updates use server-sent events. |
+| Email notifications | Reservation-created, confirmed, rejected, cancelled, and reminder events can be delivered by email. | Students, staff, admins | `backend/src/services/NotificationService.ts` | Delivery depends on SMTP configuration or preview mode. |
+| Reservation assistant | ComPort GPT provides grounded, role-aware answers and can prepare draft actions requiring confirmation. | All authenticated roles | Frontend: `/assistant`; API: `/api/ai/reservation-assistant*` | If no AI provider is configured, deterministic fallback replies are used. |
+| Profile management | Users can update profile details and change their password. | All authenticated roles | Frontend: `/profile`; API: `PUT /api/users/profile`, `POST /api/auth/change-password` | Year level remains role-validated. |
 
-- The frontend is a React single-page application used by students, staff, and administrators
-- The backend is a Node.js and Express REST API responsible for authentication, validation, business rules, and persistence
-- Prisma ORM acts as the data-access layer between the backend and a Supabase PostgreSQL database
-- Supabase PostgreSQL stores users, laboratories, PCs, schedules, reservations, sessions, notifications, logs, and calendar data
-- A platform-hosted Node runtime can be used for the backend web service, provided it can run the backend workspace commands and connect to Supabase
+## Technology Stack
 
-### 2.2 High-Level Request Flow
+### Frontend Technologies
 
-1. A user accesses the React frontend.
-2. The frontend submits API requests to the Express backend.
-3. The backend validates the request using Zod schemas and route middleware.
-4. Business rules are enforced in service classes such as `AuthService`, `LaboratoryService`, `ScheduleService`, and `ReservationService`.
-5. Prisma reads from or writes to the Supabase PostgreSQL database.
-6. The backend returns structured JSON responses to the frontend.
-7. Notifications, dashboard metrics, and logs are updated as part of the business workflow where applicable.
-
-### 2.3 Technology Stack
-
-| Layer | Technology | Purpose |
+| Technology | Evidence in Repository | Purpose |
 | --- | --- | --- |
-| Frontend | React, Vite, TypeScript | User interface and client-side routing |
-| Styling | Tailwind CSS | Responsive styling and layout |
-| State / Data | React Query | API data fetching, caching, and invalidation |
-| Backend | Node.js, Express, TypeScript | API server and business logic |
-| Validation | Zod | Request and form validation |
-| ORM | Prisma | Database access, migrations, and schema management |
-| Database | Supabase PostgreSQL | Persistent relational data storage |
-| Auth | JWT + HttpOnly cookies + bcrypt | Secure login, session refresh, and password hashing |
-| Notifications | In-app notifications + SSE stream | User alerts and real-time updates |
-| Testing | Vitest, Testing Library, Supertest-ready backend structure | Unit and integration-oriented validation |
-| Deployment | Any Node-capable hosting platform + static frontend hosting | Cloud deployment for the backend API and built frontend |
+| React 19 | `frontend/package.json` | Component-based user interface |
+| Vite 6 | `frontend/package.json`, `frontend/vite.config.ts` | Frontend dev server and build tool |
+| TypeScript | `frontend/package.json`, `frontend/tsconfig*.json` | Static typing |
+| React Router 7 | `frontend/package.json`, `frontend/src/App.tsx` | Client-side routing |
+| TanStack React Query | `frontend/package.json`, `frontend/src/App.tsx` | Data fetching, cache invalidation, mutation handling |
+| React Hook Form + Zod | `frontend/package.json`, multiple page forms | Client-side form state and validation |
+| Axios | `frontend/package.json`, `frontend/src/api/client.ts` | HTTP client with refresh interceptor |
+| Tailwind CSS | `frontend/tailwind.config.js`, `frontend/src/index.css` | Utility-first styling |
+| Chart.js + react-chartjs-2 | `frontend/package.json`, dashboard and reports pages | Charts for analytics and reports |
+| Lucide React | `frontend/package.json` | Icons |
+| React Hot Toast | `frontend/package.json` | UI notifications |
 
-### 2.4 Architectural Characteristics
+### Backend Technologies
 
-The current implementation shows the following architectural strengths:
+| Technology | Evidence in Repository | Purpose |
+| --- | --- | --- |
+| Node.js 22 | Root and workspace `package.json` engines | Runtime |
+| Express 4 | `backend/package.json`, `backend/src/app.ts` | REST API server |
+| TypeScript | `backend/package.json`, `backend/tsconfig.json` | Static typing |
+| Prisma ORM | `backend/package.json`, `backend/prisma/schema.prisma` | Database access and migrations |
+| PostgreSQL | `backend/prisma/schema.prisma`, `docker-compose.yml` | Relational database |
+| Zod | `backend/package.json`, `backend/src/validations/*.ts` | Request validation |
+| bcrypt | `backend/package.json`, auth and seed files | Password hashing |
+| jsonwebtoken | `backend/package.json`, `backend/src/utils/jwt.ts` | Access and refresh token signing |
+| cookie-parser | `backend/package.json`, `backend/src/app.ts` | Cookie parsing |
+| cors | `backend/package.json`, `backend/src/app.ts` | Cross-origin configuration |
+| helmet | `backend/package.json`, `backend/src/app.ts` | Security headers |
+| morgan | `backend/package.json`, `backend/src/app.ts` | Request logging |
+| nodemailer | `backend/package.json`, `backend/src/services/EmailService.ts` | SMTP email delivery |
+| dayjs | `backend/package.json`, assistant and seed logic | Date handling |
 
-- Separation of concerns through controllers, services, middleware, domain models, and validations
-- Strong role-based authorization controls
-- Centralized error handling
-- Database-backed refresh sessions instead of local token-only auth
-- Activity logging for traceability
-- Explicit validation of schedules, reservations, and user fields
-- Protection against schedule overlaps and reservation conflicts
+### Database and ORM
 
-### 2.5 Important Production Notes
+- Database provider: PostgreSQL
+- ORM: Prisma
+- Schema file: `backend/prisma/schema.prisma`
+- Migration folder: `backend/prisma/migrations/`
+- Seed script: `backend/prisma/seed.ts`
 
-The backend exposes:
+### Authentication Method
 
-- API base path: `/api`
-- Health endpoint: `/api/health`
+The repository explicitly shows:
 
-The deployed backend is designed to bind to the configured `PORT`, which is `5000` in the current environment examples.
+- JWT access tokens
+- JWT refresh tokens
+- `HttpOnly` auth cookies
+- Database-backed auth sessions in `AuthSession`
+- Email verification before login
+- Password hashing through `bcrypt`
 
----
+### Deployment-Related Files
 
-## 3. Role-Based Access and Permissions
+| File | Purpose |
+| --- | --- |
+| `docker-compose.yml` | Local multi-container setup with PostgreSQL, backend, and frontend |
+| `backend/Dockerfile` | Backend container build and startup |
+| `frontend/Dockerfile` | Frontend build and Nginx runtime image |
+| `frontend/nginx.conf` | SPA routing in Nginx |
+| `frontend/vercel.json` | SPA rewrite configuration for static hosting |
+| `backend/Procfile` | Procfile-based backend start command |
 
-### 3.1 Administrator (`ADMIN`)
+## System Architecture
 
-Administrators have full operational control over the platform.
+### Architectural Style
 
-#### Main Capabilities
+The repository follows a layered client-server architecture:
 
-- Create, edit, activate, and deactivate user accounts
-- Create admin, laboratory staff, or student accounts
-- View the full user list
-- Create, edit, and delete laboratories
-- Assign or unassign laboratory staff to laboratories
-- Update PC status for any laboratory
-- Create, edit, and delete schedules across laboratories
-- Review, approve, reject, and complete reservation requests
-- Access system-wide reservation and dashboard summaries
-- Manage administrative calendar events such as maintenance and holidays
-- View reports and export reservation data
+- The frontend is a React single-page application.
+- The backend is an Express REST API.
+- Prisma serves as the data access layer.
+- PostgreSQL stores the persistent records.
+- Background services handle notifications and reservation reminders.
+- Optional SMTP and optional external AI providers extend the core platform.
 
-#### Operational Restrictions
+### Frontend Layer
 
-- Laboratories with reservation or calendar history cannot be deleted
-- Schedules with reservation history cannot be modified or deleted
-- Reservation approvals still pass through conflict validation before final approval
+The frontend includes:
 
-### 3.2 Laboratory Staff (`LABORATORY_STAFF`)
+- Public pages for landing, login, registration, password reset, and email verification
+- Role-protected pages for dashboards, laboratories, schedules, reservations, reports, calendar, and profile settings
+- `AuthContext` for current-user bootstrapping
+- Axios request handling with automatic refresh-session retry
+- React Query for caching and invalidation
+- Notification streaming through `EventSource`
 
-Laboratory staff members manage the laboratory assigned to them by an administrator.
+### Backend Layer
 
-#### Main Capabilities
+The backend is organized into clear responsibilities:
 
-- Access the management dashboard
-- View the assigned laboratory profile
-- View reservation requests for the assigned laboratory
-- Approve or reject pending reservation requests for the assigned laboratory
-- Mark approved reservations as completed
-- Create, edit, and delete schedule blocks for the assigned laboratory
-- Update the status of PCs in the assigned laboratory
-- View activity logs for the assigned laboratory
-- View read-only public schedule or availability information from other laboratories
+- `routes/` defines route groups and middleware composition
+- `controllers/` accepts HTTP requests and returns HTTP responses
+- `services/` contains business logic
+- `middleware/` handles authentication, authorization, validation, rate limiting, and error processing
+- `domain/` contains domain-oriented OOP models
+- `notifications/` and notification services support event-driven notification delivery
 
-#### Operational Restrictions
+### Database Layer
 
-- Staff cannot manage laboratories that are not assigned to them
-- Staff cannot create or manage user accounts
-- Staff cannot create calendar events
-- Staff cannot override history protections on schedules and laboratories
+The database layer uses Prisma models for:
 
-### 3.3 Student (`STUDENT`)
+- Users and sessions
+- Laboratories and PCs
+- Schedules and reservations
+- Activity logs
+- Calendar events
+- Notifications
+- Email verification tokens
+- Password reset tokens
 
-Students are the primary reservation requestors in the system.
+### API Communication
 
-#### Main Capabilities
+- The frontend uses Axios through `frontend/src/api/client.ts`.
+- The API base URL comes from `VITE_API_URL`.
+- Cookies are sent with `withCredentials: true`.
+- On `401` responses, the frontend attempts `POST /api/auth/refresh` before failing the request.
 
-- Self-register through the public registration page
-- Log in securely and manage their profile
-- Browse available laboratories
-- Inspect laboratory details, published schedules, and room occupancy
-- Submit reservation requests for an entire laboratory or for a specific PC
-- View reservation history and status
-- Cancel only their own pending reservations
-- Receive in-app and system notifications related to reservation events
+### Authentication and Session Flow
 
-#### Operational Restrictions
+The repository explicitly shows this flow:
 
-- Students cannot create schedules
-- Students cannot approve or reject reservations
-- Students cannot reserve unavailable laboratories
-- Students cannot reserve outside published schedule windows
-- Students cannot cancel approved, rejected, completed, or already cancelled reservations
+1. User logs in through `POST /api/auth/login`.
+2. Backend validates email, password, account status, and email verification.
+3. Backend signs an access token and a refresh token.
+4. Backend stores a refresh-session record in `AuthSession`.
+5. Backend sets access and refresh tokens as `HttpOnly` cookies.
+6. Frontend requests `GET /api/auth/me` to bootstrap current user state.
+7. If an access token expires, the frontend calls `POST /api/auth/refresh`.
+8. Logout or sensitive account changes revoke active sessions in the database.
 
-### 3.4 Permission Summary
+### External Services
 
-| Function | Admin | Laboratory Staff | Student |
+- SMTP email delivery for verification, password reset, and reservation notifications
+- Optional external AI provider for assistant rewriting
+- PostgreSQL deployment examples that target Supabase-compatible connection strings
+
+### Architecture Diagram
+
+```mermaid
+flowchart TD
+    User[User]
+    Frontend[React + Vite Frontend]
+    API[Express REST API]
+    MW[Middleware Layer\nAuth, Role, Validation, Rate Limit, Error Handling]
+    Services[Service Layer\nAuth, Laboratory, Schedule, Reservation,\nCalendar, Notification, Assistant]
+    Prisma[Prisma ORM]
+    DB[(PostgreSQL Database)]
+    SSE[SSE Notification Stream]
+    SMTP[SMTP Email Delivery]
+    AI[Optional AI Provider]
+
+    User --> Frontend
+    Frontend -->|Axios + Cookies| API
+    API --> MW
+    MW --> Services
+    Services --> Prisma
+    Prisma --> DB
+    Services --> SSE
+    SSE --> Frontend
+    Services --> SMTP
+    Services -.optional.-> AI
+```
+
+## Object-Oriented Programming Concepts
+
+### Where OOP Appears in the Repository
+
+The repository uses object-oriented programming most clearly in the backend domain, controller, and service layers.
+
+Examples:
+
+- `backend/src/domain/User.ts`
+- `backend/src/domain/Admin.ts`
+- `backend/src/domain/Student.ts`
+- `backend/src/domain/LaboratoryStaff.ts`
+- `backend/src/domain/UserFactory.ts`
+- `backend/src/domain/Laboratory.ts`
+- `backend/src/domain/Schedule.ts`
+- `backend/src/domain/Reservation.ts`
+- `backend/src/services/*.ts`
+- `backend/src/controllers/*.ts`
+
+### Encapsulation
+
+Encapsulation means combining related data and behavior inside a class so that other parts of the program interact through controlled methods.
+
+Code-based examples:
+
+- `User` stores the email in a private field `#email` and exposes getters such as `email`, `fullName`, `role`, and `status`.
+- `Laboratory`, `Schedule`, and `Reservation` wrap Prisma records and expose behavior such as `canAcceptReservations()`, `isBookable()`, `hasValidTimeRange()`, `canBeCancelledByStudent()`, and `canBeCompleted()`.
+- Service classes such as `ReservationService` encapsulate the reservation workflow, including validation, locking, conflict checking, activity logging, and notification publishing.
+
+### Abstraction
+
+Abstraction means hiding complex steps behind a simpler interface.
+
+Code-based examples:
+
+- Controllers expose concise entry points like `ReservationController.create`, while the detailed workflow is hidden inside `ReservationService.createReservation`.
+- `ScheduleService` hides overlap detection, scope checks, and history restrictions behind methods like `createSchedule`, `updateSchedule`, and `deleteSchedule`.
+- `AuthService` abstracts session creation, token rotation, email verification, password reset handling, and logout revocation.
+- Middleware such as `authenticate`, `requireRole`, and `requireAssignedLabManager` hides repeated security checks from route handlers.
+
+### Inheritance
+
+Inheritance is explicitly shown in the repository.
+
+Examples:
+
+- `Admin extends User`
+- `Student extends User`
+- `LaboratoryStaff extends User`
+
+These subclasses inherit shared behavior from the abstract `User` class and override role-specific behavior.
+
+### Polymorphism
+
+Polymorphism is explicitly shown in the repository.
+
+Examples:
+
+- `UserFactory.create()` returns different subclasses depending on the database role.
+- The system then calls common methods such as `canCreateReservation()`, `canReviewReservations()`, and `getDashboardScope()` without needing separate conditional logic everywhere.
+- `DashboardService` uses `getDashboardScope()` to branch to admin, staff, or student dashboard logic.
+
+### How OOP Helps the Project
+
+- It keeps business rules reusable and easier to maintain.
+- It separates role behavior from route wiring.
+- It makes the code easier to explain in a defense because each class has a focused responsibility.
+- It reduces duplicated permission logic.
+
+### Beginner-Friendly Defense Explanation
+
+If asked during defense, a simple explanation is:
+
+- Encapsulation: “We grouped related data and actions together in classes, such as user behavior and reservation rules.”
+- Abstraction: “We hid complex backend processes behind services and controllers so each layer has a simpler job.”
+- Inheritance: “Admin, student, and laboratory staff reuse a common user base class.”
+- Polymorphism: “The system can treat different user roles as users in general, but each role responds differently when methods like `getDashboardScope()` are called.”
+
+## APIs and Endpoints
+
+All backend routes are registered under `/api`.
+
+### Health
+
+| Method | Endpoint | Purpose | Auth and Role | Key Inputs | Related File |
+| --- | --- | --- | --- | --- | --- |
+| `GET` | `/api/health` | Returns API health metadata. | Public | None | `backend/src/routes/index.ts` |
+
+### Authentication
+
+| Method | Endpoint | Purpose | Auth and Role | Key Inputs | Related File |
+| --- | --- | --- | --- | --- | --- |
+| `POST` | `/api/auth/register` | Registers a student account and creates an email verification token. | Public | `firstName`, `lastName`, `email`, `password`, `studentNumber`, `department`, `yearLevel`, `phone` | `backend/src/routes/auth.routes.ts` |
+| `POST` | `/api/auth/login` | Logs in a verified active account and sets auth cookies. | Public | `email`, `password` | `backend/src/routes/auth.routes.ts` |
+| `POST` | `/api/auth/refresh` | Rotates refresh session and returns a new authenticated session. | Cookie-based session | Refresh cookie | `backend/src/routes/auth.routes.ts` |
+| `POST` | `/api/auth/verify-email` | Verifies a pending email verification token. | Public | `token` | `backend/src/routes/auth.routes.ts` |
+| `POST` | `/api/auth/resend-verification` | Sends another verification email for an unverified active account. | Public | `email` | `backend/src/routes/auth.routes.ts` |
+| `POST` | `/api/auth/forgot-password` | Creates a password reset token. | Public | `email` | `backend/src/routes/auth.routes.ts` |
+| `POST` | `/api/auth/reset-password` | Resets password using a valid token and revokes active sessions. | Public | `token`, `newPassword` | `backend/src/routes/auth.routes.ts` |
+| `POST` | `/api/auth/change-password` | Changes password for the current authenticated user. | Authenticated | `currentPassword`, `newPassword` | `backend/src/routes/auth.routes.ts` |
+| `POST` | `/api/auth/logout` | Logs out the current session or refresh token. | Optional authentication | Refresh cookie and current auth session when present | `backend/src/routes/auth.routes.ts` |
+| `GET` | `/api/auth/me` | Returns the current authenticated user profile. | Authenticated | None | `backend/src/routes/auth.routes.ts` |
+
+### Users
+
+| Method | Endpoint | Purpose | Auth and Role | Key Inputs | Related File |
+| --- | --- | --- | --- | --- | --- |
+| `GET` | `/api/users` | Lists all user accounts. | `ADMIN` | None | `backend/src/routes/user.routes.ts` |
+| `POST` | `/api/users` | Creates an admin, staff, or student account. | `ADMIN` | `firstName`, `lastName`, `email`, `password`, `role`, optional student fields, department, phone | `backend/src/routes/user.routes.ts` |
+| `PUT` | `/api/users/:id` | Updates an existing user account. | `ADMIN` | Path `id`; editable user fields and optional `status` | `backend/src/routes/user.routes.ts` |
+| `PATCH` | `/api/users/:id/status` | Activates or deactivates a user account. | `ADMIN` | Path `id`; `status` | `backend/src/routes/user.routes.ts` |
+| `PUT` | `/api/users/profile` | Updates the current user's profile. | Authenticated | `firstName`, `lastName`, optional `department`, `yearLevel`, `phone` | `backend/src/routes/user.routes.ts` |
+
+### Laboratories
+
+| Method | Endpoint | Purpose | Auth and Role | Key Inputs | Related File |
+| --- | --- | --- | --- | --- | --- |
+| `GET` | `/api/laboratories` | Lists laboratories. Students and unauthenticated requests see available labs only; admins and staff can see unavailable labs too. | Optional authentication | None | `backend/src/routes/laboratory.routes.ts` |
+| `GET` | `/api/laboratories/:id` | Returns one laboratory with schedules, reservations, and PCs. | Optional authentication | Path `id` | `backend/src/routes/laboratory.routes.ts` |
+| `POST` | `/api/laboratories` | Creates a laboratory. | `ADMIN` | Name, room code, building, location, capacity, computer count, description, status, image URL/data URL, optional `custodianId` | `backend/src/routes/laboratory.routes.ts` |
+| `PUT` | `/api/laboratories/:id` | Updates a laboratory. | `ADMIN` | Path `id`; same fields as create | `backend/src/routes/laboratory.routes.ts` |
+| `DELETE` | `/api/laboratories/:id` | Deletes a laboratory if no reservation or calendar history exists. | `ADMIN` | Path `id` | `backend/src/routes/laboratory.routes.ts` |
+| `GET` | `/api/laboratories/assignments` | Lists laboratories for staff assignment management. | `ADMIN` | Optional query: `building`, `department` | `backend/src/routes/laboratory.routes.ts` |
+| `GET` | `/api/laboratories/staff-options` | Lists active laboratory staff options. | `ADMIN` | None | `backend/src/routes/laboratory.routes.ts` |
+| `PUT` | `/api/laboratories/:id/custodian` | Assigns or unassigns a laboratory custodian. | `ADMIN` | Path `id`; `custodianId` or `null` | `backend/src/routes/laboratory.routes.ts` |
+| `PUT` | `/api/laboratories/:id/pcs/:pcId/status` | Updates the status of a PC in a laboratory. | `ADMIN` | Path `id`, `pcId`; `status` | `backend/src/routes/laboratory.routes.ts` |
+
+### Schedules
+
+| Method | Endpoint | Purpose | Auth and Role | Key Inputs | Related File |
+| --- | --- | --- | --- | --- | --- |
+| `GET` | `/api/schedules` | Lists schedules, optionally filtered by laboratory and date. Staff results are scoped when authenticated as staff. | Optional authentication | Optional query: `laboratoryId`, `date` | `backend/src/routes/schedule.routes.ts` |
+| `POST` | `/api/schedules` | Creates a schedule block. | `ADMIN`, `LABORATORY_STAFF` | `laboratoryId`, `date`, `startTime`, `endTime`, `status` | `backend/src/routes/schedule.routes.ts` |
+| `PUT` | `/api/schedules/:id` | Updates a schedule block. | `ADMIN`, `LABORATORY_STAFF` | Path `id`; same fields as create | `backend/src/routes/schedule.routes.ts` |
+| `DELETE` | `/api/schedules/:id` | Deletes a schedule block if no reservation history exists. | `ADMIN`, `LABORATORY_STAFF` | Path `id` | `backend/src/routes/schedule.routes.ts` |
+
+### Reservations
+
+| Method | Endpoint | Purpose | Auth and Role | Key Inputs | Related File |
+| --- | --- | --- | --- | --- | --- |
+| `GET` | `/api/reservations` | Lists reservations scoped to the current user role. | `STUDENT`, `LABORATORY_STAFF`, `ADMIN` | None | `backend/src/routes/reservation.routes.ts` |
+| `POST` | `/api/reservations` | Creates a reservation request. | `STUDENT` | `scheduleId`, `laboratoryId`, `reservationType`, optional `pcId`, `purpose`, `startTime`, `endTime` | `backend/src/routes/reservation.routes.ts` |
+| `PATCH` | `/api/reservations/:id/cancel` | Cancels a student's own pending reservation. | `STUDENT` | Path `id` | `backend/src/routes/reservation.routes.ts` |
+| `PATCH` | `/api/reservations/:id/review` | Approves or rejects a pending reservation. | `ADMIN`, `LABORATORY_STAFF` | Path `id`; `status`, optional `remarks` | `backend/src/routes/reservation.routes.ts` |
+| `PATCH` | `/api/reservations/:id/complete` | Marks an approved reservation as completed. | `ADMIN`, `LABORATORY_STAFF` | Path `id`; optional `remarks` | `backend/src/routes/reservation.routes.ts` |
+
+### Staff-Scoped Operations
+
+| Method | Endpoint | Purpose | Auth and Role | Key Inputs | Related File |
+| --- | --- | --- | --- | --- | --- |
+| `GET` | `/api/staff/my-lab` | Returns the primary assigned laboratory for the current staff member. | `ADMIN`, `LABORATORY_STAFF` | None | `backend/src/routes/staff.routes.ts` |
+| `GET` | `/api/staff/my-lab/reservations` | Returns reservations for the assigned laboratory. | `ADMIN`, `LABORATORY_STAFF` | None | `backend/src/routes/staff.routes.ts` |
+| `GET` | `/api/staff/my-lab/schedules` | Returns schedules for the assigned laboratory. | `ADMIN`, `LABORATORY_STAFF` | None | `backend/src/routes/staff.routes.ts` |
+| `GET` | `/api/staff/my-lab/logs` | Returns recent activity logs for the assigned laboratory. | `ADMIN`, `LABORATORY_STAFF` | None | `backend/src/routes/staff.routes.ts` |
+| `GET` | `/api/staff/my-lab/pcs` | Returns PCs for the assigned laboratory. | `ADMIN`, `LABORATORY_STAFF` | None | `backend/src/routes/staff.routes.ts` |
+| `GET` | `/api/staff/labs/availability` | Returns availability summaries for laboratories. | `ADMIN`, `LABORATORY_STAFF` | Optional query: `laboratoryId`, `date` | `backend/src/routes/staff.routes.ts` |
+| `GET` | `/api/staff/labs/schedules/public` | Returns public schedule blocks from laboratories. | `ADMIN`, `LABORATORY_STAFF` | Optional query: `laboratoryId`, `date` | `backend/src/routes/staff.routes.ts` |
+| `PUT` | `/api/staff/my-lab/reservation/:id` | Reviews a reservation in assigned scope. | `ADMIN`, `LABORATORY_STAFF` | Path `id`; `status`, optional `remarks` | `backend/src/routes/staff.routes.ts` |
+| `PUT` | `/api/staff/my-lab/schedule/:id` | Updates a schedule in assigned scope. | `ADMIN`, `LABORATORY_STAFF` | Path `id`; `date`, `startTime`, `endTime`, `status` | `backend/src/routes/staff.routes.ts` |
+| `PUT` | `/api/staff/my-lab/pcs/:id/status` | Updates a PC status in assigned scope. | `ADMIN`, `LABORATORY_STAFF` | Path `id`; `status` | `backend/src/routes/staff.routes.ts` |
+
+### Dashboard
+
+| Method | Endpoint | Purpose | Auth and Role | Key Inputs | Related File |
+| --- | --- | --- | --- | --- | --- |
+| `GET` | `/api/dashboard` | Returns role-scoped dashboard data. | Authenticated | None | `backend/src/routes/dashboard.routes.ts` |
+
+### Calendar
+
+| Method | Endpoint | Purpose | Auth and Role | Key Inputs | Related File |
+| --- | --- | --- | --- | --- | --- |
+| `GET` | `/api/calendar` | Lists custom calendar events and derived schedule or reservation events. | `ADMIN` | Optional query: `laboratoryId`, `date` | `backend/src/routes/calendar.routes.ts` |
+| `POST` | `/api/calendar` | Creates a calendar event. | `ADMIN` | `title`, `type`, optional `laboratoryId`, optional `pcId`, `date`, optional `startTime`, optional `endTime`, optional `description` | `backend/src/routes/calendar.routes.ts` |
+| `PUT` | `/api/calendar/:id` | Updates a calendar event. | `ADMIN` | Path `id`; same fields as create | `backend/src/routes/calendar.routes.ts` |
+| `DELETE` | `/api/calendar/:id` | Deletes a calendar event. | `ADMIN` | Path `id` | `backend/src/routes/calendar.routes.ts` |
+
+### Notifications
+
+| Method | Endpoint | Purpose | Auth and Role | Key Inputs | Related File |
+| --- | --- | --- | --- | --- | --- |
+| `GET` | `/api/notifications` | Lists in-app notifications and unread count. | Authenticated | Optional query: `unreadOnly`, `limit` | `backend/src/routes/notification.routes.ts` |
+| `POST` | `/api/notifications/mark-all-read` | Marks all in-app notifications as read. | Authenticated | None | `backend/src/routes/notification.routes.ts` |
+| `PATCH` | `/api/notifications/:id/read` | Marks one in-app notification as read. | Authenticated | Path `id` | `backend/src/routes/notification.routes.ts` |
+| `GET` | `/api/notifications/stream` | Opens a server-sent event notification stream. | Authenticated | None | `backend/src/routes/notification.routes.ts` |
+
+### Reservation Assistant
+
+| Method | Endpoint | Purpose | Auth and Role | Key Inputs | Related File |
+| --- | --- | --- | --- | --- | --- |
+| `POST` | `/api/ai/reservation-assistant` | Sends a grounded assistant query. | Authenticated | `message` | `backend/src/routes/ai.routes.ts` |
+| `POST` | `/api/ai/reservation-assistant/actions/:actionId/confirm` | Confirms a pending assistant draft action. | Authenticated | Path `actionId`; optional `confirmation` | `backend/src/routes/ai.routes.ts` |
+| `POST` | `/api/ai/reservation-assistant/actions/:actionId/cancel` | Cancels a pending assistant draft action. | Authenticated | Path `actionId` | `backend/src/routes/ai.routes.ts` |
+
+## External APIs and Integrations
+
+| Integration | Purpose | Where It Is Used | Environment Variables | Notes |
+| --- | --- | --- | --- | --- |
+| PostgreSQL connection, including Supabase-style connection strings | Main relational database connection | `backend/prisma/schema.prisma`, `backend/src/config/env.ts`, `backend/.env.example` | `DATABASE_URL`, `DIRECT_URL` | The repository shows PostgreSQL use directly; Supabase is referenced as a connection style, not as a replacement API layer. |
+| SMTP through Nodemailer | Email verification, password reset, and reservation notification delivery | `backend/src/services/EmailService.ts`, `backend/src/services/AuthService.ts`, `backend/src/services/NotificationService.ts` | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME`, `NOTIFICATION_EMAIL_PREVIEW` | In development or incomplete SMTP configuration, preview mode can log or expose preview links instead of sending email. |
+| Optional AI provider | Assistant response rewriting and optional external completion calls | `backend/src/services/ReservationAssistantService.ts` | `AI_PROVIDER`, `AI_API_KEY`, `AI_MODEL`, `AI_API_BASE_URL`, `OPENROUTER_SITE_URL`, `OPENROUTER_APP_NAME` | Supported values are `groq`, `openrouter`, `openai`, and `custom`. If not configured, deterministic fallback replies are used. |
+
+No payment API, map API, SMS API, file storage API, or external authentication provider is explicitly shown in the repository.
+
+## Database Design
+
+### Database Type
+
+- Type: PostgreSQL
+- ORM: Prisma
+- Schema file: `backend/prisma/schema.prisma`
+
+### Entities and Relationships
+
+| Table or Entity | Purpose | Important Fields | Relationships |
 | --- | --- | --- | --- |
-| Register own account | No public self-registration path | No public self-registration path | Yes |
-| Login / logout | Yes | Yes | Yes |
-| Update own profile | Yes | Yes | Yes |
-| Manage users | Yes | No | No |
-| Manage laboratories | Yes | Assigned lab only for PC status viewing and maintenance tasks | No |
-| Assign staff to laboratories | Yes | No | No |
-| Manage schedules | Yes | Yes, assigned lab only | No |
-| Create reservation | No | No | Yes |
-| Review reservation | Yes | Yes, assigned lab only | No |
-| Complete reservation | Yes | Yes, assigned lab only | No |
-| Manage calendar events | Yes | No | No |
-| View full reports | Yes | Yes, role-scoped | No |
+| `User` | Stores admin, student, and laboratory staff accounts. | `firstName`, `lastName`, `email`, `emailVerifiedAt`, `passwordHash`, `role`, `status`, `studentNumber`, `department`, `yearLevel`, `phone` | Related to `Reservation`, `Schedule`, `CalendarEvent`, `Laboratory`, `ActivityLog`, `Notification`, `AuthSession`, `PasswordResetToken`, `EmailVerificationToken` |
+| `Laboratory` | Stores laboratory records. | `name`, `roomCode`, `building`, `location`, `capacity`, `computerCount`, `description`, `status`, `imageUrl`, `custodianId` | Parent of `PC`, `Schedule`, `Reservation`, `CalendarEvent`, `ActivityLog`; optional `custodian` is a `User` |
+| `PC` | Stores workstation records under a laboratory. | `laboratoryId`, `pcNumber`, `status` | Belongs to `Laboratory`; related to `Reservation`, `CalendarEvent`, `ActivityLog` |
+| `Schedule` | Stores published room availability blocks. | `laboratoryId`, `date`, `startTime`, `endTime`, `status`, `createdById` | Belongs to `Laboratory`; created by `User`; linked from `Reservation` |
+| `Reservation` | Stores student reservation requests and review state. | `reservationCode`, `studentId`, `laboratoryId`, `scheduleId`, `pcId`, `reservationType`, `purpose`, `reservationDate`, `startTime`, `endTime`, `status`, `remarks`, `reviewedById`, `reviewedAt`, `cancelledAt` | Belongs to `User` as student; optionally belongs to reviewer `User`; belongs to `Laboratory`; optionally links `Schedule` and `PC`; parent of `Notification` |
+| `CalendarEvent` | Stores admin-created maintenance and holiday entries. | `title`, `type`, `laboratoryId`, `pcId`, `date`, `startTime`, `endTime`, `description`, `createdById` | Optionally belongs to `Laboratory` and `PC`; created by `User` |
+| `Notification` | Stores email and in-app notification records. | `userId`, `reservationId`, `channel`, `type`, `status`, `subject`, `message`, `metadata`, `readAt`, `sentAt` | Belongs to `User`; optionally belongs to `Reservation` |
+| `AuthSession` | Stores refresh-session records. | `userId`, `tokenHash`, `userAgent`, `ipAddress`, `expiresAt`, `lastUsedAt`, `revokedAt` | Belongs to `User` |
+| `PasswordResetToken` | Stores password reset tokens. | `userId`, `tokenHash`, `expiresAt`, `usedAt` | Belongs to `User` |
+| `EmailVerificationToken` | Stores email verification tokens. | `userId`, `tokenHash`, `expiresAt`, `usedAt` | Belongs to `User` |
+| `ActivityLog` | Stores audit-style activity entries. | `userId`, `labId`, `pcId`, `action`, `entityType`, `entityId`, `description`, `metadata`, `timestamp` | Optionally belongs to `User`, `Laboratory`, and `PC` |
 
----
+### Constraints Visible in the Schema
 
-## 4. Comprehensive User Manual
+- `User.email` is unique.
+- `User.studentNumber` is unique when present.
+- `Laboratory.roomCode` is unique.
+- `Reservation.reservationCode` is unique.
+- `PC` has a composite unique key on `laboratoryId` and `pcNumber`.
+- `Notification` has a composite unique key on `userId`, `reservationId`, `channel`, and `type`.
+- Indexed fields support frequent lookup by role, status, date, laboratory, PC, and reservation conflict patterns.
 
-This section provides practical, step-by-step operating procedures based on the implemented frontend and backend workflows.
+### Seed Data
 
-### 4.1 Authentication and User Management
+The repository contains a seed script at `backend/prisma/seed.ts`. It explicitly creates:
 
-#### A. Student Self-Registration
+- One admin account
+- Three laboratory staff accounts
+- Five student accounts
+- Three laboratories
+- Auto-generated PCs for each laboratory
+- Example schedules
+- Example reservations with multiple statuses
+- Example calendar events
+- Example activity logs
 
-Public route:
+### Entity Relationship Diagram
 
-- `/register`
+```mermaid
+erDiagram
+    User ||--o{ Reservation : "student"
+    User ||--o{ Reservation : "reviewedBy"
+    User ||--o{ Schedule : "creates"
+    User ||--o{ CalendarEvent : "creates"
+    User ||--o{ Laboratory : "assigned as custodian"
+    User ||--o{ ActivityLog : "logs"
+    User ||--o{ Notification : "receives"
+    User ||--o{ AuthSession : "has"
+    User ||--o{ PasswordResetToken : "has"
+    User ||--o{ EmailVerificationToken : "has"
 
-Purpose:
+    Laboratory ||--o{ PC : "contains"
+    Laboratory ||--o{ Schedule : "has"
+    Laboratory ||--o{ Reservation : "hosts"
+    Laboratory ||--o{ CalendarEvent : "scopes"
+    Laboratory ||--o{ ActivityLog : "appears in"
 
-- Allows a new student to create an account without administrator intervention
+    Schedule ||--o{ Reservation : "selected by"
+    PC ||--o{ Reservation : "assigned to"
+    PC ||--o{ CalendarEvent : "scoped by"
+    PC ||--o{ ActivityLog : "appears in"
+    Reservation ||--o{ Notification : "triggers"
+```
 
-Required fields:
+## System Modules
 
-- First Name
-- Last Name
-- Email Address
-- Student Number
-- Department
-- Year Level
-- Phone Number
-- Password
+| Module | Purpose | Main Features | Key Files | Roles |
+| --- | --- | --- | --- | --- |
+| Authentication Module | Handles account access and session lifecycle. | Registration, login, refresh, email verification, forgot/reset password, logout, change password | `backend/src/routes/auth.routes.ts`, `backend/src/services/AuthService.ts`, `frontend/src/pages/public/*` | Public, all users |
+| User Management Module | Handles account creation and maintenance. | List users, create users, update users, activate or deactivate users, update own profile | `backend/src/routes/user.routes.ts`, `backend/src/services/UserService.ts`, `frontend/src/pages/admin/UserManagementPage.tsx`, `frontend/src/pages/ProfilePage.tsx` | `ADMIN`, all users for profile |
+| Laboratory Management Module | Manages room records and PC inventory. | Create/edit/delete laboratories, sync PC records, update PC status, list availability | `backend/src/routes/laboratory.routes.ts`, `backend/src/services/LaboratoryService.ts`, `frontend/src/pages/staff/LaboratoryManagementPage.tsx` | `ADMIN`, `LABORATORY_STAFF` |
+| Staff Assignment Module | Assigns laboratory custodians. | Assignment, reassignment, unassignment, filter by building and department | `backend/src/services/LaboratoryService.ts`, `frontend/src/pages/admin/LaboratoryStaffAssignmentPage.tsx` | `ADMIN` |
+| Schedule Management Module | Publishes room schedule blocks. | Create, update, delete, filter, staff-scoped schedule control, public schedule view for staff | `backend/src/routes/schedule.routes.ts`, `backend/src/services/ScheduleService.ts`, `frontend/src/pages/staff/ScheduleManagementPage.tsx` | `ADMIN`, `LABORATORY_STAFF` |
+| Reservation Module | Handles reservation lifecycle. | Create, list, cancel, approve, reject, complete, conflict checks | `backend/src/routes/reservation.routes.ts`, `backend/src/services/ReservationService.ts`, `frontend/src/pages/student/ReserveLaboratoryPage.tsx`, `frontend/src/pages/student/MyReservationsPage.tsx`, `frontend/src/pages/staff/ReservationManagementPage.tsx` | `STUDENT`, `ADMIN`, `LABORATORY_STAFF` |
+| Dashboard Module | Shows role-specific operational data. | Totals, trends, recent activity, recent reservations | `backend/src/services/DashboardService.ts`, `frontend/src/pages/student/StudentDashboardPage.tsx`, `frontend/src/pages/staff/StaffDashboardPage.tsx` | All authenticated roles |
+| Reports Module | Summarizes reservation activity for presentation and export. | Filters, charts, CSV export | `frontend/src/pages/staff/ReportsPage.tsx`, `frontend/src/utils/csv.ts` | `ADMIN`, `LABORATORY_STAFF` |
+| Notification Module | Delivers and tracks system notices. | In-app list, unread count, mark-as-read, mark-all-read, email delivery, SSE streaming | `backend/src/routes/notification.routes.ts`, `backend/src/services/NotificationService.ts`, `backend/src/services/NotificationInboxService.ts`, `backend/src/services/NotificationRealtimeService.ts`, `frontend/src/components/layout/NotificationCenter.tsx` | All authenticated roles |
+| Management Calendar Module | Maintains administrative calendar blocks and merged calendar views. | Create, edit, delete maintenance and holiday events; display derived schedule and reservation events | `backend/src/routes/calendar.routes.ts`, `backend/src/services/CalendarService.ts`, `frontend/src/pages/admin/ManagementCalendarPage.tsx` | `ADMIN` |
+| Assistant Module | Provides grounded, role-aware assistant behavior. | Reservation help, availability lookup, statistics summaries, role capability answers, draft actions with confirmation | `backend/src/routes/ai.routes.ts`, `backend/src/services/ReservationAssistantService.ts`, `frontend/src/pages/ReservationAssistantPage.tsx` | All authenticated roles |
 
-Password requirements:
+## User Flows
 
-- At least 10 characters
-- At least one uppercase letter
-- At least one lowercase letter
-- At least one number
-- At least one special character
+### Registration, Verification, and Login Flow
 
-Step-by-step procedure:
+```mermaid
+flowchart TD
+    A[Student opens Register page] --> B[Submit registration form]
+    B --> C[Backend validates fields and checks duplicates]
+    C --> D[User record created with emailVerifiedAt = null]
+    D --> E[Verification token created]
+    E --> F[Verification email or preview link prepared]
+    F --> G[Student opens verification link]
+    G --> H[Backend verifies token and marks email verified]
+    H --> I[Student logs in]
+    I --> J[Backend checks password, active status, and verified email]
+    J --> K[Access and refresh cookies set]
+    K --> L[Frontend loads current user profile]
+```
 
-1. Open the public registration page.
-2. Enter complete student identity information.
-3. Enter a valid institutional or personal email address.
-4. Create a password that satisfies all password rules shown in the interface.
-5. Submit the form.
-6. The backend validates all fields and checks for duplicate email or duplicate student number.
-7. If validation passes, the account is created with the `STUDENT` role.
-8. A verification email is prepared and the student is asked to verify the account before logging in.
+### Reservation Creation and Review Flow
 
-System checks performed:
+```mermaid
+flowchart TD
+    A[Student selects laboratory and schedule] --> B[Choose LAB or PC reservation]
+    B --> C[Submit purpose and time range]
+    C --> D[Backend validates schedule, time range, lab availability, and conflicts]
+    D --> E[Reservation saved as PENDING]
+    E --> F[Notification event published]
+    F --> G[Admin or laboratory staff opens Reservation Management]
+    G --> H[Reviewer approves or rejects]
+    H --> I{Approved?}
+    I -- Yes --> J[Conflict check runs again]
+    J --> K[Reservation becomes APPROVED]
+    I -- No --> L[Reservation becomes REJECTED]
+    K --> M[Reviewer may later mark reservation COMPLETED]
+    E --> N[Student may cancel while still PENDING]
+```
 
-- Email must be unique
-- Student number must be unique
-- Password must meet complexity rules
-- Required fields must not be blank
+### Password Reset Flow
 
-#### B. Login, Logout, and Session Management
+```mermaid
+flowchart TD
+    A[User opens Forgot Password page] --> B[Submit email]
+    B --> C[Backend creates reset token for active account]
+    C --> D[Reset email or preview link prepared]
+    D --> E[User opens reset link]
+    E --> F[User submits new password]
+    F --> G[Backend validates token and updates password hash]
+    G --> H[Existing sessions revoked]
+    H --> I[User logs in with new password]
+```
 
-Public route:
+### Assistant Draft and Confirmation Flow
 
+```mermaid
+flowchart TD
+    A[Authenticated user opens /assistant] --> B[Send role-aware question or command]
+    B --> C[Assistant inspects user role and system context]
+    C --> D{Read-only answer or write draft?}
+    D -- Read-only --> E[Reply with grounded summary or availability]
+    D -- Write draft --> F[Create pending action preview]
+    F --> G[User confirms or cancels]
+    G -- Confirm --> H[Backend executes allowed action]
+    G -- Cancel --> I[Pending action discarded]
+```
+
+## Data Flow Diagram
+
+```mermaid
+flowchart LR
+    UserInput[User Input]
+    Frontend[Frontend UI]
+    API[Express API]
+    Services[Business Services]
+    DB[(PostgreSQL)]
+    Mail[SMTP]
+    Stream[SSE Stream]
+    AI[Optional AI Provider]
+
+    UserInput --> Frontend
+    Frontend --> API
+    API --> Services
+    Services --> DB
+    Services --> Mail
+    Services --> Stream
+    Services -.optional.-> AI
+    DB --> Services
+    Services --> API
+    API --> Frontend
+```
+
+## Use Cases
+
+| Use Case | Actor | Description | Precondition | Main Flow | Expected Result |
+| --- | --- | --- | --- | --- | --- |
+| Register student account | Student | Create a new student account. | User is not yet registered. | Fill registration form, submit, receive verification step. | Student account is created and awaits email verification. |
+| Verify email | Student | Activate account for login. | Student has a valid verification token. | Open verification link. | `emailVerifiedAt` is set and login becomes allowed. |
+| Log in | Any user | Enter the protected system. | Account is active and verified. | Submit email and password. | Auth cookies are set and dashboard loads. |
+| Manage own profile | Any authenticated user | Update name, department, phone, and role-valid fields. | User is authenticated and active. | Open profile page and save changes. | Profile data is updated. |
+| Create user account | Admin | Create admin, staff, or student accounts. | Admin is logged in. | Open user management, submit user form. | New user record is created. |
+| Manage laboratory | Admin | Create or update a laboratory record. | Admin is logged in. | Open laboratory management, submit lab form. | Laboratory data and PC records are updated. |
+| Assign staff to laboratory | Admin | Attach a staff member to a laboratory. | Admin is logged in; staff account is active. | Open staff assignment page and select staff. | `custodianId` is updated. |
+| Publish schedule | Admin or laboratory staff | Create a schedule block for reservations. | Authorized user is logged in and has lab scope. | Submit schedule form. | Schedule is created if it does not overlap. |
+| Submit reservation | Student | Request a whole lab or a PC reservation. | Student is logged in; schedule exists. | Choose schedule, time, purpose, and optional PC. | Reservation is saved as `PENDING`. |
+| Review reservation | Admin or laboratory staff | Approve or reject a pending request. | Reviewer is logged in and has scope over the laboratory. | Open reservation details, add remarks, approve or reject. | Reservation becomes `APPROVED` or `REJECTED`. |
+| Complete reservation | Admin or laboratory staff | Mark an approved reservation as finished. | Reservation status is `APPROVED`. | Click complete. | Reservation becomes `COMPLETED`. |
+| Cancel pending reservation | Student | Cancel an unreviewed request. | Reservation belongs to student and is `PENDING`. | Open reservations page and confirm cancel. | Reservation becomes `CANCELLED`. |
+| Manage calendar event | Admin | Add or edit a maintenance or holiday event. | Admin is logged in. | Open management calendar and submit form. | Calendar event is created or updated. |
+| View notifications | Authenticated user | Review in-app notifications and unread count. | User is logged in. | Open notification center. | Notifications are listed and can be marked read. |
+| Ask assistant | Authenticated user | Query grounded system information or prepare draft actions. | User is logged in. | Open assistant and send prompt. | Assistant returns an answer or draft action preview. |
+
+## User Manual
+
+This section covers shared usage patterns before the role-specific manuals.
+
+### Public Access and Shared Entry Points
+
+Available public routes in the frontend:
+
+- `/`
 - `/login`
+- `/register`
+- `/forgot-password`
+- `/reset-password`
+- `/verify-email`
 
-Step-by-step procedure:
+### How to Log In
 
-1. Enter email and password on the login page.
-2. Submit the form.
-3. The backend verifies the account and compares the password hash using `bcrypt`.
-4. If the account is active, ComPort creates an access token and refresh token.
-5. Tokens are stored using secure `HttpOnly` cookies rather than browser local storage.
-6. The user is redirected to the correct dashboard based on role.
+1. Open `/login`.
+2. Enter the registered email and password.
+3. Submit the form.
+4. If the account is active and verified, the system redirects to:
+   - `/student/dashboard` for students
+   - `/dashboard` for admins and laboratory staff
 
-Additional auth workflows:
+Common login-related messages visible in code:
 
-- `Forgot Password`: requests a reset link token
-- `Reset Password`: validates a reset token and stores the new password
-- `Change Password`: available to authenticated users from within the system
-- `Logout`: revokes the current refresh session
+- `Please verify your email before logging in. Check your inbox.`
+- `This account has been deactivated by the administrator.`
+- `Invalid email or password.`
 
-#### C. Administrator User Creation and Maintenance
+### How to Recover a Password
 
-Protected route:
+1. Open `/forgot-password`.
+2. Enter the account email.
+3. Submit the form.
+4. Use the email link or preview link to open `/reset-password?token=...`.
+5. Enter a new password and confirm it.
+
+### Shared Features After Login
+
+All authenticated users can:
+
+- Open `/profile` to update profile details
+- Change password from `/profile`
+- Open `/assistant` to use the reservation assistant
+- View the notification center in the top bar
+
+## Admin Manual
+
+### Admin Dashboard
+
+Route:
+
+- `/dashboard`
+
+The admin dashboard shows:
+
+- Total users
+- Total laboratories
+- Total reservations
+- Pending, approved, and completed counts
+- Seven-day reservation trend
+- Recent activity logs
+
+### Managing Users
+
+Route:
 
 - `/management/users`
 
-Purpose:
-
-- Allows administrators to create and maintain accounts for admins, laboratory staff, and students
-
-Step-by-step procedure for creating a user:
-
-1. Log in as an administrator.
-2. Open `User Management`.
-3. Click `Add User`.
-4. Enter the required profile details.
-5. Select the role:
-   - `ADMIN`
-   - `LABORATORY_STAFF`
-   - `STUDENT`
-6. If the selected role is `STUDENT`, also provide:
-   - Student Number
-   - Year Level
-7. Optionally enter department and phone number.
-8. Submit the form.
-
-System checks performed:
-
-- Duplicate email is blocked
-- Duplicate student number is blocked for student accounts
-- Student-only fields are required when the role is `STUDENT`
-- Password complexity rules are enforced
-
-Step-by-step procedure for editing a user:
+How to use:
 
 1. Open `User Management`.
-2. Locate the target user from the paginated list.
-3. Click `Edit`.
-4. Update the required fields.
-5. Leave password blank if the password should remain unchanged.
-6. Save changes.
+2. Click `Add User`.
+3. Fill in the form.
+4. Select a role.
+5. If the role is `STUDENT`, provide student number and year level.
+6. Save the form.
 
-Step-by-step procedure for activation or deactivation:
+Admin-specific actions:
 
-1. Open `User Management`.
-2. Locate the user account.
-3. Click `Deactivate` or `Activate`.
-4. Confirm the action.
-5. The backend updates the `status` field and revokes active sessions for that user.
+- Create user
+- Edit user
+- Activate user
+- Deactivate user
 
-Important administrative effect:
+Important behavior:
 
-- Changing a user's role or status revokes active sessions so that permissions are reapplied cleanly
+- Updating role or status revokes active sessions.
+- New admin-created accounts are stored with `emailVerifiedAt` already set.
 
-### 4.2 Creating and Configuring a Computer Laboratory
+### Managing Laboratories
 
-#### A. Create a Laboratory
-
-Protected route:
+Route:
 
 - `/management/laboratories`
 
-Administrator steps:
+How to use:
 
-1. Log in as an administrator.
-2. Open `Laboratory Management`.
-3. Click `Add Laboratory`.
-4. Fill in the following details:
-   - Laboratory Name
-   - Room Code
-   - Building
-   - Optional custom Location
-   - Status
-   - Capacity
-   - Number of Computers
-   - Optional Image URL or uploaded image
-   - Description
-5. Submit the form.
+1. Click `Add Laboratory`.
+2. Provide laboratory name, room code, building, optional location, status, capacity, computer count, description, and optional image.
+3. Save the form.
 
-System behavior after creation:
+Important backend behavior:
 
-- The laboratory record is created
-- The system generates PC records automatically based on the `computerCount`
-- Generated PCs follow the `PC-01`, `PC-02`, `PC-03` numbering pattern
-- The action is written to the activity log
+- Duplicate room codes are blocked.
+- `computerCount` changes can create or reconcile PC records automatically.
+- Laboratories with reservation or calendar history cannot be deleted.
 
-Validation and business rules:
+### Assigning Laboratory Staff
 
-- Room code must be unique
-- Capacity and computer count must be positive integers
-- Description must be meaningful
-- Status must be one of:
-  - `AVAILABLE`
-  - `UNAVAILABLE`
-  - `MAINTENANCE`
-
-#### B. Edit a Laboratory
-
-Administrator steps:
-
-1. Open `Laboratory Management`.
-2. Find the laboratory from the catalog table.
-3. Click `Edit`.
-4. Update room details, counts, image, description, or status.
-5. Save changes.
-
-Important system behavior when changing computer count:
-
-- If the count increases, new PCs are generated automatically
-- If the count decreases, the system checks PCs outside the new count
-- PCs with history are not blindly deleted; they are set to `MAINTENANCE`
-- PCs with no history may be removed safely
-
-This preserves historical integrity for past reservations and logs.
-
-#### C. Delete a Laboratory
-
-Administrator steps:
-
-1. Open `Laboratory Management`.
-2. Click `Delete` for the target laboratory.
-3. Confirm the action.
-
-Deletion rule:
-
-- A laboratory cannot be deleted if it already has reservation history or calendar history
-
-#### D. Assign a Laboratory Staff Member
-
-Protected route:
+Route:
 
 - `/management/laboratories/assign-staff`
 
-Administrator steps:
+How to use:
 
-1. Open `Assign Staff`.
-2. Search or filter by building or department if needed.
-3. Find the target laboratory.
-4. Use the assignment dropdown to choose a staff member or set the lab as `Unassigned`.
+1. Filter by building or department if needed.
+2. Search for a laboratory.
+3. Use the assignment dropdown.
+4. Select an active laboratory staff member or set the lab to `Unassigned`.
 
-Validation rules:
+### Managing Schedules
 
-- Only active `LABORATORY_STAFF` users may be assigned
-- Inactive staff accounts cannot be assigned
+Route:
 
-#### E. Update PC Status
+- `/management/schedules`
 
-There are two supported management contexts:
+How to use:
 
-- Administrator updates any laboratory PC from the laboratory and API management layer
-- Laboratory staff update PCs in their assigned laboratory
+1. Filter by laboratory or date.
+2. Click `Add Schedule`.
+3. Select laboratory, date, time range, and schedule status.
+4. Save the schedule.
 
-Supported PC statuses:
+Restrictions:
+
+- Overlapping schedules are blocked.
+- Schedules with reservation history cannot be changed in reservation-relevant fields.
+- Schedules with reservation history cannot be deleted.
+
+### Reviewing Reservations
+
+Route:
+
+- `/management/reservations`
+
+How to use:
+
+1. Filter by student, laboratory, date, or status.
+2. Click `View` on a reservation row.
+3. Review student, purpose, room, time, and current status.
+4. Enter remarks if needed.
+5. Click `Approve` or `Reject`.
+6. For approved reservations, use `Mark Complete` when appropriate.
+
+### Viewing Reports
+
+Route:
+
+- `/management/reports`
+
+Features:
+
+- Filter by status, laboratory, and date range
+- View status chart and top-demand laboratory chart
+- Export current filtered report to CSV
+
+### Managing Calendar Events
+
+Route:
+
+- `/management/calendar`
+
+How to use:
+
+1. Filter by date or laboratory if needed.
+2. Click `Add Calendar Event`.
+3. Choose `MAINTENANCE` or `HOLIDAY`.
+4. Provide title, optional laboratory, date, optional time range, and optional description.
+5. Save the event.
+
+Notes:
+
+- The same page also displays non-editable derived schedule and reservation calendar items.
+
+## Laboratory Staff Manual
+
+### Staff Dashboard
+
+Route:
+
+- `/dashboard`
+
+The staff dashboard shows:
+
+- Reservation totals in scope
+- Pending, approved, rejected, and completed counts
+- Assigned laboratory count
+- Seven-day reservation trend
+- Recent activity
+
+### Viewing Assigned Laboratory
+
+Route:
+
+- `/management/laboratories`
+
+What staff can do:
+
+- View assigned laboratory details
+- View PC records
+- Update PC status
+- See read-only availability summaries for other laboratories
+
+### Updating PC Status
+
+Within `/management/laboratories`:
+
+1. Locate the `PC Status` section.
+2. Choose a status from the dropdown.
+3. The system saves the change immediately.
+
+Statuses:
 
 - `AVAILABLE`
 - `OCCUPIED`
 - `MAINTENANCE`
 
-Practical usage:
+### Managing Schedules
 
-- `AVAILABLE` means the PC is ready for reservation
-- `OCCUPIED` marks a unit as currently in use or unavailable for new PC reservations
-- `MAINTENANCE` blocks the PC from reservation selection
-
-### 4.3 Creating, Editing, and Deleting Schedules
-
-#### A. Create a Schedule
-
-Protected route:
+Route:
 
 - `/management/schedules`
 
-Roles allowed:
+What staff can do:
 
-- `ADMIN`
-- `LABORATORY_STAFF` for assigned laboratory only
+- Create schedules for the assigned laboratory
+- Edit schedules for the assigned laboratory
+- Delete schedules when allowed
+- View read-only public schedules from other laboratories
 
-Schedule fields:
+### Reviewing Reservations
 
-- Laboratory
-- Date
-- Start Time
-- End Time
-- Status
-
-Schedule statuses:
-
-- `AVAILABLE`
-- `BLOCKED`
-- `CLOSED`
-
-Step-by-step procedure:
-
-1. Open `Schedule Management`.
-2. Click `Add Schedule`.
-3. Choose the target laboratory.
-   - For staff users, the assigned laboratory is fixed automatically.
-4. Select the date.
-5. Enter the start time and end time.
-6. Select the schedule status.
-7. Save the schedule.
-
-System checks performed:
-
-- End time must be later than start time
-- The laboratory must be available for reservations
-- The new schedule must not overlap with an existing schedule in the same laboratory and date
-- Staff may only manage their assigned laboratory
-
-#### B. Edit a Schedule
-
-Step-by-step procedure:
-
-1. Open `Schedule Management`.
-2. Find the schedule using filters such as laboratory or date.
-3. Click `Edit`.
-4. Update the date, time, or status.
-5. Save changes.
-
-Editing restrictions:
-
-- If a schedule already has reservation history, it cannot be changed when the change would mutate the reservation-relevant fields
-- Overlap rules are checked again before saving
-
-#### C. Delete a Schedule
-
-Step-by-step procedure:
-
-1. Open `Schedule Management`.
-2. Click `Delete` on the target schedule.
-3. Confirm the action.
-
-Deletion rule:
-
-- Schedules with reservation history cannot be deleted
-
-#### D. Why Schedule Status Matters
-
-- `AVAILABLE` schedules may be booked by students
-- `BLOCKED` schedules exist but are not bookable
-- `CLOSED` schedules represent non-bookable periods and also remain visible for management purposes
-
-### 4.4 How a User Makes a Reservation and How Conflicts Are Handled
-
-#### A. Student Reservation Workflow
-
-Protected student routes:
-
-- `/student/laboratories`
-- `/student/laboratories/:id`
-- `/student/laboratories/:id/reserve`
-- `/student/reservations`
-
-Step-by-step reservation procedure:
-
-1. Log in as a student.
-2. Open the laboratory list and choose a laboratory.
-3. Review room information, existing schedule blocks, and current occupancy.
-4. Open the reservation page for the selected laboratory.
-5. Choose the reservation type:
-   - `Whole Laboratory`
-   - `Specific PC`
-6. Select a published `AVAILABLE` schedule block.
-7. Enter the reservation purpose.
-8. Choose a start time and end time from the remaining free windows only.
-9. If choosing a PC reservation, select an available PC.
-10. Submit the reservation request.
-
-System behavior after submission:
-
-- A reservation code is generated automatically
-- The reservation is stored with `PENDING` status
-- A reservation-created notification event is published
-- The request appears in the student's reservation history and in the staff/admin review interface
-
-#### B. Reservation Conflict Rules
-
-The system applies strict conflict detection before a reservation is created or approved.
-
-The following rules are enforced:
-
-1. The selected laboratory must be in an available state.
-2. The selected schedule must exist and belong to the same laboratory.
-3. The schedule must be in `AVAILABLE` status.
-4. The reservation time must stay fully inside the published schedule block.
-5. End time must be later than start time.
-6. Whole-lab reservations block overlapping whole-lab and PC reservations.
-7. PC reservations only block the same PC, unless a whole-lab reservation overlaps the same time.
-8. A student cannot reserve a PC that is not currently marked `AVAILABLE`.
-
-Examples:
-
-- If Laboratory A already has an approved whole-lab reservation from `09:00` to `11:00`, no overlapping PC reservation may be submitted for that period.
-- If `PC-05` is reserved from `10:00` to `11:00`, another student may still reserve `PC-07` during that same time, provided there is no whole-lab reservation conflict.
-- If a student selects `08:00` to `12:00` but the published schedule is only `09:00` to `11:00`, the request is rejected.
-
-#### C. Reservation Review Workflow
-
-Roles allowed to review:
-
-- `ADMIN`
-- `LABORATORY_STAFF` for assigned laboratory
-
-Protected route:
+Route:
 
 - `/management/reservations`
 
-Step-by-step review procedure:
+What staff can do:
 
-1. Open `Reservation Management`.
-2. Filter by status, laboratory, student, or date if needed.
-3. Open the reservation details modal.
-4. Review the request details:
-   - Student identity
-   - Laboratory
-   - Schedule
-   - Reservation type
-   - Purpose
-5. Optionally enter remarks.
-6. Click `Approve` or `Reject`.
+- View reservations for the assigned laboratory
+- Approve or reject pending reservations
+- Add remarks
+- Mark approved reservations as completed
+- Export the current reservation list to CSV
 
-System checks performed during approval:
+Restrictions:
 
-- The reservation must still be pending
-- The reviewer must have permission over the target laboratory
-- Conflict detection is re-run before final approval
+- Staff cannot review reservations outside assigned scope.
 
-This means approval is not just a manual status change. The system protects against race conditions and newly conflicting bookings.
+### Viewing Reports
 
-#### D. Reservation Completion
-
-Step-by-step procedure:
-
-1. Open `Reservation Management`.
-2. Locate an approved reservation.
-3. Click `Mark Complete`.
-
-Completion rule:
-
-- Only approved reservations can be marked as completed
-
-#### E. Student Cancellation
-
-Students may cancel reservations only when:
-
-- The reservation belongs to them
-- The status is still `PENDING`
-
-Cancelled reservations are retained in history for tracking and auditability.
-
-### 4.5 Dashboard, Notifications, and Reports
-
-Although not requested as a separate manual section, these modules are part of the user experience and are useful during a panel demonstration.
-
-#### Dashboard
-
-Protected route:
-
-- `/dashboard` for admins and staff
-- `/student/dashboard` for students
-
-Dashboard behavior:
-
-- Admin dashboard shows total users, laboratories, reservations, status counts, trends, and recent activity
-- Staff dashboard shows reservation metrics for assigned laboratories only
-- Student dashboard shows personal reservation counts, recent reservations, and available laboratory counts
-
-#### Notifications
-
-Authenticated routes:
-
-- `GET /api/notifications`
-- `PATCH /api/notifications/:id/read`
-- `POST /api/notifications/mark-all-read`
-- `GET /api/notifications/stream`
-
-Notification behavior:
-
-- Reservation events create notification entries
-- Users can view unread and recent notification items
-- Live updates are supported through a stream endpoint
-
-#### Reports
-
-Protected route:
+Route:
 
 - `/management/reports`
 
-Current report support:
+Staff can:
 
-- Filtering operational reservation data
-- Viewing reservation activity
-- Exporting reservation views to CSV
+- Review reservation summaries
+- View charts
+- Export filtered reservation data
 
----
+## Student Manual
 
-## 5. Developer Guide (Local Setup)
+### Student Dashboard
 
-This section is intended for future developers, maintainers, and evaluators who need to run the project locally.
+Route:
 
-### 5.1 Prerequisites
+- `/student/dashboard`
 
-Install the following first:
+The student dashboard shows:
+
+- Pending reservations
+- Approved reservations
+- Completed reservations
+- Available laboratory count
+- Recent reservation history
+- Shortcut to the assistant
+
+### Browsing Laboratories
+
+Routes:
+
+- `/student/laboratories`
+- `/student/laboratories/:id`
+
+How to use:
+
+1. Open the laboratory list.
+2. Search by laboratory name, room code, or building.
+3. Open a laboratory card with `View Details`.
+4. Review description, capacity, computer count, custodian, and visible schedules.
+
+### Creating a Reservation
+
+Route:
+
+- `/student/laboratories/:id/reserve`
+
+How to use:
+
+1. Choose `Whole Laboratory` or `Specific PC`.
+2. Select a schedule block.
+3. Enter a reservation purpose.
+4. Choose start and end time within the free windows shown.
+5. If choosing `Specific PC`, select an available PC.
+6. Submit the request.
+
+What the page helps the student see:
+
+- Published schedule window
+- Occupied windows
+- Remaining free booking windows
+- Available PCs for the selected time
+
+### Viewing and Cancelling Reservations
+
+Route:
+
+- `/student/reservations`
+
+How to use:
+
+1. Search reservations by code, purpose, laboratory, or remarks.
+2. Filter by status.
+3. Review the laboratory, reservation type, schedule, remarks, and reviewer.
+4. If the reservation is still `PENDING`, click `Cancel Request`.
+
+### Using the Assistant
+
+Route:
+
+- `/assistant`
+
+Student assistant examples shown in the frontend:
+
+- “Who am I?”
+- “My reservations today.”
+- “Available ba CL-302 bukas?”
+- “Reserve a laboratory.”
+- “Reservation rules.”
+
+The backend enforces student-only scope for personal reservation data.
+
+## Installation and Setup Guide
+
+### Prerequisites
 
 - Git
-- Node.js 22.x or a compatible modern Node.js runtime
+- Node.js `>=22 <23`
 - npm
-- A Supabase project with PostgreSQL credentials, or a local PostgreSQL 16+ database for development
+- PostgreSQL, or Docker Desktop if using `docker-compose.yml`
 
-### 5.2 Clone the Repository
+### Clone the Repository
 
 ```bash
-git clone <your-repository-url>
+git clone <repository-url>
 cd "ComLab Reservation System"
 ```
 
-### 5.3 Install Dependencies
-
-From the repository root:
+### Install Dependencies
 
 ```bash
 npm install
 ```
 
-This installs both workspace packages:
+### Configure Environment Files
 
-- `backend`
-- `frontend`
-
-### 5.4 Configure Environment Variables
-
-Create local environment files using the provided examples.
-The `.env.example` files are templates only and are not loaded automatically. Your real runtime values must be stored in ignored files at `backend/.env` and `frontend/.env`.
-
-Windows:
+Create local environment files from the examples:
 
 ```bash
 copy backend\.env.example backend\.env
 copy frontend\.env.example frontend\.env
 ```
 
-Or create them manually.
+If you are not on Windows, create equivalent `.env` files manually.
 
-#### Backend Environment Example
+### Configure the Database
+
+Option 1: Local PostgreSQL
+
+- Set `DATABASE_URL` and `DIRECT_URL` in `backend/.env` to your PostgreSQL connection string.
+
+Option 2: Docker Compose database
+
+```bash
+docker compose up -d postgres
+```
+
+Use the local compose database URL:
 
 ```env
-PORT=5000
-NODE_ENV=development
-DATABASE_URL="postgresql://postgres.PROJECT_REF:YOUR_PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres?pgbouncer=true&connection_limit=1&sslmode=require"
-DIRECT_URL="postgresql://postgres.PROJECT_REF:YOUR_PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require"
-JWT_SECRET=replace_me_with_a_long_random_secret
-JWT_EXPIRES_IN=1d
-JWT_REFRESH_SECRET=replace_me_with_a_second_long_random_secret
-JWT_REFRESH_EXPIRES_IN=7d
-AUTH_COOKIE_NAME=comlab_access_token
-AUTH_COOKIE_MAX_AGE_MS=86400000
-REFRESH_COOKIE_NAME=comlab_refresh_token
-REFRESH_COOKIE_MAX_AGE_MS=604800000
-AUTH_COOKIE_SAME_SITE=lax
-CLIENT_URL=http://localhost:5173
-FRONTEND_URL=http://localhost:5173
-APP_BASE_URL=http://localhost:5173
-CORS_ORIGINS=http://localhost:5173,http://localhost:5174
-RESET_TOKEN_TTL_MINUTES=30
-EMAIL_VERIFICATION_TOKEN_TTL_HOURS=24
-RESET_TOKEN_PREVIEW=true
-ENABLE_DEMO_BOOTSTRAP=false
-NOTIFICATION_EMAIL_PREVIEW=true
-SMTP_HOST=
-SMTP_PORT=587
-SMTP_SECURE=false
-SMTP_USER=
-SMTP_PASS=
-SMTP_FROM="ComPort <no-reply@example.com>"
-SMTP_FROM_EMAIL=
-SMTP_FROM_NAME=
-AI_PROVIDER=groq
-AI_API_KEY=
-AI_MODEL=llama-3.1-8b-instant
-AI_API_BASE_URL=
-OPENROUTER_SITE_URL=
-OPENROUTER_APP_NAME=ComPort
-RESERVATION_REMINDER_LEAD_MINUTES=60
-RESERVATION_REMINDER_INTERVAL_MS=60000
-LOGIN_RATE_LIMIT_WINDOW_MS=60000
-LOGIN_RATE_LIMIT_MAX=5
-REGISTER_RATE_LIMIT_WINDOW_MS=60000
-REGISTER_RATE_LIMIT_MAX=5
-PASSWORD_RESET_RATE_LIMIT_WINDOW_MS=60000
-PASSWORD_RESET_RATE_LIMIT_MAX=5
+postgresql://postgres:password@localhost:5432/comlab_reservation_system
 ```
 
-- `DATABASE_URL` is the Supabase pooler URL used by the running backend.
-- `DIRECT_URL` is the Supabase session pooler URL used by Prisma migrations in environments that cannot reach the direct database host.
-- `CLIENT_URL`, `FRONTEND_URL`, and `APP_BASE_URL` are single canonical frontend URLs.
-- `CORS_ORIGINS` is the comma-separated allowlist for browser origins such as `https://www.comlabreservation.app,https://comlabreservation.app`.
-- Replace `PROJECT_REF` with your actual Supabase project ref.
-- Replace `YOUR_PASSWORD` with your actual database password.
+Option 3: Supabase-style PostgreSQL deployment
 
-#### Frontend Environment Example
+- The example environment file shows pooled and direct connection string formats.
+- Use real project-specific connection strings in `backend/.env`.
 
-```env
-VITE_API_URL=http://localhost:5000/api
-```
-
-For static production deployments, `VITE_API_URL` must be set explicitly. Use your backend URL such as `https://your-backend-domain.com/api`, or `/api` only when a reverse proxy is configured for that path.
-
-### 5.5 Configure the Database
-
-For Supabase, create or open a Supabase project and copy both PostgreSQL connection strings from the dashboard Connect panel.
-
-- `DATABASE_URL` is used by the running Express backend. In this repo, use the Supabase pooler connection string for the runtime.
-- `DIRECT_URL` is used by Prisma migrations. In this repo, use the Supabase session pooler connection string on port `5432` when the deployment environment cannot reach the direct database host.
-- Replace `PROJECT_REF` with the project reference from the Supabase dashboard.
-- Replace `YOUR_PASSWORD` with the database password for that project.
-- Do not commit real Supabase credentials. Keep them only in local `.env` files and deployment environment settings.
-
-For local-only development without Supabase, the provided Docker Compose file starts PostgreSQL on port `5432`; use `postgresql://postgres:password@localhost:5432/comlab_reservation_system` for both `DATABASE_URL` and `DIRECT_URL`.
-
-### 5.6 Generate Prisma Client
-
-Recommended from the repository root:
+### Generate Prisma Client
 
 ```bash
-npm run prisma:generate --workspace backend
+npm run prisma:generate
 ```
 
-Or directly inside the backend workspace:
+### Run Migrations
+
+Development migration:
 
 ```bash
-cd backend
-npx prisma generate
+npm run prisma:migrate:dev
 ```
 
-The root shorthand `npm run prisma:generate` also works because it delegates into the backend workspace.
-
-### 5.7 Run Database Migrations
-
-Recommended from the repository root:
+Reset development database:
 
 ```bash
-npm run prisma:migrate:reset --workspace backend
-npm run prisma:migrate:dev --workspace backend
-npm run prisma:migrate:deploy --workspace backend
+npm run prisma:migrate:reset
 ```
 
-Or from the backend workspace:
+Production-style migration deploy:
 
 ```bash
-cd backend
-npx prisma migrate reset
-npx prisma migrate dev
-npx prisma migrate deploy
+npm run prisma:migrate:deploy
 ```
 
-`prisma migrate reset` deletes local or test data and replays every migration from scratch. Use it when you are working with disposable data or when Prisma reports that an applied migration was modified and the development database needs to be realigned.
+### Seed Demo Data
 
-Avoid running raw root-level Prisma commands like the example below:
-
-```bash
-npx prisma migrate reset --schema backend/prisma/schema.prisma
-```
-
-That form points Prisma at the backend schema file, but it does not automatically load `backend/.env` when run from the repository root. In this repo, use the backend workspace commands above so Prisma picks up `backend/.env` correctly.
-
-### 5.8 Seed Optional Development Data
-
-If you want to run the seed script:
+Optional:
 
 ```bash
 npm run seed
 ```
 
-Or:
+The seed script is defined in `backend/prisma/seed.ts`.
 
-```bash
-cd backend
-npx tsx prisma/seed.ts
-```
+### Start the Development Servers
 
-### 5.9 Start the Development Servers
-
-Run both frontend and backend:
+Run both workspaces:
 
 ```bash
 npm run dev
 ```
 
-Run only the backend:
+Run only backend:
 
 ```bash
 npm run dev --workspace backend
 ```
 
-Run only the frontend:
+Run only frontend:
 
 ```bash
 npm run dev --workspace frontend
@@ -908,124 +1182,505 @@ npm run dev --workspace frontend
 Expected local URLs:
 
 - Frontend: `http://localhost:5173`
-- Backend API: `http://localhost:5000/api`
+- Backend: `http://localhost:5000/api`
 - Health check: `http://localhost:5000/api/health`
 
-### 5.10 Build the Project
+### Build the Project
 
 ```bash
 npm run build
 ```
 
-### 5.11 Run Tests
+### Run Automated Tests
 
 ```bash
 npm test
 ```
 
-Workspace-specific test commands:
+Workspace-specific test runs:
 
 ```bash
 npm run test --workspace backend
 npm run test --workspace frontend
 ```
 
-### 5.12 Deployment Note
+### Run the Containerized Stack
 
-The backend remains an Express API. Supabase is used only as the PostgreSQL database in this migration phase; do not replace Express routes with Supabase APIs, Supabase Auth, Realtime, or Storage yet. In production:
+```bash
+docker compose up --build
+```
 
-- Set `NODE_ENV=production`
-- Set `DATABASE_URL` to the Supabase pooler connection string used by the running backend
-- Set `DIRECT_URL` to the Supabase session pooler connection string on port `5432` when the deployment environment cannot reach the direct database host
-- Set production `JWT_SECRET` and `JWT_REFRESH_SECRET`
-- Set `CLIENT_URL`, `FRONTEND_URL`, and `APP_BASE_URL` to the real frontend domain
-- Set SMTP variables and turn preview mode off for real email delivery
-- Set AI provider variables for Groq, OpenRouter, or a custom OpenAI-compatible endpoint
-- Set the frontend `VITE_API_URL` build-time variable to the deployed backend API URL
-- Run `npx prisma migrate deploy` during backend startup or release
-- Use the exposed backend health endpoint `/api/health` for readiness checks
+Visible container targets in `docker-compose.yml`:
 
-Deployment-specific environment examples, local preview setup, production SMTP and AI guidance, and a step-by-step verification checklist are documented in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+- `postgres`
+- `backend`
+- `frontend`
 
----
+## Environment Variables
 
-## 6. System Modules and Data Model Summary
+### Backend Variables
 
-### 6.1 Main Backend Modules
+#### Core Application and Database
 
-The backend is organized into clear layers:
+| Variable | Purpose | Required | Notes |
+| --- | --- | --- | --- |
+| `PORT` | Backend listening port | Yes | Defaults to `5000` in examples |
+| `NODE_ENV` | Runtime mode | Yes | `development`, `test`, or `production` |
+| `DATABASE_URL` | Runtime PostgreSQL connection string | Yes | Used by Prisma datasource |
+| `DIRECT_URL` | Direct migration connection string | Yes | Falls back to `DATABASE_URL` if omitted |
 
-- `controllers/`
-  - Thin request handlers
-- `services/`
-  - Business rules and workflow logic
-- `routes/`
-  - API route definitions and permission binding
-- `middleware/`
-  - Authentication, authorization, validation, and access controls
-- `validations/`
-  - Zod schemas for request validation
-- `domain/`
-  - Domain entities encapsulating role and workflow behavior
-- `utils/`
-  - Shared helpers such as JWT, time, cookies, and error utilities
-- `notifications/`
-  - Notification event and delivery support
+#### Authentication and Cookies
 
-### 6.2 Main Frontend Modules
+| Variable | Purpose | Required | Notes |
+| --- | --- | --- | --- |
+| `JWT_SECRET` | Access token signing secret | Yes | Must be a real secure value in production |
+| `JWT_EXPIRES_IN` | Access token lifetime | Yes | Example: `1d` |
+| `JWT_REFRESH_SECRET` | Refresh token signing secret | Yes | Separate from access secret |
+| `JWT_REFRESH_EXPIRES_IN` | Refresh token lifetime | Yes | Example: `7d` |
+| `AUTH_COOKIE_NAME` | Access cookie name | Yes | Example: `comlab_access_token` |
+| `AUTH_COOKIE_MAX_AGE_MS` | Access cookie lifetime in ms | Yes | Example: `86400000` |
+| `REFRESH_COOKIE_NAME` | Refresh cookie name | Yes | Example: `comlab_refresh_token` |
+| `REFRESH_COOKIE_MAX_AGE_MS` | Refresh cookie lifetime in ms | Yes | Example: `604800000` |
+| `AUTH_COOKIE_SAME_SITE` | Cookie same-site mode | Conditional | Resolved automatically if omitted |
 
-- Public pages for landing, login, registration, forgot password, and reset password
-- Student pages for dashboards, laboratory browsing, reservation creation, and reservation history
-- Staff and admin management pages for laboratories, schedules, reservations, reports, and profile maintenance
-- Admin-only pages for user management, staff assignment, and calendar management
+#### Frontend URL and CORS
 
-### 6.3 Core API Route Groups
+| Variable | Purpose | Required | Notes |
+| --- | --- | --- | --- |
+| `CLIENT_URL` | Canonical client URL | Conditional | Used in CORS resolution |
+| `FRONTEND_URL` | Frontend base URL | Conditional | Used in reset and verification links |
+| `APP_BASE_URL` | App base URL fallback | Conditional | Used if `FRONTEND_URL` is absent |
+| `CORS_ORIGINS` | Comma-separated allowed origins | Conditional | Validated as URL list |
 
-- `/api/auth`
-- `/api/users`
-- `/api/laboratories`
-- `/api/schedules`
-- `/api/reservations`
-- `/api/dashboard`
-- `/api/staff`
-- `/api/calendar`
-- `/api/notifications`
-- `/api/health`
+#### Email Verification and Reset
 
-### 6.4 Core Database Entities
+| Variable | Purpose | Required | Notes |
+| --- | --- | --- | --- |
+| `RESET_TOKEN_TTL_MINUTES` | Reset token expiry | Yes | Default 30 |
+| `EMAIL_VERIFICATION_TOKEN_TTL_HOURS` | Verification token expiry | Yes | Default 24 |
+| `RESET_TOKEN_PREVIEW` | Expose preview links in non-production flows | Conditional | Defaults based on environment |
 
-The Prisma schema currently models these major entities:
+#### Optional Bootstrap and Workers
 
-- `User`
-- `AuthSession`
-- `Laboratory`
-- `PC`
-- `Schedule`
-- `Reservation`
-- `CalendarEvent`
-- `Notification`
-- `PasswordResetToken`
-- `ActivityLog`
+| Variable | Purpose | Required | Notes |
+| --- | --- | --- | --- |
+| `ENABLE_DEMO_BOOTSTRAP` | Creates demo accounts at startup | Conditional | Defaults to `false` |
+| `ENABLE_BACKGROUND_WORKERS` | Enables reminder and notification background workers | Conditional | Defaults to `true` |
+| `RESERVATION_REMINDER_LEAD_MINUTES` | Minutes before reservation when reminders trigger | Yes | Used by reminder service |
+| `RESERVATION_REMINDER_INTERVAL_MS` | Reminder worker interval | Yes | Used by reminder service |
 
-### 6.5 Operational Highlights for Evaluators
+#### SMTP and Email Delivery
 
-For panel evaluation, the following implemented behaviors are especially important:
+| Variable | Purpose | Required | Notes |
+| --- | --- | --- | --- |
+| `SMTP_HOST` | SMTP host | Conditional | Required for real email delivery |
+| `SMTP_PORT` | SMTP port | Conditional | Required for real email delivery |
+| `SMTP_SECURE` | SMTP TLS mode | Conditional | Boolean-like env value |
+| `SMTP_USER` | SMTP username | Conditional | Optional if server allows unauthenticated sending |
+| `SMTP_PASS` | SMTP password | Conditional | Optional if server allows unauthenticated sending |
+| `SMTP_FROM` | Full sender value | Conditional | Alternative to separate sender fields |
+| `SMTP_FROM_EMAIL` | Sender email | Conditional | Used if `SMTP_FROM` is absent |
+| `SMTP_FROM_NAME` | Sender display name | Conditional | Used with `SMTP_FROM_EMAIL` |
+| `NOTIFICATION_EMAIL_PREVIEW` | Preview emails instead of sending them | Conditional | Auto-enabled in development without full SMTP config |
 
-- Role-based authorization is enforced on both route and service levels
-- Student reservations are not allowed outside published schedule windows
-- Schedule overlaps are actively prevented
-- Reservation conflicts are checked both at submission time and approval time
-- Session revocation occurs when sensitive account changes happen
-- Activity logging creates an audit trail for significant actions
-- The system supports both whole-lab and per-PC booking strategies
-- Staff access is scoped to assigned laboratories
+#### Assistant and External AI
 
----
+| Variable | Purpose | Required | Notes |
+| --- | --- | --- | --- |
+| `AI_PROVIDER` | Assistant provider selector | Conditional | `groq`, `openrouter`, `openai`, or `custom` |
+| `AI_API_KEY` | External AI API key | Conditional | Required for external AI calls |
+| `AI_MODEL` | External AI model name | Conditional | Required for external AI calls |
+| `AI_API_BASE_URL` | Base URL for custom or overridden provider | Conditional | Used for `custom` and optional overrides |
+| `OPENROUTER_SITE_URL` | OpenRouter referer header value | Conditional | Used only for OpenRouter-style requests |
+| `OPENROUTER_APP_NAME` | OpenRouter app title header | Conditional | Used only for OpenRouter-style requests |
 
-## Conclusion
+#### Rate Limiting
 
-ComPort is not only a laboratory reservation interface, but a complete operational management system for academic computer laboratories. It combines role-based access control, schedule enforcement, reservation conflict prevention, audit logging, and structured administration into one platform.
+| Variable | Purpose | Required | Notes |
+| --- | --- | --- | --- |
+| `LOGIN_RATE_LIMIT_WINDOW_MS` | Login limiter window | Yes | Default 60000 |
+| `LOGIN_RATE_LIMIT_MAX` | Login limiter max requests | Yes | Default 5 |
+| `REGISTER_RATE_LIMIT_WINDOW_MS` | Registration limiter window | Yes | Default 60000 |
+| `REGISTER_RATE_LIMIT_MAX` | Registration limiter max requests | Yes | Default 5 |
+| `FORGOT_PASSWORD_RATE_LIMIT_WINDOW_MS` | Forgot-password limiter window | Yes | Default 60000 |
+| `FORGOT_PASSWORD_RATE_LIMIT_MAX` | Forgot-password limiter max requests | Yes | Default 5 |
+| `RESET_PASSWORD_RATE_LIMIT_WINDOW_MS` | Reset-password limiter window | Yes | Default 60000 |
+| `RESET_PASSWORD_RATE_LIMIT_MAX` | Reset-password limiter max requests | Yes | Default 5 |
+| `VERIFY_EMAIL_RATE_LIMIT_WINDOW_MS` | Verify-email limiter window | Yes | Default 60000 |
+| `VERIFY_EMAIL_RATE_LIMIT_MAX` | Verify-email limiter max requests | Yes | Default 10 |
+| `RESEND_VERIFICATION_RATE_LIMIT_WINDOW_MS` | Resend-verification limiter window | Yes | Default 60000 |
+| `RESEND_VERIFICATION_RATE_LIMIT_MAX` | Resend-verification limiter max requests | Yes | Default 5 |
+| `AI_ASSISTANT_RATE_LIMIT_WINDOW_MS` | Assistant limiter window | Yes | Default 60000 |
+| `AI_ASSISTANT_RATE_LIMIT_MAX` | Assistant limiter max requests | Yes | Default 12 |
 
-For end-users, it provides a guided and secure reservation experience.
-For programmers and evaluators, it demonstrates a layered architecture, validated workflows, and production-aware backend design.
+### Frontend Variables
 
+| Variable | Purpose | Required | Notes |
+| --- | --- | --- | --- |
+| `VITE_API_URL` | Base API URL used by Axios | Yes | Production builds require this explicitly |
+
+## Project Structure
+
+```text
+ComLab Reservation System/
+|-- backend/
+|   |-- prisma/
+|   |   |-- migrations/
+|   |   |-- schema.prisma
+|   |   `-- seed.ts
+|   |-- src/
+|   |   |-- config/
+|   |   |-- controllers/
+|   |   |-- domain/
+|   |   |-- middleware/
+|   |   |-- notifications/
+|   |   |-- routes/
+|   |   |-- services/
+|   |   |-- utils/
+|   |   `-- validations/
+|   |-- tests/
+|   |-- .env.example
+|   |-- Dockerfile
+|   `-- Procfile
+|-- frontend/
+|   |-- public/
+|   |-- src/
+|   |   |-- api/
+|   |   |-- assets/
+|   |   |-- components/
+|   |   |-- hooks/
+|   |   |-- layouts/
+|   |   |-- pages/
+|   |   |-- store/
+|   |   |-- test/
+|   |   |-- types/
+|   |   `-- utils/
+|   |-- .env.example
+|   |-- Dockerfile
+|   |-- nginx.conf
+|   `-- vercel.json
+|-- docs/
+|-- docker-compose.yml
+|-- package.json
+`-- README.md
+```
+
+### Folder Summary
+
+| Folder | Purpose |
+| --- | --- |
+| `backend/src/config` | Environment parsing and Prisma setup |
+| `backend/src/controllers` | HTTP request handlers |
+| `backend/src/domain` | OOP domain models |
+| `backend/src/middleware` | Authentication, role checks, lab access, validation, error handling, rate limiting |
+| `backend/src/routes` | API route definitions |
+| `backend/src/services` | Business logic |
+| `backend/src/validations` | Zod request schemas |
+| `backend/prisma` | Schema, migrations, seed data |
+| `backend/tests` | Backend test suites |
+| `frontend/src/api` | API clients and service wrappers |
+| `frontend/src/components` | Reusable UI and layout components |
+| `frontend/src/hooks` | Reusable React hooks |
+| `frontend/src/layouts` | Route layouts |
+| `frontend/src/pages` | Public, student, staff, and admin page components |
+| `frontend/src/store` | Auth context state |
+| `frontend/src/types` | Shared frontend API types |
+| `frontend/src/utils` | Formatting, CSV, RBAC, validation, and scheduling helpers |
+| `docs` | Supporting project documents included in the repository |
+
+## Security Features
+
+The repository explicitly shows the following security practices:
+
+- Password hashing with `bcrypt`
+- JWT access and refresh tokens
+- `HttpOnly` auth cookies
+- Database-backed refresh sessions in `AuthSession`
+- Session revocation on logout, password reset, password change, role change, and status change
+- Email verification before login
+- Role-based authorization through `requireRole` and `authorizeRoles`
+- Laboratory-scope authorization through `requireAssignedLabManager` and `StaffAccessService`
+- CORS allowlist validation
+- Origin checks for state-changing requests that rely on auth cookies
+- Security headers through `helmet`
+- Request rate limiting for login, registration, password reset, email verification, and assistant usage
+- Input validation using Zod
+- Centralized error handling that avoids leaking raw database errors
+- Environment validation at startup
+
+Security features not explicitly shown in the repository:
+
+- Multi-factor authentication
+- CAPTCHA or bot-detection services
+- Full audit trail export tooling beyond existing activity log storage
+
+## Validation and Error Handling
+
+### Backend Validation
+
+The backend uses Zod validation schemas in `backend/src/validations/` for:
+
+- Auth forms
+- User management
+- Laboratory forms
+- Schedule forms
+- Reservation forms
+- Calendar forms
+- Assistant requests
+
+Examples of validated rules:
+
+- Strong password requirements
+- Student number format
+- Phone number format
+- Required year level for student accounts
+- Valid time format `HH:MM`
+- End time later than start time
+- Valid enum values for statuses and roles
+
+### Frontend Validation
+
+The frontend uses:
+
+- `react-hook-form`
+- `zodResolver`
+- Utility helpers in `frontend/src/utils/userValidation.ts`
+
+Examples:
+
+- Sanitized names and phone inputs
+- Formatted student number input
+- Password rule feedback during registration
+- Role-aware field validation in user management and profile forms
+
+### Business-Rule Validation
+
+The repository also enforces service-level rules beyond field validation:
+
+- No duplicate email or student number
+- No duplicate laboratory room code
+- No reservation outside the selected schedule window
+- No overlapping schedule blocks
+- No overlapping reservation conflicts
+- No deletion of laboratories with reservation or calendar history
+- No deletion or mutation of schedules with reservation history
+- No reservation on unavailable laboratory or unavailable PC
+
+### Error Handling
+
+The centralized error handler in `backend/src/middleware/errorHandler.ts` maps:
+
+- `ApiError` to structured JSON errors
+- `ZodError` to field-level validation errors
+- Prisma unique constraint errors to conflict responses
+- Prisma not-found errors to `404`
+- Invalid JSON request bodies to `400`
+- Blocked CORS origins to `403`
+- Unknown failures to `500`
+
+## Testing and Quality Assurance
+
+### Automated Tests Present in the Repository
+
+Automated tests are explicitly shown in the repository.
+
+Backend examples:
+
+- `backend/tests/AuthService.test.ts`
+- `backend/tests/ReservationService.test.ts`
+- `backend/tests/ReservationReminderService.test.ts`
+- `backend/tests/ReservationAssistantService.test.ts`
+- `backend/tests/AssistantDateRangeParser.test.ts`
+- `backend/tests/UserValidation.test.ts`
+- `backend/tests/EnvBoolean.test.ts`
+
+Frontend examples:
+
+- `frontend/src/pages/public/LandingPage.test.tsx`
+- `frontend/src/pages/public/VerifyEmailPage.test.tsx`
+- `frontend/src/pages/admin/UserManagementPage.test.tsx`
+- `frontend/src/components/ui/StatusBadge.test.tsx`
+- `frontend/src/hooks/useStartupSplash.test.tsx`
+- `frontend/src/utils/userValidation.test.ts`
+
+### What the Existing Tests Cover
+
+Based on the test files, the repository includes coverage for:
+
+- Registration and verification flows
+- Auth service behaviors
+- Reservation conflict and review logic
+- Reservation reminder behavior
+- Assistant date parsing and assistant service behavior
+- Frontend page rendering and selected UI interactions
+- Validation utilities
+
+### Manual Testing Checklist
+
+- Register a new student account.
+- Verify the student email.
+- Log in as student, staff, and admin.
+- Test forgot-password and reset-password flow.
+- Create a laboratory as admin.
+- Assign a laboratory staff member to a laboratory.
+- Create schedule blocks and test overlap prevention.
+- Submit both laboratory-wide and PC-specific reservations.
+- Approve, reject, complete, and cancel reservations under the correct role.
+- Update PC statuses and confirm availability changes.
+- Create and delete management calendar events.
+- Open the notification center and confirm unread tracking.
+- Export CSV files from reports and reservation management.
+- Ask the assistant both read-only questions and draft-action prompts.
+
+## Deployment Guide
+
+### Visible Deployment Paths in the Repository
+
+The repository explicitly includes:
+
+- `docker-compose.yml` for local multi-service deployment
+- `backend/Dockerfile` for backend containerization
+- `frontend/Dockerfile` plus `frontend/nginx.conf` for frontend containerization
+- `frontend/vercel.json` for SPA path rewrites
+- `backend/Procfile` for process-based backend deployment
+
+### Backend Build and Start
+
+Visible backend commands:
+
+```bash
+npm run build --workspace backend
+npm run start --workspace backend
+```
+
+The backend `start` script runs:
+
+1. `prisma generate`
+2. `prisma migrate deploy`
+3. `node dist/src/server.js`
+
+### Frontend Build
+
+Visible frontend commands:
+
+```bash
+npm run build --workspace frontend
+npm run preview --workspace frontend
+```
+
+### Container Deployment
+
+Run the full stack:
+
+```bash
+docker compose up --build
+```
+
+### Production Considerations Visible in Code
+
+- Production requires real `JWT_SECRET` and `JWT_REFRESH_SECRET`.
+- Production requires explicit frontend URL configuration.
+- Production cookies may need `AUTH_COOKIE_SAME_SITE=none`.
+- Production email delivery requires SMTP settings.
+- Production assistant rewriting requires AI provider settings.
+- Production frontend build requires `VITE_API_URL`.
+
+### What Is Not Explicitly Shown
+
+- A single mandated hosting provider for the backend is not explicitly shown in the repository.
+- Full CI/CD deployment automation is not explicitly shown in the repository.
+- Kubernetes, Terraform, or infrastructure-as-code definitions are not explicitly shown in the repository.
+
+## System Limitations
+
+- The role model is limited to `ADMIN`, `LABORATORY_STAFF`, and `STUDENT`.
+- The assistant is authenticated and role-scoped, but long-term conversation persistence beyond browser session storage is not explicitly shown in the repository.
+- Most list endpoints do not show server-side pagination.
+- Notifications are limited to `EMAIL` and `IN_APP`.
+- Laboratory images are stored as URLs or data URLs rather than through a dedicated media storage service.
+- Public guest browsing of the frontend laboratory catalog is not explicitly shown in the repository.
+- Multi-factor authentication is not explicitly shown in the repository.
+
+## Future Enhancements
+
+The following are recommendations only. They should not be treated as already implemented features.
+
+- Add end-to-end browser tests and CI/CD pipelines.
+- Add server-side pagination and more advanced filtering for large datasets.
+- Add file storage or CDN-backed image uploads for laboratory media.
+- Add multi-factor authentication or SSO integration.
+- Add richer report exports and downloadable audit log reports.
+- Add push notifications, SMS, or mobile app support.
+- Add more granular permission levels beyond the current three-role model.
+- Add stronger assistant audit visibility or longer-lived assistant history.
+
+## Defense and Presentation Reviewer Guide
+
+| Reviewer Question | Suggested Beginner-Friendly Answer |
+| --- | --- |
+| What is your system? | ComPort is a web-based computer laboratory reservation and management system for schools. |
+| What problem does it solve? | It replaces manual or unstructured room scheduling and reservation handling with a role-based, validated workflow. |
+| Who are the users? | The implemented users are administrators, laboratory staff, and students. |
+| What are your APIs? | The backend exposes REST endpoints for auth, users, laboratories, schedules, reservations, staff operations, dashboard data, calendar events, notifications, and the assistant. |
+| How does the database work? | PostgreSQL stores users, labs, PCs, schedules, reservations, sessions, notifications, logs, and token records, all managed through Prisma. |
+| How did you use OOP? | We used domain classes, services, controllers, inheritance, and polymorphism to organize behavior cleanly. |
+| How did you apply encapsulation? | We grouped data and logic together inside classes, such as user role behavior and reservation rules. |
+| How did you apply abstraction? | We hid complex workflows inside service classes and kept controllers focused on HTTP input and output. |
+| Did you use inheritance? | Yes. `Admin`, `Student`, and `LaboratoryStaff` inherit from the abstract `User` class. |
+| Did you use polymorphism? | Yes. The system calls shared methods like `getDashboardScope()` and role-specific behavior changes depending on the subclass returned by `UserFactory`. |
+| What are the main modules? | Auth, user management, laboratory management, staff assignment, schedule management, reservation management, dashboards, reports, notifications, calendar, profile, and assistant. |
+| How does the system flow work? | Students create accounts and reservations, then staff or admins review them, while schedules, notifications, and dashboards update around that workflow. |
+| What are the security features? | Password hashing, JWT cookies, database sessions, email verification, role-based authorization, scope checks, CORS validation, and rate limiting. |
+| What are the limitations? | The repository shows only three fixed roles, no MFA, no dedicated media storage service, and no explicit server-side pagination on most list endpoints. |
+| What can be improved in the future? | CI/CD, end-to-end testing, stronger auth, better exports, mobile support, and more granular permissions. |
+
+## Glossary of Terms
+
+| Term | Simple Meaning |
+| --- | --- |
+| API | A set of backend endpoints the frontend can call. |
+| Frontend | The user-facing web interface. |
+| Backend | The server-side application that processes requests and business rules. |
+| Database | The persistent storage for users, laboratories, reservations, and other records. |
+| Authentication | Confirming who the user is. |
+| Authorization | Checking what the user is allowed to do. |
+| ORM | A tool like Prisma that lets code work with database records more easily. |
+| Endpoint | A specific API URL, such as `/api/auth/login`. |
+| CRUD | Create, Read, Update, Delete. |
+| Environment Variables | Runtime settings such as API URLs, secrets, and database connection strings. |
+| Middleware | Logic that runs before the main route handler, such as auth or validation. |
+| OOP | Object-Oriented Programming, a way of organizing code using classes and objects. |
+| SSE | Server-Sent Events, a browser-friendly way to stream updates from server to client. |
+
+## References
+
+Repository files used as primary sources for this README:
+
+- `package.json`
+- `docker-compose.yml`
+- `backend/package.json`
+- `frontend/package.json`
+- `backend/.env.example`
+- `frontend/.env.example`
+- `backend/prisma/schema.prisma`
+- `backend/prisma/seed.ts`
+- `backend/src/app.ts`
+- `backend/src/server.ts`
+- `backend/src/config/env.ts`
+- `backend/src/routes/*.ts`
+- `backend/src/controllers/*.ts`
+- `backend/src/services/*.ts`
+- `backend/src/domain/*.ts`
+- `backend/src/middleware/*.ts`
+- `backend/tests/*.test.ts`
+- `frontend/src/App.tsx`
+- `frontend/src/api/client.ts`
+- `frontend/src/api/services.ts`
+- `frontend/src/store/AuthContext.tsx`
+- `frontend/src/pages/**/*.tsx`
+- `frontend/src/components/**/*.tsx`
+- `frontend/src/hooks/useNotifications.ts`
+- `frontend/src/types/api.ts`
+- `frontend/src/utils/*.ts`
+- `frontend/src/**/*.test.tsx`
+- `frontend/src/**/*.test.ts`

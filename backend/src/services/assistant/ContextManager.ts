@@ -2,10 +2,12 @@ import type {
   AssistantConversationContext,
   AssistantConversationMessage,
   AssistantLanguage,
+  AssistantPendingDraft,
   AssistantQuerySnapshot
 } from "./types.js";
 
 const CONTEXT_TTL_MS = 30 * 60 * 1000;
+const PENDING_DRAFT_TTL_MS = 15 * 60 * 1000;
 const MAX_MESSAGES = 16;
 
 export class ContextManager {
@@ -14,7 +16,13 @@ export class ContextManager {
   get(userId: number, sessionId: number) {
     this.pruneExpired();
 
-    return this.contexts.get(this.buildKey(userId, sessionId)) ?? null;
+    const context = this.contexts.get(this.buildKey(userId, sessionId)) ?? null;
+
+    if (context?.pendingDraft && context.pendingDraft.expiresAt <= Date.now()) {
+      context.pendingDraft = null;
+    }
+
+    return context;
   }
 
   appendUserMessage(
@@ -71,6 +79,45 @@ export class ContextManager {
     context.updatedAt = Date.now();
   }
 
+  getPendingDraft(userId: number, sessionId: number) {
+    return this.get(userId, sessionId)?.pendingDraft ?? null;
+  }
+
+  setPendingDraft(
+    userId: number,
+    sessionId: number,
+    draft: Omit<AssistantPendingDraft, "createdAt" | "updatedAt" | "expiresAt"> | null
+  ) {
+    const context = this.ensureContext(userId, sessionId, draft?.language ?? "english");
+
+    context.pendingDraft = draft
+      ? {
+          ...draft,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          expiresAt: Date.now() + PENDING_DRAFT_TTL_MS
+        }
+      : null;
+    context.updatedAt = Date.now();
+  }
+
+  updatePendingDraft(
+    userId: number,
+    sessionId: number,
+    draft: AssistantPendingDraft | null
+  ) {
+    const context = this.ensureContext(userId, sessionId, draft?.language ?? "english");
+
+    context.pendingDraft = draft
+      ? {
+          ...draft,
+          updatedAt: Date.now(),
+          expiresAt: Date.now() + PENDING_DRAFT_TTL_MS
+        }
+      : null;
+    context.updatedAt = Date.now();
+  }
+
   private ensureContext(userId: number, sessionId: number, language: AssistantLanguage) {
     const key = this.buildKey(userId, sessionId);
     const existing = this.contexts.get(key);
@@ -87,6 +134,7 @@ export class ContextManager {
       messages: [],
       activeQuery: null,
       pendingActionId: null,
+      pendingDraft: null,
       updatedAt: Date.now()
     };
     this.contexts.set(key, created);

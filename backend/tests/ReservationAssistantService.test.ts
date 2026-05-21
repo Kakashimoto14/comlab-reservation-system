@@ -299,6 +299,7 @@ const matchesDateRange = (value: Date, range?: { gte?: Date; lte?: Date }) => {
 };
 
 const createMockDb = () => {
+  const localSchedules = [...scheduleRows];
   const db = {
     laboratory: {
       findMany: vi.fn(async (args?: any) => {
@@ -317,6 +318,20 @@ const createMockDb = () => {
           return true;
         });
       }),
+      findUnique: vi.fn(async (args?: any) =>
+        laboratories.find((laboratory) => laboratory.id === args?.where?.id) ?? null),
+      findFirst: vi.fn(async (args?: any) =>
+        laboratories.find((laboratory) => {
+          if (typeof args?.where?.id === "number" && laboratory.id !== args.where.id) {
+            return false;
+          }
+
+          if (typeof args?.where?.custodianId === "number" && laboratory.custodianId !== args.where.custodianId) {
+            return false;
+          }
+
+          return true;
+        }) ?? null),
       count: vi.fn(async (args?: any) =>
         laboratories.filter((laboratory) => {
           if (args?.where?.status && laboratory.status !== args.where.status) {
@@ -357,8 +372,26 @@ const createMockDb = () => {
     },
     schedule: {
       findMany: vi.fn(async (args?: any) =>
-        scheduleRows.filter((schedule) => {
+        localSchedules.filter((schedule) => {
           const allowedLabs = args?.where?.laboratoryId?.in ?? laboratories.map((lab) => lab.id);
+          const exactLabId = typeof args?.where?.laboratoryId === "number" ? args.where.laboratoryId : null;
+          const dateFilter = args?.where?.date;
+
+          if (exactLabId !== null && schedule.laboratoryId !== exactLabId) {
+            return false;
+          }
+
+          if (dateFilter?.in) {
+            const allowedDates = dateFilter.in.map((date: Date) => date.toISOString().slice(0, 10));
+
+            if (!allowedDates.includes(schedule.date.toISOString().slice(0, 10))) {
+              return false;
+            }
+          } else if (dateFilter instanceof Date) {
+            if (schedule.date.toISOString().slice(0, 10) !== dateFilter.toISOString().slice(0, 10)) {
+              return false;
+            }
+          }
 
           return (
             allowedLabs.includes(schedule.laboratoryId) &&
@@ -366,7 +399,22 @@ const createMockDb = () => {
           );
         })),
       count: vi.fn(async (args?: any) =>
-        scheduleRows.filter((schedule) => matchesDateRange(schedule.date, args?.where?.date)).length)
+        localSchedules.filter((schedule) => matchesDateRange(schedule.date, args?.where?.date)).length),
+      create: vi.fn(async (args?: any) => {
+        const laboratory = laboratories.find((lab) => lab.id === args?.data?.laboratoryId)!;
+        const created = {
+          id: localSchedules.length + 100,
+          laboratoryId: args.data.laboratoryId,
+          date: args.data.date,
+          startTime: args.data.startTime,
+          endTime: args.data.endTime,
+          status: args.data.status,
+          createdById: args.data.createdById,
+          laboratory
+        };
+        localSchedules.push(created as any);
+        return created;
+      })
     },
     reservation: {
       findMany: vi.fn(async (args?: any) => {
@@ -497,11 +545,17 @@ const createMockDb = () => {
 
             return true;
           })
-          .slice(0, args?.take ?? activityLogRecords.length))
+          .slice(0, args?.take ?? activityLogRecords.length)),
+      create: vi.fn(async (args?: any) => ({
+        id: 1000,
+        ...args.data
+      }))
     },
     calendarEvent: {
       findMany: vi.fn(async () => [])
-    }
+    },
+    $queryRaw: vi.fn(async () => []),
+    $transaction: vi.fn(async (callback: any) => callback(db))
   } as any;
 
   return db;
@@ -662,5 +716,113 @@ describe("ReservationAssistantService", () => {
 
     expect(response.category).toBe("out_of_scope");
     expect(response.reply.toLowerCase()).toContain("comport");
+  });
+
+  it("continues a pending bulk schedule command when the admin supplies the missing laboratory", async () => {
+    const service = new ReservationAssistantService(createMockDb());
+    const currentUser = { id: 1, sessionId: 110, role: "ADMIN" as const };
+
+    const first = await service.askReservationAssistant(
+      currentUser,
+      "Create bulk schedule next week 8-5."
+    );
+    const second = await service.askReservationAssistant(currentUser, "all active labs");
+
+    expect(first.category).toBe("clarification");
+    expect(first.reply).toContain("Which laboratory should I use");
+    expect(second.category).toBe("action_preview");
+    expect(second.reply.toLowerCase()).toContain("all active laboratories");
+    expect(second.pendingAction?.actionType).toBe("CREATE_BULK_SCHEDULE");
+    expect(second.pendingAction?.affectedCount).toBe(14);
+    expect(second.pendingAction?.summary).toContain("08:00 to 17:00");
+    expect(second.presentation?.type).toBe("summary");
+    if (second.presentation?.type === "summary") {
+      expect(second.presentation.items).toEqual(
+        expect.arrayContaining([
+          { label: "Start time", value: "08:00" },
+          { label: "End time", value: "17:00" },
+          { label: "Total schedule blocks", value: "14" }
+        ])
+      );
+    }
+  });
+
+  it("extracts all bulk schedule slots from one admin command without re-asking for the lab", async () => {
+    const service = new ReservationAssistantService(createMockDb());
+
+    const response = await service.askReservationAssistant(
+      { id: 1, sessionId: 111, role: "ADMIN" },
+      "create a bulk schedule for all labs on may 26-29. the start time is 8am the end time is 4pm"
+    );
+
+    expect(response.category).toBe("action_preview");
+    expect(response.reply).not.toContain("Which laboratory");
+    expect(response.pendingAction?.actionType).toBe("CREATE_BULK_SCHEDULE");
+    expect(response.pendingAction?.affectedCount).toBe(8);
+    expect(response.pendingAction?.summary).toContain("08:00 to 16:00");
+  });
+
+  it("denies schedule creation for students", async () => {
+    const service = new ReservationAssistantService(createMockDb());
+
+    const response = await service.askReservationAssistant(
+      { id: 7, sessionId: 112, role: "STUDENT" },
+      "create bulk schedule next week 8-5 for all labs"
+    );
+
+    expect(response.category).toBe("permission_denied");
+    expect(response.reply.toLowerCase()).toContain("students are not allowed");
+    expect(response.pendingAction).toBeUndefined();
+  });
+
+  it("asks for a corrected time when the schedule time range is invalid", async () => {
+    const service = new ReservationAssistantService(createMockDb());
+
+    const response = await service.askReservationAssistant(
+      { id: 1, sessionId: 113, role: "ADMIN" },
+      "create bulk schedule for all labs next week 5pm to 8am"
+    );
+
+    expect(response.category).toBe("clarification");
+    expect(response.reply).toContain("What start and end time should I use");
+    expect(response.pendingAction).toBeUndefined();
+  });
+
+  it("warns and excludes overlapping schedules from the draft", async () => {
+    const service = new ReservationAssistantService(createMockDb());
+
+    const response = await service.askReservationAssistant(
+      { id: 1, sessionId: 114, role: "ADMIN" },
+      "create bulk schedule for all labs on may 16 8-9"
+    );
+
+    expect(response.category).toBe("action_preview");
+    expect(response.pendingAction?.affectedCount).toBe(1);
+    expect(response.pendingAction?.warnings).toEqual(
+      expect.arrayContaining(["CL-303 already has an overlapping schedule on 2026-05-16."])
+    );
+  });
+
+  it("requires confirmation before creating the prepared schedule records", async () => {
+    const db = createMockDb();
+    const service = new ReservationAssistantService(db);
+    const currentUser = { id: 1, sessionId: 115, role: "ADMIN" as const };
+
+    const draft = await service.askReservationAssistant(
+      currentUser,
+      "create bulk schedule for CL-302 on may 26 8-10"
+    );
+
+    expect(draft.category).toBe("action_preview");
+    expect(db.schedule.create).not.toHaveBeenCalled();
+
+    const confirmation = await service.confirmPendingAction(
+      currentUser,
+      draft.pendingAction!.actionId,
+      "Confirm Create Schedule"
+    );
+
+    expect(confirmation.category).toBe("action_completed");
+    expect(db.schedule.create).toHaveBeenCalledTimes(1);
   });
 });

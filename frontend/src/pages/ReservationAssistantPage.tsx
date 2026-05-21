@@ -54,22 +54,25 @@ const promptSuggestionsByRole: Record<UserRole, string[]> = {
     "Show system summary.",
     "Pending reservations today.",
     "Create bulk schedule next week 8-5.",
-    "Add laboratory CL-304.",
-    "Show recent activity."
+    "Add laboratory CL-305.",
+    "Manage schedules.",
+    "Show active labs."
   ],
   LABORATORY_STAFF: [
-    "Show reservations needing approval.",
-    "Show my lab schedule.",
-    "Create schedule for my lab this week 8-5.",
-    "Approve pending reservation.",
-    "Summarize today."
+    "Pending reservations today.",
+    "Show approved reservations.",
+    "Check lab schedules.",
+    "Create schedule draft.",
+    "Reservation rules.",
+    "Notifications."
   ],
   STUDENT: [
     "Who am I?",
     "My reservations today.",
-    "Available ba CL-302 bukas?",
-    "Reserve a laboratory.",
-    "Reservation rules."
+    "Available schedules tomorrow.",
+    "Step-by-step reservation.",
+    "Reservation rules.",
+    "My notifications."
   ]
 };
 
@@ -254,6 +257,18 @@ export const ReservationAssistantPage = () => {
     assistantMutation.isPending ||
     confirmActionMutation.isPending ||
     cancelActionMutation.isPending;
+  const activePendingAction = useMemo(() => {
+    for (const message of [...messages].reverse()) {
+      if (
+        message.pendingAction &&
+        !resolvedActionIds[message.pendingAction.actionId]
+      ) {
+        return message.pendingAction;
+      }
+    }
+
+    return null;
+  }, [messages, resolvedActionIds]);
 
   const isNearBottom = () => {
     const viewport = messageViewportRef.current;
@@ -556,6 +571,18 @@ export const ReservationAssistantPage = () => {
             ) : null}
 
             <div className="mb-3 flex flex-wrap gap-2">
+              {activePendingAction ? (
+                <PromptChip
+                  label="Cancel current action"
+                  onClick={() => {
+                    shouldForceScrollRef.current = true;
+                    cancelActionMutation.mutate({
+                      actionId: activePendingAction.actionId
+                    });
+                  }}
+                  disabled={isBusy}
+                />
+              ) : null}
               {composerPromptSuggestions.map((prompt) => (
                 <PromptChip
                   key={prompt}

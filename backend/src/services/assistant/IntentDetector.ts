@@ -95,6 +95,52 @@ const RULE_KEYWORDS = [
   "help me reserve"
 ];
 
+const RESERVATION_GUIDE_KEYWORDS = [
+  "step by step reservation",
+  "step-by-step reservation",
+  "reservation step by step",
+  "how to reserve",
+  "how do i reserve",
+  "how can i reserve",
+  "how to make reservation",
+  "how to make a reservation",
+  "how do i make a reservation",
+  "give me the step by step guide",
+  "step by step guide",
+  "tell me how",
+  "guide me",
+  "guide me to reserve",
+  "help me reserve",
+  "reservation guide",
+  "reservation tutorial",
+  "walk me through reservation",
+  "how does reservation work",
+  "how to book",
+  "how do i book a lab",
+  "paano mag reserve",
+  "paano magpa reserve",
+  "paano magpareserve",
+  "paano gumawa ng reservation",
+  "paano mag book",
+  "paano mag book ng lab",
+  "paano mag request ng reservation",
+  "pa guide mag reserve",
+  "paturo mag reserve",
+  "tulungan mo ako mag reserve",
+  "guide mo ako mag reserve",
+  "paano ito gamitin sa reservation"
+];
+
+const RESERVATION_GUIDE_FOLLOW_UPS = new Set([
+  "how",
+  "steps",
+  "guide",
+  "tutorial",
+  "tell me how",
+  "step by step",
+  "step-by-step"
+]);
+
 const SCHEDULE_KEYWORDS = [
   "schedule",
   "schedules",
@@ -272,6 +318,17 @@ export class IntentDetector {
         language,
         normalizedMessage,
         previousQuery
+      });
+    }
+
+    if (this.isReservationGuideQuestion(normalizedMessage, context)) {
+      return this.buildIntent("reservation_guide", {
+        range,
+        laboratory: null,
+        language,
+        normalizedMessage,
+        previousQuery,
+        isFollowUp: this.isReservationGuideFollowUp(normalizedMessage)
       });
     }
 
@@ -523,6 +580,39 @@ export class IntentDetector {
       hasAnyKeyword(message, ADMIN_STATS_KEYWORDS) &&
       (!this.referencesOwnData(message) || message.includes("whole system"))
     );
+  }
+
+  private isReservationGuideQuestion(
+    message: string,
+    context?: AssistantConversationContext | null
+  ) {
+    if (hasAnyKeyword(message, RESERVATION_GUIDE_KEYWORDS)) {
+      return true;
+    }
+
+    return this.isReservationGuideFollowUp(message) && this.hasRecentReservationGuideContext(context);
+  }
+
+  private isReservationGuideFollowUp(message: string) {
+    return RESERVATION_GUIDE_FOLLOW_UPS.has(message);
+  }
+
+  private hasRecentReservationGuideContext(context?: AssistantConversationContext | null) {
+    if (!context) {
+      return false;
+    }
+
+    if (context.activeFlow?.activeFlow === "GUIDED_RESERVATION_FLOW") {
+      return true;
+    }
+
+    return context.messages
+      .slice(-4)
+      .some(
+        (message) =>
+          message.category === "reservation_guide" ||
+          hasAnyKeyword(normalizeAssistantText(message.content), RESERVATION_GUIDE_KEYWORDS)
+      );
   }
 
   private resolveLaboratory(

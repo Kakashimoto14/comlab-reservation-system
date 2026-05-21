@@ -227,6 +227,7 @@ export type ReservationAssistantCategory =
   | "system_info"
   | "user_directory"
   | "reservation_submitter"
+  | "reservation_guide"
   | "reservation_rules"
   | "laboratory_lookup"
   | "laboratory_catalog"

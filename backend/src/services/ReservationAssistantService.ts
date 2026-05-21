@@ -22,6 +22,7 @@ import { ResponseFormatter } from "./assistant/ResponseFormatter.js";
 import { normalizeAssistantText } from "./assistant/text.js";
 import type {
   AssistantActionType,
+  AssistantActiveFlow,
   AssistantCategory,
   AssistantConfirmationLevel,
   AssistantPendingActionCard,
@@ -122,6 +123,15 @@ export class ReservationAssistantService {
     const context = contextManager.get(currentUser.id, currentUser.sessionId);
     const laboratories = await this.tools.listLaboratories();
     const intent = this.intentDetector.detect(message, laboratories, context);
+    const activeFlowBefore = context?.activeFlow?.activeFlow ?? null;
+
+    this.logAssistantRoute(
+      intent.normalizedMessage,
+      intent.category,
+      "rule-based",
+      activeFlowBefore,
+      null
+    );
 
     contextManager.appendUserMessage(
       currentUser.id,
@@ -140,6 +150,22 @@ export class ReservationAssistantService {
 
     if (inlineActionResponse) {
       return this.finalizeResponse(currentUser, inlineActionResponse.response, inlineActionResponse.query);
+    }
+
+    const activeFlowResponse = await this.tryContinueActiveFlow(
+      currentUser,
+      message,
+      intent,
+      laboratories
+    );
+
+    if (activeFlowResponse) {
+      return this.finalizeResponse(currentUser, activeFlowResponse.response, activeFlowResponse.query);
+    }
+
+    if (intent.category === "reservation_guide") {
+      const guideResponse = this.buildReservationGuideResponse(currentUser, intent);
+      return this.finalizeResponse(currentUser, guideResponse.response, guideResponse.query);
     }
 
     const draftedAction = await this.tryDraftWriteAction(
@@ -193,6 +219,10 @@ export class ReservationAssistantService {
       finalResponse.reply,
       finalResponse.category,
       this.buildNextQuerySnapshot(intent, finalResponse.presentation)
+    );
+    this.logAssistantActiveFlow(
+      "after",
+      contextManager.get(currentUser.id, currentUser.sessionId)?.activeFlow?.activeFlow ?? null
     );
 
     return finalResponse;
@@ -671,6 +701,10 @@ export class ReservationAssistantService {
   ): Promise<HandledResponse | null> {
     const message = intent.normalizedMessage;
 
+    if (intent.category === "reservation_guide") {
+      return null;
+    }
+
     if (this.isReservationCreationCommand(message)) {
       return this.draftReservationCreation(currentUser, intent);
     }
@@ -703,6 +737,40 @@ export class ReservationAssistantService {
     const pendingActionId = contextManager.getPendingActionId(currentUser.id, currentUser.sessionId);
 
     if (!pendingActionId) {
+      const activeFlow = contextManager.getActiveFlow(currentUser.id, currentUser.sessionId);
+
+      if (activeFlow && CANCEL_SYNONYMS.has(normalized)) {
+        contextManager.clearActiveFlow(currentUser.id, currentUser.sessionId);
+
+        return {
+          response: {
+            reply: this.pick(language, {
+              english: "Okay, I cancelled the current assistant flow. No database changes were made.",
+              tagalog: "Sige, kinansela ko ang current assistant flow. Walang binagong database records.",
+              taglish: "Sige, cancelled ang current assistant flow. Walang binagong database records."
+            }),
+            category: "action_cancelled",
+            suggestions: this.roleAwareSuggestions(currentUser.role, language)
+          },
+          query: contextManager.get(currentUser.id, currentUser.sessionId)?.activeQuery ?? null
+        };
+      }
+
+      if (CONFIRM_SYNONYMS.has(normalized) || normalized.startsWith("confirm ")) {
+        return {
+          response: {
+            reply: this.pick(language, {
+              english: "I do not have a pending action to confirm yet.",
+              tagalog: "Wala pa akong pending action na iko-confirm.",
+              taglish: "Wala pa akong pending action to confirm yet."
+            }),
+            category: "clarification",
+            suggestions: this.roleAwareSuggestions(currentUser.role, language)
+          },
+          query: contextManager.get(currentUser.id, currentUser.sessionId)?.activeQuery ?? null
+        };
+      }
+
       return null;
     }
 
@@ -729,6 +797,238 @@ export class ReservationAssistantService {
     return null;
   }
 
+  private async tryContinueActiveFlow(
+    currentUser: CurrentUser,
+    message: string,
+    intent: ReturnType<IntentDetector["detect"]>,
+    laboratories: LaboratorySummary[]
+  ): Promise<HandledResponse | null> {
+    const flow = contextManager.getActiveFlow(currentUser.id, currentUser.sessionId);
+
+    if (!flow) {
+      return null;
+    }
+
+    if (intent.category === "reservation_guide") {
+      return this.buildReservationGuideResponse(currentUser, intent);
+    }
+
+    if (flow.activeFlow === "GUIDED_RESERVATION_FLOW") {
+      return this.continueGuidedReservationFlow(currentUser, intent, laboratories, flow);
+    }
+
+    if (
+      flow.activeIntent !== "CREATE_SCHEDULE_DRAFT" &&
+      flow.activeIntent !== "CREATE_BULK_SCHEDULE_DRAFT"
+    ) {
+      return null;
+    }
+
+    const normalized = normalizeAssistantText(message);
+    const savedTimeRange = flow.collectedSlots.timeRange as ParsedTimeRange | undefined;
+    const messageTimeRange = this.extractTimeRange(normalized);
+    const timeRange = messageTimeRange ?? savedTimeRange ?? null;
+    const savedRange = flow.collectedSlots.range as ReturnType<IntentDetector["detect"]>["range"] | undefined;
+    const range = intent.range.source === "default" && savedRange ? savedRange : intent.range;
+    const saysAllActiveLabs =
+      normalized.includes("all active labs") ||
+      normalized.includes("all labs") ||
+      normalized.includes("lahat ng active") ||
+      normalized.includes("lahat labs") ||
+      normalized.includes("lahat ng labs");
+    const laboratory =
+      intent.laboratory ??
+      (typeof flow.collectedSlots.laboratoryId === "number"
+        ? laboratories.find((candidate) => candidate.id === flow.collectedSlots.laboratoryId) ?? null
+        : null);
+
+    if (!timeRange) {
+      this.rememberScheduleFlow(currentUser, intent, {
+        range,
+        laboratory,
+        timeRange: null,
+        useAllActiveLabs: saysAllActiveLabs,
+        lastQuestionAsked: "What start and end time should I use for the schedule?"
+      });
+
+      return this.clarificationResponse(
+        currentUser,
+        intent.language,
+        "What start and end time should I use for the schedule? For example: 08:00 to 17:00.",
+        {
+          ...intent,
+          range,
+          laboratory
+        }
+      );
+    }
+
+    const syntheticIntent = {
+      ...intent,
+      range,
+      laboratory,
+      normalizedMessage: [
+        "create schedule",
+        saysAllActiveLabs || flow.collectedSlots.useAllActiveLabs ? "all active labs" : "",
+        laboratory?.roomCode ?? "",
+        `${timeRange.startTime} to ${timeRange.endTime}`,
+        normalized
+      ].filter(Boolean).join(" ")
+    };
+
+    return this.draftScheduleCreation(currentUser, syntheticIntent);
+  }
+
+  private buildReservationGuideResponse(
+    currentUser: CurrentUser,
+    intent: ReturnType<IntentDetector["detect"]>
+  ): HandledResponse {
+    this.rememberGuidedReservationFlow(currentUser, intent, {
+      currentStep: "select_laboratory",
+      filledSlots: {},
+      missingSlots: ["laboratory", "date", "schedule"],
+      lastQuestionAsked: "Which laboratory would you like to reserve?"
+    });
+
+    return {
+      response: {
+        reply: this.buildReservationGuideReply(currentUser.role),
+        category: "reservation_guide",
+        suggestions: ["CL-302", "Show available labs"]
+      },
+      query: intent.previousQuery
+    };
+  }
+
+  private async continueGuidedReservationFlow(
+    currentUser: CurrentUser,
+    intent: ReturnType<IntentDetector["detect"]>,
+    laboratories: LaboratorySummary[],
+    flow: AssistantActiveFlow
+  ): Promise<HandledResponse | null> {
+    if (intent.category === "available_laboratories") {
+      return null;
+    }
+
+    const normalized = intent.normalizedMessage;
+    const filledSlots = {
+      ...flow.collectedSlots,
+      ...(flow.filledSlots ?? {})
+    };
+    const savedLaboratory =
+      typeof filledSlots.laboratoryId === "number"
+        ? laboratories.find((candidate) => candidate.id === filledSlots.laboratoryId) ?? null
+        : null;
+    const laboratory = intent.laboratory ?? savedLaboratory;
+    const savedRange = filledSlots.range as ReturnType<IntentDetector["detect"]>["range"] | undefined;
+    const range = intent.range.source === "default" && savedRange ? savedRange : intent.range;
+    const savedTimeRange = filledSlots.timeRange as ParsedTimeRange | undefined;
+    const timeRange = this.extractTimeRange(normalized) ?? savedTimeRange ?? null;
+    const extractedPurpose = this.extractPurpose(normalized);
+    const savedPurpose = typeof filledSlots.purpose === "string" ? filledSlots.purpose : null;
+    const purpose =
+      extractedPurpose ??
+      (flow.currentStep === "enter_purpose" && normalized.length >= 5 ? normalized : savedPurpose);
+
+    if (!laboratory) {
+      return this.startGuidedReservationFlowResponse(currentUser, intent, {
+        range,
+        timeRange,
+        purpose,
+        question: "Which laboratory would you like to reserve? Try the exact room code such as CL-302."
+      });
+    }
+
+    if (range.granularity !== "day" || range.source === "default") {
+      this.rememberGuidedReservationFlow(currentUser, intent, {
+        currentStep: "select_date",
+        filledSlots: {
+          laboratoryId: laboratory.id,
+          laboratoryRoomCode: laboratory.roomCode,
+          ...(timeRange ? { timeRange } : {}),
+          ...(purpose ? { purpose } : {})
+        },
+        missingSlots: ["date", "schedule"],
+        lastQuestionAsked: `What date would you like to reserve ${laboratory.roomCode}?`
+      });
+
+      return this.clarificationResponse(
+        currentUser,
+        intent.language,
+        `What date would you like to reserve ${laboratory.roomCode}? For example: tomorrow or May 26.`,
+        {
+          ...intent,
+          laboratory
+        }
+      );
+    }
+
+    if (!timeRange) {
+      this.rememberGuidedReservationFlow(currentUser, intent, {
+        currentStep: "select_schedule",
+        filledSlots: {
+          laboratoryId: laboratory.id,
+          laboratoryRoomCode: laboratory.roomCode,
+          range,
+          ...(purpose ? { purpose } : {})
+        },
+        missingSlots: ["schedule"],
+        lastQuestionAsked: `What time block would you like for ${laboratory.roomCode}?`
+      });
+
+      return this.clarificationResponse(
+        currentUser,
+        intent.language,
+        `What time block would you like for ${laboratory.roomCode}? For example: 09:00 to 10:00.`,
+        {
+          ...intent,
+          range,
+          laboratory
+        }
+      );
+    }
+
+    if (!purpose || purpose.length < 5) {
+      this.rememberGuidedReservationFlow(currentUser, intent, {
+        currentStep: "enter_purpose",
+        filledSlots: {
+          laboratoryId: laboratory.id,
+          laboratoryRoomCode: laboratory.roomCode,
+          range,
+          timeRange
+        },
+        missingSlots: [],
+        lastQuestionAsked: "What is the reservation purpose?"
+      });
+
+      return this.clarificationResponse(
+        currentUser,
+        intent.language,
+        "What is the reservation purpose? Please include a short purpose such as programming, thesis work, or lab activity.",
+        {
+          ...intent,
+          range,
+          laboratory
+        }
+      );
+    }
+
+    contextManager.clearActiveFlow(currentUser.id, currentUser.sessionId);
+
+    return this.draftReservationCreation(currentUser, {
+      ...intent,
+      category: "specific_laboratory",
+      range,
+      laboratory,
+      normalizedMessage: [
+        "reserve",
+        laboratory.roomCode,
+        `${timeRange.startTime} to ${timeRange.endTime}`,
+        `for ${purpose}`
+      ].join(" ")
+    });
+  }
+
   private async draftReservationCreation(
     currentUser: CurrentUser,
     intent: ReturnType<IntentDetector["detect"]>
@@ -746,15 +1046,27 @@ export class ReservationAssistantService {
     const purpose = this.extractPurpose(intent.normalizedMessage);
 
     if (!laboratory) {
-      return this.clarificationResponse(
-        currentUser,
-        intent.language,
-        "Which laboratory would you like to reserve? Try the exact room code such as CL-302.",
-        intent
-      );
+      return this.startGuidedReservationFlowResponse(currentUser, intent, {
+        timeRange,
+        purpose,
+        range: intent.range.source === "default" ? undefined : intent.range,
+        question: "Sure, I will guide you through creating a reservation. Which laboratory would you like to reserve? Try the exact room code such as CL-302."
+      });
     }
 
-    if (intent.range.granularity !== "day") {
+    if (intent.range.granularity !== "day" || intent.range.source === "default") {
+      this.rememberGuidedReservationFlow(currentUser, intent, {
+        currentStep: "select_date",
+        filledSlots: {
+          laboratoryId: laboratory.id,
+          laboratoryRoomCode: laboratory.roomCode,
+          ...(timeRange ? { timeRange } : {}),
+          ...(purpose ? { purpose } : {})
+        },
+        missingSlots: ["date", "schedule"],
+        lastQuestionAsked: `What date would you like to reserve ${laboratory.roomCode}?`
+      });
+
       return this.clarificationResponse(
         currentUser,
         intent.language,
@@ -764,6 +1076,18 @@ export class ReservationAssistantService {
     }
 
     if (!timeRange) {
+      this.rememberGuidedReservationFlow(currentUser, intent, {
+        currentStep: "select_schedule",
+        filledSlots: {
+          laboratoryId: laboratory.id,
+          laboratoryRoomCode: laboratory.roomCode,
+          range: intent.range,
+          ...(purpose ? { purpose } : {})
+        },
+        missingSlots: ["schedule"],
+        lastQuestionAsked: `What time block would you like for ${laboratory.roomCode}?`
+      });
+
       return this.clarificationResponse(
         currentUser,
         intent.language,
@@ -773,6 +1097,18 @@ export class ReservationAssistantService {
     }
 
     if (!purpose || purpose.length < 5) {
+      this.rememberGuidedReservationFlow(currentUser, intent, {
+        currentStep: "enter_purpose",
+        filledSlots: {
+          laboratoryId: laboratory.id,
+          laboratoryRoomCode: laboratory.roomCode,
+          range: intent.range,
+          timeRange
+        },
+        missingSlots: [],
+        lastQuestionAsked: "What is the reservation purpose?"
+      });
+
       return this.clarificationResponse(
         currentUser,
         intent.language,
@@ -1180,6 +1516,14 @@ export class ReservationAssistantService {
     const timeRange = this.extractTimeRange(intent.normalizedMessage);
 
     if (!timeRange) {
+      this.rememberScheduleFlow(currentUser, intent, {
+        range: intent.range,
+        laboratory: intent.laboratory,
+        timeRange: null,
+        useAllActiveLabs: intent.normalizedMessage.includes("all active labs"),
+        lastQuestionAsked: "What start and end time should I use for the schedule?"
+      });
+
       return this.clarificationResponse(
         currentUser,
         intent.language,
@@ -1195,6 +1539,14 @@ export class ReservationAssistantService {
     }
 
     if (targetLaboratories.kind === "clarify") {
+      this.rememberScheduleFlow(currentUser, intent, {
+        range: intent.range,
+        laboratory: intent.laboratory,
+        timeRange,
+        useAllActiveLabs: false,
+        lastQuestionAsked: targetLaboratories.message
+      });
+
       return this.clarificationResponse(currentUser, intent.language, targetLaboratories.message, intent);
     }
 
@@ -1331,6 +1683,113 @@ export class ReservationAssistantService {
     };
   }
 
+  private rememberScheduleFlow(
+    currentUser: CurrentUser,
+    intent: ReturnType<IntentDetector["detect"]>,
+    input: {
+      range: ReturnType<IntentDetector["detect"]>["range"];
+      laboratory: LaboratorySummary | null;
+      timeRange: ParsedTimeRange | null;
+      useAllActiveLabs: boolean;
+      lastQuestionAsked: string;
+    }
+  ) {
+    const missingSlots = [
+      !input.timeRange ? "time range" : null,
+      !input.laboratory && !input.useAllActiveLabs && currentUser.role === "ADMIN"
+        ? "laboratory target"
+        : null
+    ].filter((slot): slot is string => Boolean(slot));
+
+    contextManager.setActiveFlow(currentUser.id, currentUser.sessionId, {
+      activeIntent: input.useAllActiveLabs ? "CREATE_BULK_SCHEDULE_DRAFT" : "CREATE_SCHEDULE_DRAFT",
+      activeFlow: "slot_collection",
+      collectedSlots: {
+        range: input.range,
+        laboratoryId: input.laboratory?.id ?? null,
+        timeRange: input.timeRange,
+        useAllActiveLabs: input.useAllActiveLabs,
+        language: intent.language
+      },
+      missingSlots,
+      lastQuestionAsked: input.lastQuestionAsked,
+      lastShownOptions:
+        currentUser.role === "ADMIN"
+          ? ["all active labs", "specific lab room code"]
+          : ["my assigned laboratory"],
+      pendingDraftAction: null,
+      confirmationRequired: false
+    });
+  }
+
+  private startGuidedReservationFlowResponse(
+    currentUser: CurrentUser,
+    intent: ReturnType<IntentDetector["detect"]>,
+    input: {
+      range?: ReturnType<IntentDetector["detect"]>["range"];
+      timeRange?: ParsedTimeRange | null;
+      purpose?: string | null;
+      question: string;
+    }
+  ): HandledResponse {
+    this.rememberGuidedReservationFlow(currentUser, intent, {
+      currentStep: "select_laboratory",
+      filledSlots: {
+        ...(input.range ? { range: input.range } : {}),
+        ...(input.timeRange ? { timeRange: input.timeRange } : {}),
+        ...(input.purpose ? { purpose: input.purpose } : {})
+      },
+      missingSlots: ["laboratory", "date", "schedule"],
+      lastQuestionAsked: "Which laboratory would you like to reserve?"
+    });
+
+    return this.clarificationResponse(currentUser, intent.language, input.question, intent);
+  }
+
+  private rememberGuidedReservationFlow(
+    currentUser: CurrentUser,
+    intent: ReturnType<IntentDetector["detect"]>,
+    input: {
+      currentStep: string;
+      filledSlots: Record<string, unknown>;
+      missingSlots: string[];
+      lastQuestionAsked: string;
+    }
+  ) {
+    contextManager.setActiveFlow(currentUser.id, currentUser.sessionId, {
+      activeIntent: "CREATE_RESERVATION_DRAFT",
+      activeFlow: "GUIDED_RESERVATION_FLOW",
+      currentStep: input.currentStep,
+      filledSlots: input.filledSlots,
+      collectedSlots: input.filledSlots,
+      missingSlots: input.missingSlots,
+      lastQuestionAsked: input.lastQuestionAsked,
+      lastShownOptions: ["CL-302", "show available labs"],
+      pendingDraftAction: null,
+      confirmationRequired: false
+    });
+    this.logAssistantActiveFlow("saved", "GUIDED_RESERVATION_FLOW");
+  }
+
+  private buildReservationGuideReply(role: CurrentUser["role"]) {
+    const roleNote =
+      role === "ADMIN" || role === "LABORATORY_STAFF"
+        ? "\n\nSince your role is Admin/Lab Staff, you may also manage schedules and reservation approvals depending on your permissions."
+        : "";
+
+    return `Sure! Here is the step-by-step guide to reserve a laboratory in ComPort:
+
+Step 1: Choose a laboratory.
+Step 2: Choose your preferred date.
+Step 3: Select an available schedule or time block.
+Step 4: Enter your purpose or subject if required.
+Step 5: Review the reservation preview.
+Step 6: Confirm and submit your reservation request.
+Step 7: Wait for approval from the authorized laboratory staff or admin.${roleNote}
+
+I can guide you now. Which laboratory would you like to reserve? You can type a room code like CL-302 or say 'show available labs'.`;
+  }
+
   private async draftLaboratoryManagement(
     currentUser: CurrentUser,
     intent: ReturnType<IntentDetector["detect"]>,
@@ -1353,11 +1812,22 @@ export class ReservationAssistantService {
         : null);
 
     if ((message.includes("remove") || message.includes("tanggal")) && !message.includes("delete")) {
-      return this.clarificationResponse(
+      if (!matchedLab) {
+        return this.clarificationResponse(
+          currentUser,
+          intent.language,
+          "Which laboratory should I remove from active use? Give me a room code like CL-305.",
+          intent
+        );
+      }
+
+      return this.prepareLaboratoryStatusDraft(
         currentUser,
-        intent.language,
-        `Do you want to deactivate laboratory ${roomCode ?? "that lab"} or permanently delete it?`,
-        intent
+        intent,
+        matchedLab.id,
+        "UNAVAILABLE",
+        "Remove laboratory from active use",
+        "DEACTIVATE_LABORATORY"
       );
     }
 
@@ -1564,10 +2034,11 @@ export class ReservationAssistantService {
       ].filter(Boolean);
 
       if (missingFields.length) {
+        const nextMissingField = missingFields[0];
         return this.clarificationResponse(
           currentUser,
           intent.language,
-          `I can prepare that laboratory creation draft, but I still need the following: ${missingFields.join(", ")}.`,
+          `I can prepare that laboratory creation draft. What ${nextMissingField} should I use?`,
           intent
         );
       }
@@ -1664,7 +2135,10 @@ export class ReservationAssistantService {
         "This changes the laboratory status for future reservation availability checks."
       ],
       requiredConfirmationLevel: "HIGH",
-      confirmationPhrase: `CONFIRM ${status === "MAINTENANCE" ? "UPDATE" : "DEACTIVATE"} ${record.roomCode}`,
+      confirmationPhrase:
+        actionType === "DEACTIVATE_LABORATORY"
+          ? "CONFIRM REMOVE LABORATORY"
+          : `CONFIRM UPDATE ${record.roomCode}`,
       language: intent.language,
       payload: {
         kind: "update-laboratory",
@@ -2260,6 +2734,7 @@ export class ReservationAssistantService {
         "system_info",
         "user_directory",
         "reservation_submitter",
+        "reservation_guide",
         "reservation_rules",
         "general_reservation_help",
         "role_capabilities",
@@ -2310,11 +2785,41 @@ export class ReservationAssistantService {
       response.category,
       query
     );
+    this.logAssistantActiveFlow(
+      "after",
+      contextManager.get(currentUser.id, currentUser.sessionId)?.activeFlow?.activeFlow ?? null
+    );
 
     return {
       ...response,
       mode: "fallback"
     };
+  }
+
+  private logAssistantRoute(
+    normalizedMessage: string,
+    detectedIntent: AssistantCategory,
+    routeSource: "rule-based" | "model",
+    activeFlowBefore: string | null,
+    activeFlowAfter: string | null
+  ) {
+    if (env.NODE_ENV !== "development") {
+      return;
+    }
+
+    console.info(`Assistant route: ${detectedIntent.toUpperCase()} via ${routeSource}`, {
+      normalizedMessage,
+      activeFlowBefore,
+      activeFlowAfter
+    });
+  }
+
+  private logAssistantActiveFlow(label: "saved" | "after", activeFlow: string | null) {
+    if (env.NODE_ENV !== "development") {
+      return;
+    }
+
+    console.info(`Assistant active flow ${label}: ${activeFlow ?? "none"}`);
   }
 
   private buildSimpleQuerySnapshot(
@@ -2461,7 +2966,8 @@ export class ReservationAssistantService {
         headers: this.buildAiHeaders(),
         body: JSON.stringify({
           model: env.AI_MODEL,
-          temperature: 0.2,
+          temperature: env.AI_TEMPERATURE,
+          max_tokens: env.AI_MAX_TOKENS,
           messages: [
             {
               role: "system",
@@ -2994,11 +3500,78 @@ export class ReservationAssistantService {
   }
 
   private isReservationCreationCommand(message: string) {
-    return (
-      message.includes("reserve") ||
-      message.includes("book me") ||
+    if (this.isReservationGuideCommand(message)) {
+      return false;
+    }
+
+    const hasReservationVerb =
+      /\breserve\b/.test(message) ||
+      /\bbook\b/.test(message) ||
       message.includes("mag reserve") ||
-      message.includes("pa reserve")
+      message.includes("pa reserve") ||
+      message.includes("magpapa reserve") ||
+      message.includes("magpareserve");
+
+    if (!hasReservationVerb) {
+      return false;
+    }
+
+    return (
+      this.hasActionableReservationDetail(message) ||
+      this.isGuidedReservationStartCommand(message)
+    );
+  }
+
+  private isReservationGuideCommand(message: string) {
+    return (
+      message.includes("how to reserve") ||
+      message.includes("how do i reserve") ||
+      message.includes("how can i reserve") ||
+      message.includes("how to make reservation") ||
+      message.includes("how to make a reservation") ||
+      message.includes("how do i make a reservation") ||
+      message.includes("step by step") ||
+      message.includes("step-by-step") ||
+      message.includes("guide") ||
+      message.includes("tutorial") ||
+      message.includes("tell me how") ||
+      message.includes("paano mag reserve") ||
+      message.includes("paano magpa reserve") ||
+      message.includes("paano magpareserve") ||
+      message.includes("paano mag book") ||
+      message.includes("paturo mag reserve")
+    );
+  }
+
+  private hasActionableReservationDetail(message: string) {
+    return Boolean(
+      this.extractRoomCode(message) ||
+        this.extractTimeRange(message) ||
+        this.hasExplicitDateCue(message)
+    );
+  }
+
+  private isGuidedReservationStartCommand(message: string) {
+    return (
+      message === "reserve" ||
+      message === "book" ||
+      message.includes("i want to reserve") ||
+      message.includes("i need to reserve") ||
+      message.includes("i would like to reserve") ||
+      message.includes("pa reserve ako") ||
+      message.includes("magpapa reserve ako") ||
+      message.includes("magpa reserve ako") ||
+      message.includes("mag reserve ako")
+    );
+  }
+
+  private hasExplicitDateCue(message: string) {
+    return (
+      /\b(today|tomorrow|tonight)\b/.test(message) ||
+      /\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}\b/.test(message) ||
+      /\b\d{4}-\d{2}-\d{2}\b/.test(message) ||
+      /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/.test(message) ||
+      /\b(ngayon|bukas|mamaya|lunes|martes|miyerkules|mierkules|huwebes|biyernes|sabado|linggo)\b/.test(message)
     );
   }
 

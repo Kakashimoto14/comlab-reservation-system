@@ -81,6 +81,11 @@ const envSchema = z.object({
   AI_PROVIDER: optionalAiProviderSchema,
   AI_API_KEY: optionalNonEmptyStringSchema,
   AI_MODEL: optionalNonEmptyStringSchema,
+  AI_FALLBACK_MODEL: optionalNonEmptyStringSchema,
+  GROQ_MODEL: optionalNonEmptyStringSchema,
+  GROQ_FALLBACK_MODEL: optionalNonEmptyStringSchema,
+  AI_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.1),
+  AI_MAX_TOKENS: z.coerce.number().int().positive().default(1200),
   AI_API_BASE_URL: optionalUrlSchema,
   OPENROUTER_SITE_URL: optionalUrlSchema,
   OPENROUTER_APP_NAME: z.string().min(1).optional(),
@@ -149,6 +154,12 @@ const hasSmtpSender = Boolean(parsedEnv.SMTP_FROM || parsedEnv.SMTP_FROM_EMAIL);
 const hasSmtpConfig = Boolean(
   parsedEnv.SMTP_HOST && parsedEnv.SMTP_PORT && hasSmtpSender
 );
+const resolvedAiModel =
+  parsedEnv.AI_MODEL ??
+  (parsedEnv.AI_PROVIDER === "groq" ? parsedEnv.GROQ_MODEL : undefined);
+const resolvedAiFallbackModel =
+  parsedEnv.AI_FALLBACK_MODEL ??
+  (parsedEnv.AI_PROVIDER === "groq" ? parsedEnv.GROQ_FALLBACK_MODEL : undefined);
 
 export const env = {
   ...parsedEnv,
@@ -161,6 +172,8 @@ export const env = {
   RESET_TOKEN_PREVIEW: parsedEnv.RESET_TOKEN_PREVIEW ?? parsedEnv.NODE_ENV !== "production",
   ENABLE_DEMO_BOOTSTRAP: parsedEnv.ENABLE_DEMO_BOOTSTRAP ?? false,
   ENABLE_BACKGROUND_WORKERS: parsedEnv.ENABLE_BACKGROUND_WORKERS ?? true,
+  AI_MODEL: resolvedAiModel,
+  AI_FALLBACK_MODEL: resolvedAiFallbackModel,
   NOTIFICATION_EMAIL_PREVIEW:
     parsedEnv.NOTIFICATION_EMAIL_PREVIEW ??
     (!hasSmtpConfig || parsedEnv.NODE_ENV !== "production")

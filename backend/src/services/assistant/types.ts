@@ -22,6 +22,7 @@ export type AssistantCategory =
   | "system_info"
   | "user_directory"
   | "reservation_submitter"
+  | "reservation_guide"
   | "reservation_rules"
   | "laboratory_lookup"
   | "laboratory_catalog"
@@ -184,6 +185,21 @@ export type AssistantConversationMessage = {
   category?: AssistantCategory;
 };
 
+export type AssistantActiveFlow = {
+  activeIntent: "CREATE_RESERVATION_DRAFT" | "CREATE_SCHEDULE_DRAFT" | "CREATE_BULK_SCHEDULE_DRAFT" | "ADD_LABORATORY_DRAFT";
+  activeFlow: "slot_collection" | "GUIDED_RESERVATION_FLOW";
+  currentStep?: string;
+  filledSlots?: Record<string, unknown>;
+  collectedSlots: Record<string, unknown>;
+  missingSlots: string[];
+  lastQuestionAsked: string | null;
+  lastShownOptions: string[];
+  pendingDraftAction: string | null;
+  confirmationRequired: boolean;
+  createdAt: number;
+  expiresAt: number;
+};
+
 export type AssistantQuerySnapshot = {
   category: AssistantCategory;
   range: DateRange;
@@ -200,6 +216,7 @@ export type AssistantConversationContext = {
   language: AssistantLanguage;
   messages: AssistantConversationMessage[];
   activeQuery: AssistantQuerySnapshot | null;
+  activeFlow: AssistantActiveFlow | null;
   pendingActionId: string | null;
   updatedAt: number;
 };

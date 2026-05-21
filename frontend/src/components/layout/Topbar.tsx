@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, LogOut, ShieldCheck } from "lucide-react";
+import { Bell, CalendarDays, LogOut, ShieldCheck, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 
@@ -8,7 +8,7 @@ import { roleLabels } from "../../utils/constants";
 
 const routeMeta = [
   { match: "/student/dashboard", title: "Student Dashboard", description: "Track your booking activity and latest reservation updates." },
-  { match: "/student/laboratories", title: "Laboratory Catalog", description: "Browse available laboratories, schedules, and reservation windows." },
+  { match: "/student/laboratories", title: "Reserve Laboratory", description: "Choose a laboratory, review available schedules, and submit your reservation request." },
   { match: "/student/reservations", title: "Reservation History", description: "Review your requests, status changes, and staff remarks." },
   { match: "/dashboard", title: "Operations Dashboard", description: "Monitor reservation volume, approval queues, and laboratory usage." },
   { match: "/management/users", title: "User Administration", description: "Manage access, roles, and account status across the system." },
@@ -114,6 +114,7 @@ export const Topbar = () => {
               <button
                 type="button"
                 aria-label="Open notifications"
+                aria-expanded={notificationsOpen}
                 className="relative rounded-2xl border border-slate-200 p-3 text-slate-500 transition hover:bg-slate-50"
                 onClick={() => setNotificationsOpen((current) => !current)}
               >
@@ -127,68 +128,90 @@ export const Topbar = () => {
               </button>
 
               {notificationsOpen ? (
-                <div className="absolute right-0 z-20 mt-3 w-[22rem] rounded-3xl border border-slate-200 bg-white p-4 shadow-soft">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">Notifications</p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {unreadCount ? `${unreadCount} unread update${unreadCount === 1 ? "" : "s"}` : "You're all caught up."}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      className="text-xs font-semibold text-brand-700 disabled:text-slate-300"
-                      disabled={!unreadCount || isMarkingAllAsRead}
-                      onClick={() => void markAllAsRead()}
-                    >
-                      Mark all read
-                    </button>
-                  </div>
+                <>
+                  <div
+                    className="fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-[1px] sm:hidden"
+                    onClick={() => setNotificationsOpen(false)}
+                  />
 
-                  <div className="mt-4 space-y-3">
-                    {isLoading ? (
-                      Array.from({ length: 3 }).map((_, index) => (
-                        <div key={index} className="h-20 animate-pulse rounded-2xl bg-slate-100" />
-                      ))
-                    ) : items.length ? (
-                      items.map((notification) => (
-                        <button
-                          key={notification.id}
-                          type="button"
-                          className={`block w-full rounded-2xl border px-4 py-3 text-left transition ${
-                            notification.readAt
-                              ? "border-slate-200 bg-white"
-                              : "border-brand-200 bg-brand-50/50"
-                          }`}
-                          onClick={() => {
-                            if (!notification.readAt) {
-                              void markAsRead(notification.id);
-                            }
-                          }}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <p className="text-sm font-semibold text-slate-900">
-                              {notification.subject}
-                            </p>
-                            {!notification.readAt ? (
-                              <span className="mt-1 h-2.5 w-2.5 rounded-full bg-brand-500" />
-                            ) : null}
-                          </div>
-                          <p className="mt-2 text-sm leading-6 text-slate-600">
-                            {notification.message}
-                          </p>
-                          <p className="mt-3 text-xs font-medium uppercase tracking-[0.16em] text-slate-400">
-                            {formatNotificationTimestamp(notification.createdAt)}
-                          </p>
-                        </button>
-                      ))
-                    ) : (
-                      <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
-                        No notifications yet.
+                  <div className="fixed inset-x-0 bottom-0 z-50 flex max-h-[78vh] flex-col overflow-hidden rounded-t-[1.75rem] border border-slate-200 bg-white shadow-soft sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-full sm:mt-3 sm:max-h-none sm:w-[23rem] sm:rounded-3xl">
+                    <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-4">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">Notifications</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {unreadCount
+                            ? `${unreadCount} unread update${unreadCount === 1 ? "" : "s"}`
+                            : "You're all caught up."}
+                        </p>
                       </div>
-                    )}
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-brand-700 disabled:text-slate-300"
+                          disabled={!unreadCount || isMarkingAllAsRead}
+                          onClick={() => void markAllAsRead()}
+                        >
+                          Mark all read
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Close notifications"
+                          className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                          onClick={() => setNotificationsOpen(false)}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4 sm:max-h-[28rem]">
+                      {isLoading ? (
+                        Array.from({ length: 3 }).map((_, index) => (
+                          <div
+                            key={index}
+                            className="h-24 animate-pulse rounded-2xl bg-slate-100"
+                          />
+                        ))
+                      ) : items.length ? (
+                        items.map((notification) => (
+                          <button
+                            key={notification.id}
+                            type="button"
+                            className={`block w-full rounded-2xl border px-4 py-3 text-left transition hover:border-brand-200 hover:bg-brand-50/60 ${
+                              notification.readAt
+                                ? "border-slate-200 bg-white"
+                                : "border-brand-200 bg-brand-50/50"
+                            }`}
+                            onClick={() => {
+                              if (!notification.readAt) {
+                                void markAsRead(notification.id);
+                              }
+                            }}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <p className="text-sm font-semibold leading-6 text-slate-900">
+                                {notification.subject}
+                              </p>
+                              {!notification.readAt ? (
+                                <span className="mt-2 h-2.5 w-2.5 shrink-0 rounded-full bg-brand-500" />
+                              ) : null}
+                            </div>
+                            <p className="mt-2 text-sm leading-6 text-slate-600">
+                              {notification.message}
+                            </p>
+                            <p className="mt-3 text-xs font-medium uppercase tracking-[0.16em] text-slate-400">
+                              {formatNotificationTimestamp(notification.createdAt)}
+                            </p>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
+                          No notifications yet.
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                </>
               ) : null}
             </div>
           </div>

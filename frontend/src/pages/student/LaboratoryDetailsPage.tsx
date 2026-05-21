@@ -158,8 +158,16 @@ export const LaboratoryDetailsPage = () => {
             ) : (
               <div className="mt-4">
                 <EmptyState
-                  title="No schedules for this selection"
-                  description="Pick another day in the weekly timetable or wait for laboratory staff to publish availability."
+                  title={
+                    data.schedules.length
+                      ? "No schedules for this selection"
+                      : "No available schedules"
+                  }
+                  description={
+                    data.schedules.length
+                      ? "Pick another day in the weekly timetable or wait for laboratory staff to publish availability."
+                      : "Please check again later or ask laboratory staff for assistance."
+                  }
                 />
               </div>
             )}
@@ -172,7 +180,7 @@ export const LaboratoryDetailsPage = () => {
         reservations={data.reservations ?? []}
         selectedDate={selectedDate}
         onSelectDate={setSelectedDate}
-        emptyMessage="The laboratory staff has not posted any available times for this room yet."
+        emptyMessage="Please check again later or ask laboratory staff for assistance."
       />
     </div>
   );

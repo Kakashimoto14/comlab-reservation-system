@@ -3,6 +3,7 @@ import {
   BookOpen,
   Building2,
   CalendarClock,
+  CalendarPlus,
   ClipboardList,
   CalendarRange,
   LayoutDashboard,
@@ -25,7 +26,7 @@ export const useRoleRoutes = () => {
     if (user.role === "STUDENT") {
       return [
         { label: "Dashboard", to: "/student/dashboard", icon: LayoutDashboard },
-        { label: "Laboratories", to: "/student/laboratories", icon: Building2 },
+        { label: "Reserve Laboratory", to: "/student/laboratories", icon: CalendarPlus },
         { label: "My Reservations", to: "/student/reservations", icon: ClipboardList },
         { label: "Profile", to: "/profile", icon: UserRound }
       ];

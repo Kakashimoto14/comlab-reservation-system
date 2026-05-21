@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { AxiosError } from "axios";
 import { CheckCircle2, ClipboardList, Clock3, ShieldCheck } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { reservationApi } from "../../api/services";
 import type { Reservation } from "../../types/api";
@@ -86,7 +87,7 @@ export const MyReservationsPage = () => {
     <div className="space-y-6">
       <PageHeader
         title="My Reservations"
-        description="Track your request history, approval remarks, review staff decisions, and cancel pending bookings when needed."
+        description="Track your reservation requests, approval status, staff remarks, and pending bookings."
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -99,13 +100,13 @@ export const MyReservationsPage = () => {
         <StatCard
           title="Pending"
           value={reservationTotals.pending}
-          helper="Still waiting for staff review"
+          helper="Requests waiting for laboratory staff approval"
           icon={Clock3}
         />
         <StatCard
           title="Approved"
           value={reservationTotals.approved}
-          helper="Ready for scheduled laboratory use"
+          helper="Reservations approved and ready to use"
           icon={ShieldCheck}
         />
         <StatCard
@@ -240,11 +241,18 @@ export const MyReservationsPage = () => {
           </div>
         ) : (
           <EmptyState
-            title={reservations.length ? "No reservations match your filters" : "No reservations found"}
+            title={reservations.length ? "No reservations match your filters" : "No reservations yet"}
             description={
               reservations.length
                 ? "Try another status or keyword to find your reservation history faster."
-                : "Your submitted reservation requests will appear here once you create one."
+                : "Reserve an available computer laboratory schedule to get started."
+            }
+            action={
+              reservations.length ? null : (
+                <Link to="/student/laboratories">
+                  <Button>Reserve Laboratory</Button>
+                </Link>
+              )
             }
           />
         )}

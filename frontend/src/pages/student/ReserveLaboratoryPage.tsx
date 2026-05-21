@@ -531,8 +531,16 @@ export const ReserveLaboratoryPage = () => {
             </div>
           ) : (
             <EmptyState
-              title="No schedules match this date"
-              description="Pick another day from the timetable or wait for laboratory staff to publish additional schedule blocks."
+              title={
+                allAvailableSchedules.length
+                  ? "No schedules match this date"
+                  : "No available schedules"
+              }
+              description={
+                allAvailableSchedules.length
+                  ? "Pick another day from the timetable or wait for laboratory staff to publish additional schedule blocks."
+                  : "Please check again later or ask laboratory staff for assistance."
+              }
             />
           )}
         </Card>
@@ -543,7 +551,7 @@ export const ReserveLaboratoryPage = () => {
         reservations={data.reservations ?? []}
         selectedDate={selectedDate}
         onSelectDate={setSelectedDate}
-        emptyMessage="Ask the administrator or laboratory staff to publish an available schedule for this room first."
+        emptyMessage="Please check again later or ask laboratory staff for assistance."
       />
     </div>
   );

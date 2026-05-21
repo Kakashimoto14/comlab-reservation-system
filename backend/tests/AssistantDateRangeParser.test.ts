@@ -50,6 +50,7 @@ describe("DateRangeParser", () => {
         resultOffset: 6,
         hasMore: true
       },
+      activeFlow: null,
       pendingActionId: null,
       pendingDraft: null,
       updatedAt: Date.now()

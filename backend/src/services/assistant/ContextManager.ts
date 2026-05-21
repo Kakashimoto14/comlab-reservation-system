@@ -1,4 +1,5 @@
 import type {
+  AssistantActiveFlow,
   AssistantConversationContext,
   AssistantConversationMessage,
   AssistantLanguage,
@@ -9,6 +10,7 @@ import type {
 const CONTEXT_TTL_MS = 30 * 60 * 1000;
 const PENDING_DRAFT_TTL_MS = 15 * 60 * 1000;
 const MAX_MESSAGES = 16;
+const FLOW_TTL_MS = 15 * 60 * 1000;
 
 export class ContextManager {
   private readonly contexts = new Map<string, AssistantConversationContext>();
@@ -73,9 +75,48 @@ export class ContextManager {
     return this.get(userId, sessionId)?.pendingActionId ?? null;
   }
 
+  getActiveFlow(userId: number, sessionId: number) {
+    const flow = this.get(userId, sessionId)?.activeFlow ?? null;
+
+    if (!flow || flow.expiresAt <= Date.now()) {
+      this.clearActiveFlow(userId, sessionId);
+      return null;
+    }
+
+    return flow;
+  }
+
+  setActiveFlow(
+    userId: number,
+    sessionId: number,
+    flow: Omit<AssistantActiveFlow, "createdAt" | "expiresAt">
+  ) {
+    const context = this.ensureContext(userId, sessionId, "english");
+    context.activeFlow = {
+      ...flow,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + FLOW_TTL_MS
+    };
+    context.updatedAt = Date.now();
+  }
+
+  clearActiveFlow(userId: number, sessionId: number) {
+    const context = this.get(userId, sessionId);
+
+    if (!context) {
+      return;
+    }
+
+    context.activeFlow = null;
+    context.updatedAt = Date.now();
+  }
+
   setPendingActionId(userId: number, sessionId: number, actionId: string | null) {
     const context = this.ensureContext(userId, sessionId, "english");
     context.pendingActionId = actionId;
+    if (actionId) {
+      context.activeFlow = null;
+    }
     context.updatedAt = Date.now();
   }
 
@@ -133,6 +174,7 @@ export class ContextManager {
       language,
       messages: [],
       activeQuery: null,
+      activeFlow: null,
       pendingActionId: null,
       pendingDraft: null,
       updatedAt: Date.now()

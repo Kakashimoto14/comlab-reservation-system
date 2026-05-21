@@ -343,7 +343,9 @@ const createMockDb = () => {
           }
 
           return true;
-        }).length)
+        }).length),
+      findUnique: vi.fn(async (args?: any) =>
+        laboratories.find((laboratory) => laboratory.id === args?.where?.id) ?? null)
     },
     user: {
       findUnique: vi.fn(async (args?: any) => users.find((user) => user.id === args?.where?.id) ?? null),
@@ -718,17 +720,109 @@ describe("ReservationAssistantService", () => {
     expect(response.reply.toLowerCase()).toContain("comport");
   });
 
+<<<<<<< HEAD
   it("continues a pending bulk schedule command when the admin supplies the missing laboratory", async () => {
+=======
+  it("answers step-by-step reservation requests with the guide and starts the guided flow", async () => {
+    const service = new ReservationAssistantService(createMockDb());
+    const currentUser = { id: 7, sessionId: 120, role: "STUDENT" as const };
+
+    const response = await service.askReservationAssistant(currentUser, "Step-by-step reservation.");
+    const followUp = await service.askReservationAssistant(currentUser, "CL-302");
+
+    expect(response.category).toBe("reservation_guide");
+    expect(response.reply).toContain("Step 1");
+    expect(response.reply).toContain("Step 7");
+    expect(response.reply).toContain("Which laboratory");
+    expect(followUp.reply).toContain("What date");
+  });
+
+  it("prioritizes reservation guide over immediate lab clarification", async () => {
+    const service = new ReservationAssistantService(createMockDb());
+
+    const response = await service.askReservationAssistant(
+      { id: 7, sessionId: 121, role: "STUDENT" },
+      "how to reserve? give me the step by step guide"
+    );
+
+    expect(response.category).toBe("reservation_guide");
+    expect(response.reply).toContain("Sure! Here is the step-by-step guide");
+    expect(response.reply).toContain("Step 1");
+    expect(response.reply).toContain("Step 7");
+    expect(response.reply).toContain("Which laboratory");
+    expect(response.reply.toLowerCase()).not.toContain("i can help with your account details");
+    expect(response.reply.trim()).not.toBe("Which laboratory would you like to reserve?");
+  });
+
+  it("keeps short how-follow-ups in reservation guide context", async () => {
+    const service = new ReservationAssistantService(createMockDb());
+    const currentUser = { id: 7, sessionId: 122, role: "STUDENT" as const };
+
+    await service.askReservationAssistant(currentUser, "how to reserve?");
+    const response = await service.askReservationAssistant(currentUser, "tell me how");
+
+    expect(response.category).toBe("reservation_guide");
+    expect(response.reply).toContain("Step 1");
+    expect(response.reply).toContain("Step 7");
+    expect(response.reply.toLowerCase()).not.toContain("focused on comport");
+  });
+
+  it("answers Tagalog reservation guide questions before create-reservation routing", async () => {
+    const service = new ReservationAssistantService(createMockDb());
+
+    const response = await service.askReservationAssistant(
+      { id: 7, sessionId: 123, role: "STUDENT" },
+      "paano mag reserve?"
+    );
+
+    expect(response.category).toBe("reservation_guide");
+    expect(response.reply).toContain("Step 1");
+    expect(response.reply).toContain("Which laboratory");
+  });
+
+  it("still creates a reservation draft when actionable reservation details are present", async () => {
+    const service = new ReservationAssistantService(createMockDb());
+
+    const response = await service.askReservationAssistant(
+      { id: 7, sessionId: 124, role: "STUDENT" },
+      "reserve CL-302 tomorrow 9-10 for programming"
+    );
+
+    expect(response.category).toBe("action_preview");
+    expect(response.pendingAction?.actionType).toBe("CREATE_RESERVATION");
+    expect(response.reply).toContain("reservation request draft");
+  });
+
+  it("starts guided reservation flow for clear reserve-now requests without details", async () => {
+    const service = new ReservationAssistantService(createMockDb());
+    const currentUser = { id: 7, sessionId: 125, role: "STUDENT" as const };
+
+    const response = await service.askReservationAssistant(currentUser, "I want to reserve");
+    const followUp = await service.askReservationAssistant(currentUser, "CL-302");
+
+    expect(response.category).toBe("clarification");
+    expect(response.reply).toContain("guide you");
+    expect(response.reply).toContain("Which laboratory");
+    expect(followUp.reply).toContain("What date");
+  });
+
+  it("continues bulk schedule slot collection from a short follow-up", async () => {
+>>>>>>> codex/AI_Improvements
     const service = new ReservationAssistantService(createMockDb());
     const currentUser = { id: 1, sessionId: 110, role: "ADMIN" as const };
 
     const first = await service.askReservationAssistant(
       currentUser,
+<<<<<<< HEAD
       "Create bulk schedule next week 8-5."
+=======
+      "Create bulk schedule next week 8-5"
+>>>>>>> codex/AI_Improvements
     );
     const second = await service.askReservationAssistant(currentUser, "all active labs");
 
     expect(first.category).toBe("clarification");
+<<<<<<< HEAD
     expect(first.reply).toContain("Which laboratory should I use");
     expect(second.category).toBe("action_preview");
     expect(second.reply.toLowerCase()).toContain("all active laboratories");
@@ -824,5 +918,36 @@ describe("ReservationAssistantService", () => {
 
     expect(confirmation.category).toBe("action_completed");
     expect(db.schedule.create).toHaveBeenCalledTimes(1);
+=======
+    expect(first.reply.toLowerCase()).toContain("which laboratory");
+    expect(second.category).toBe("action_preview");
+    expect(second.pendingAction?.actionType).toBe("CREATE_BULK_SCHEDULE");
+    expect(second.pendingAction?.confirmationPhrase).toBe("CONFIRM CREATE BULK SCHEDULES");
+  });
+
+  it("does not execute a confirmation when there is no pending draft", async () => {
+    const service = new ReservationAssistantService(createMockDb());
+
+    const response = await service.askReservationAssistant(
+      { id: 7, sessionId: 111, role: "STUDENT" },
+      "yes"
+    );
+
+    expect(response.category).toBe("clarification");
+    expect(response.reply).toContain("pending action");
+  });
+
+  it("uses an exact destructive confirmation phrase for removing laboratories", async () => {
+    const service = new ReservationAssistantService(createMockDb());
+
+    const response = await service.askReservationAssistant(
+      { id: 1, sessionId: 112, role: "ADMIN" },
+      "remove laboratory CL-302"
+    );
+
+    expect(response.category).toBe("action_preview");
+    expect(response.pendingAction?.actionType).toBe("DEACTIVATE_LABORATORY");
+    expect(response.pendingAction?.confirmationPhrase).toBe("CONFIRM REMOVE LABORATORY");
+>>>>>>> codex/AI_Improvements
   });
 });

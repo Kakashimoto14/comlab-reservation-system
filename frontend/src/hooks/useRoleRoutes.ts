@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import {
+  Bot,
   BookOpen,
   Building2,
   CalendarClock,
@@ -28,6 +29,7 @@ export const useRoleRoutes = () => {
         { label: "Dashboard", to: "/student/dashboard", icon: LayoutDashboard },
         { label: "Reserve Laboratory", to: "/student/laboratories", icon: CalendarPlus },
         { label: "My Reservations", to: "/student/reservations", icon: ClipboardList },
+        { label: "ComPort Assistant", to: "/assistant", icon: Bot },
         { label: "Profile", to: "/profile", icon: UserRound }
       ];
     }

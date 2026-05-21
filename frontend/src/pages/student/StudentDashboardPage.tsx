@@ -1,12 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
+  Bot,
   Building2,
   CalendarCheck2,
   CalendarPlus,
   CheckCircle2,
   Clock3,
-  HelpCircle
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -220,22 +220,29 @@ export const StudentDashboardPage = () => {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
             <div className="rounded-2xl bg-brand-700/10 p-3 text-brand-700">
-              <HelpCircle className="h-5 w-5" />
+              <Bot className="h-5 w-5" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-slate-900">ComPort Assistant</h2>
               <p className="mt-1 text-sm text-slate-500">Quick questions for reservation help.</p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {assistantPrompts.map((prompt) => (
-              <span
-                key={prompt}
-                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600"
-              >
-                {prompt}
-              </span>
-            ))}
+          <div className="flex flex-col gap-3 lg:items-end">
+            <div className="flex flex-wrap gap-2">
+              {assistantPrompts.map((prompt) => (
+                <span
+                  key={prompt}
+                  className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600"
+                >
+                  {prompt}
+                </span>
+              ))}
+            </div>
+            <Link to="/assistant">
+              <Button variant="outline" className="w-full sm:w-auto">
+                Open ComPort Assistant
+              </Button>
+            </Link>
           </div>
         </div>
       </Card>

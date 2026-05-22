@@ -11,6 +11,7 @@ import type {
   PC,
   Reservation,
   ReservationAssistantResponse,
+  ReservationReviewResponse,
   ReservationSlot,
   Schedule,
   User
@@ -173,7 +174,7 @@ export const reservationApi = {
     id: number,
     payload: { status: "APPROVED" | "REJECTED"; remarks?: string }
   ) => {
-    const { data } = await apiClient.patch<Reservation>(
+    const { data } = await apiClient.patch<ReservationReviewResponse>(
       `/reservations/${id}/review`,
       payload
     );
@@ -225,7 +226,7 @@ export const staffApi = {
     id: number,
     payload: { status: "APPROVED" | "REJECTED"; remarks?: string }
   ) => {
-    const { data } = await apiClient.put<Reservation>(`/staff/my-lab/reservation/${id}`, payload);
+    const { data } = await apiClient.put<ReservationReviewResponse>(`/staff/my-lab/reservation/${id}`, payload);
     return data;
   },
   updateMyLabSchedule: async (id: number, payload: Record<string, unknown>) => {

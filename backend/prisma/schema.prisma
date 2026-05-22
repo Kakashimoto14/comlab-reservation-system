@@ -55,6 +55,13 @@ enum CalendarEventType {
   HOLIDAY
 }
 
+enum CalendarSyncStatus {
+  NOT_ATTEMPTED
+  DISABLED
+  SYNCED
+  FAILED
+}
+
 enum NotificationChannel {
   EMAIL
   IN_APP
@@ -75,53 +82,53 @@ enum NotificationStatus {
 }
 
 model User {
-  id                   Int             @id @default(autoincrement())
-  firstName            String          @db.VarChar(50)
-  lastName             String          @db.VarChar(50)
-  email                String          @unique
-  emailVerifiedAt      DateTime?
-  passwordHash         String
-  role                 UserRole
-  status               UserStatus      @default(ACTIVE)
-  studentNumber        String?         @unique @db.VarChar(8)
-  department           String?         @db.VarChar(120)
-  yearLevel            Int?
-  phone                String?         @db.VarChar(13)
-  createdAt            DateTime        @default(now())
-  updatedAt            DateTime        @updatedAt
-  reservations         Reservation[]   @relation("ReservationStudent")
-  reviewedReservations Reservation[]   @relation("ReservationReviewer")
-  createdSchedules     Schedule[]      @relation("ScheduleCreator")
-  createdCalendarEvents CalendarEvent[] @relation("CalendarEventCreator")
-  assignedLaboratories Laboratory[]    @relation("LaboratoryCustodian")
-  activityLogs         ActivityLog[]
+  id                      Int                      @id @default(autoincrement())
+  firstName               String                   @db.VarChar(50)
+  lastName                String                   @db.VarChar(50)
+  email                   String                   @unique
+  emailVerifiedAt         DateTime?
+  passwordHash            String
+  role                    UserRole
+  status                  UserStatus               @default(ACTIVE)
+  studentNumber           String?                  @unique @db.VarChar(8)
+  department              String?                  @db.VarChar(120)
+  yearLevel               Int?
+  phone                   String?                  @db.VarChar(13)
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  reservations            Reservation[]            @relation("ReservationStudent")
+  reviewedReservations    Reservation[]            @relation("ReservationReviewer")
+  createdSchedules        Schedule[]               @relation("ScheduleCreator")
+  createdCalendarEvents   CalendarEvent[]          @relation("CalendarEventCreator")
+  assignedLaboratories    Laboratory[]             @relation("LaboratoryCustodian")
+  activityLogs            ActivityLog[]
   emailVerificationTokens EmailVerificationToken[]
-  passwordResetTokens  PasswordResetToken[]
-  notifications        Notification[]
-  authSessions         AuthSession[]
+  passwordResetTokens     PasswordResetToken[]
+  notifications           Notification[]
+  authSessions            AuthSession[]
 
   @@index([role, status])
 }
 
 model Laboratory {
-  id            Int              @id @default(autoincrement())
-  name          String
-  roomCode      String           @unique
-  building      String
-  location      String?
-  capacity      Int
-  computerCount Int
-  description   String
-  status        LaboratoryStatus @default(AVAILABLE)
-  imageUrl      String?
-  custodianId   Int?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  schedules     Schedule[]
-  reservations  Reservation[]
-  custodian     User?            @relation("LaboratoryCustodian", fields: [custodianId], references: [id], onDelete: SetNull)
-  pcs           PC[]
-  activityLogs  ActivityLog[]
+  id             Int              @id @default(autoincrement())
+  name           String
+  roomCode       String           @unique
+  building       String
+  location       String?
+  capacity       Int
+  computerCount  Int
+  description    String
+  status         LaboratoryStatus @default(AVAILABLE)
+  imageUrl       String?
+  custodianId    Int?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  schedules      Schedule[]
+  reservations   Reservation[]
+  custodian      User?            @relation("LaboratoryCustodian", fields: [custodianId], references: [id], onDelete: SetNull)
+  pcs            PC[]
+  activityLogs   ActivityLog[]
   calendarEvents CalendarEvent[]
 
   @@index([status])
@@ -148,50 +155,55 @@ model Schedule {
 }
 
 model Reservation {
-  id              Int               @id @default(autoincrement())
-  reservationCode String            @unique
-  studentId       Int
-  laboratoryId    Int
-  scheduleId      Int?
-  pcId            Int?
-  reservationType ReservationType   @default(LAB)
-  purpose         String
-  reservationDate DateTime
-  startTime       String
-  endTime         String
-  status          ReservationStatus @default(PENDING)
-  remarks         String?
-  reviewedById    Int?
-  reviewedAt      DateTime?
-  cancelledAt     DateTime?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  student         User              @relation("ReservationStudent", fields: [studentId], references: [id])
-  laboratory      Laboratory        @relation(fields: [laboratoryId], references: [id], onDelete: Cascade)
-  schedule        Schedule?         @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
-  reviewedBy      User?             @relation("ReservationReviewer", fields: [reviewedById], references: [id])
-  pc              PC?               @relation(fields: [pcId], references: [id], onDelete: SetNull)
-  notifications   Notification[]
+  id                    Int                @id @default(autoincrement())
+  reservationCode       String             @unique
+  studentId             Int
+  laboratoryId          Int
+  scheduleId            Int?
+  pcId                  Int?
+  reservationType       ReservationType    @default(LAB)
+  purpose               String
+  reservationDate       DateTime
+  startTime             String
+  endTime               String
+  status                ReservationStatus  @default(PENDING)
+  remarks               String?
+  reviewedById          Int?
+  reviewedAt            DateTime?
+  cancelledAt           DateTime?
+  googleCalendarEventId String?
+  calendarSyncStatus    CalendarSyncStatus @default(NOT_ATTEMPTED)
+  calendarSyncError     String?
+  calendarSyncedAt      DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  student               User               @relation("ReservationStudent", fields: [studentId], references: [id])
+  laboratory            Laboratory         @relation(fields: [laboratoryId], references: [id], onDelete: Cascade)
+  schedule              Schedule?          @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  reviewedBy            User?              @relation("ReservationReviewer", fields: [reviewedById], references: [id])
+  pc                    PC?                @relation(fields: [pcId], references: [id], onDelete: SetNull)
+  notifications         Notification[]
 
   @@index([studentId, reservationDate])
   @@index([laboratoryId, reservationDate])
   @@index([status, reservationDate])
+  @@index([calendarSyncStatus])
   @@index([pcId, reservationDate])
   @@index([scheduleId])
   @@index([reviewedById])
   @@index([laboratoryId, reservationDate, status, startTime, endTime], map: "idx_reservation_conflict")
- }
+}
 
 model PC {
-  id           Int          @id @default(autoincrement())
-  laboratoryId Int
-  pcNumber     String
-  status       PCStatus     @default(AVAILABLE)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  laboratory   Laboratory   @relation(fields: [laboratoryId], references: [id], onDelete: Cascade)
-  reservations Reservation[]
-  activityLogs ActivityLog[]
+  id             Int             @id @default(autoincrement())
+  laboratoryId   Int
+  pcNumber       String
+  status         PCStatus        @default(AVAILABLE)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  laboratory     Laboratory      @relation(fields: [laboratoryId], references: [id], onDelete: Cascade)
+  reservations   Reservation[]
+  activityLogs   ActivityLog[]
   calendarEvents CalendarEvent[]
 
   @@unique([laboratoryId, pcNumber])
@@ -199,7 +211,7 @@ model PC {
 }
 
 model ActivityLog {
-  id          Int       @id @default(autoincrement())
+  id          Int         @id @default(autoincrement())
   userId      Int?
   labId       Int?
   pcId        Int?
@@ -208,11 +220,11 @@ model ActivityLog {
   entityId    Int?
   description String
   metadata    Json?
-  timestamp   DateTime  @default(now())
-  createdAt   DateTime  @default(now())
-  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  timestamp   DateTime    @default(now())
+  createdAt   DateTime    @default(now())
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
   laboratory  Laboratory? @relation(fields: [labId], references: [id], onDelete: SetNull)
-  pc          PC?       @relation(fields: [pcId], references: [id], onDelete: SetNull)
+  pc          PC?         @relation(fields: [pcId], references: [id], onDelete: SetNull)
 
   @@index([action])
   @@index([userId])
@@ -224,25 +236,25 @@ model ActivityLog {
 }
 
 model PasswordResetToken {
-  id         Int      @id @default(autoincrement())
-  userId     Int
-  tokenHash  String   @unique
-  expiresAt  DateTime
-  usedAt     DateTime?
-  createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
 }
 
 model EmailVerificationToken {
-  id         Int      @id @default(autoincrement())
-  userId     Int
-  tokenHash  String   @unique
-  expiresAt  DateTime
-  usedAt     DateTime?
-  createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
 }
@@ -271,38 +283,38 @@ model CalendarEvent {
 }
 
 model AuthSession {
-  id            Int      @id @default(autoincrement())
-  userId        Int
-  tokenHash     String   @unique
-  userAgent     String?
-  ipAddress     String?
-  expiresAt     DateTime
-  lastUsedAt    DateTime?
-  revokedAt     DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         Int       @id @default(autoincrement())
+  userId     Int
+  tokenHash  String    @unique
+  userAgent  String?
+  ipAddress  String?
+  expiresAt  DateTime
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
   @@index([userId, revokedAt])
 }
 
 model Notification {
-  id            Int                @id @default(autoincrement())
+  id            Int                 @id @default(autoincrement())
   userId        Int
   reservationId Int?
   channel       NotificationChannel
   type          NotificationType
-  status        NotificationStatus @default(PENDING)
+  status        NotificationStatus  @default(PENDING)
   subject       String
   message       String
   metadata      Json?
   readAt        DateTime?
   sentAt        DateTime?
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
-  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reservation   Reservation?       @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reservation   Reservation?        @relation(fields: [reservationId], references: [id], onDelete: Cascade)
 
   @@unique([userId, reservationId, channel, type])
   @@index([userId, channel, createdAt])

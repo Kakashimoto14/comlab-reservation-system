@@ -40,6 +40,7 @@ export const useRoleRoutes = () => {
       { label: "Schedules", to: "/management/schedules", icon: CalendarClock },
       { label: "Reservations", to: "/management/reservations", icon: ClipboardList },
       { label: "Reports", to: "/management/reports", icon: LineChart },
+      { label: "ComPort Assistant", to: "/assistant", icon: Bot },
       { label: "Profile", to: "/profile", icon: UserRound }
     ];
 

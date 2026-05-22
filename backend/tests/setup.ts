@@ -10,3 +10,4 @@ process.env.CLIENT_URL = process.env.CLIENT_URL ?? "http://localhost:5173";
 process.env.RESET_TOKEN_PREVIEW = "true";
 process.env.NOTIFICATION_EMAIL_PREVIEW = "true";
 process.env.ENABLE_DEMO_BOOTSTRAP = "false";
+process.env.GOOGLE_CALENDAR_ENABLED = "false";

@@ -75,14 +75,15 @@ RESET_TOKEN_PREVIEW=true
 ENABLE_DEMO_BOOTSTRAP=false
 NOTIFICATION_EMAIL_PREVIEW=true
 
-SMTP_HOST=
+SMTP_HOST=smtp-relay.brevo.com
 SMTP_PORT=587
 SMTP_SECURE=false
-SMTP_USER=
-SMTP_PASS=
-SMTP_FROM="ComPort <no-reply@example.com>"
-SMTP_FROM_EMAIL=
-SMTP_FROM_NAME=
+SMTP_USER=your_brevo_smtp_login
+SMTP_PASS=your_brevo_smtp_key
+SMTP_FROM="ComPort <verified_sender@example.com>"
+SMTP_FROM_EMAIL=verified_sender@example.com
+SMTP_FROM_NAME=ComPort
+SMTP_TLS_REJECT_UNAUTHORIZED=true
 
 AI_PROVIDER=
 AI_API_KEY=
@@ -213,14 +214,15 @@ RESET_TOKEN_PREVIEW=false
 ENABLE_DEMO_BOOTSTRAP=false
 NOTIFICATION_EMAIL_PREVIEW=false
 
-SMTP_HOST=your_smtp_host
+SMTP_HOST=smtp-relay.brevo.com
 SMTP_PORT=587
 SMTP_SECURE=false
-SMTP_USER=your_smtp_user
-SMTP_PASS=your_smtp_password
-SMTP_FROM="ComPort <no-reply@your-domain.com>"
-SMTP_FROM_EMAIL=
-SMTP_FROM_NAME=
+SMTP_USER=your_brevo_smtp_login
+SMTP_PASS=your_brevo_smtp_key
+SMTP_FROM="ComPort <verified_sender@your-domain.com>"
+SMTP_FROM_EMAIL=verified_sender@your-domain.com
+SMTP_FROM_NAME=ComPort
+SMTP_TLS_REJECT_UNAUTHORIZED=true
 
 AI_PROVIDER=groq
 AI_API_KEY=your_groq_key
@@ -228,6 +230,13 @@ AI_MODEL=llama-3.1-8b-instant
 AI_API_BASE_URL=
 OPENROUTER_SITE_URL=https://www.comlabreservation.app
 OPENROUTER_APP_NAME=ComPort
+
+GOOGLE_CALENDAR_ENABLED=false
+GOOGLE_CALENDAR_ID=your_calendar_id@group.calendar.google.com
+GOOGLE_CLIENT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
+GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nKEY_CONTENT_HERE\n-----END PRIVATE KEY-----\n"
+GOOGLE_PROJECT_ID=your-google-cloud-project-id
+GOOGLE_CALENDAR_TIME_ZONE=Asia/Manila
 ```
 
 Frontend production example:
@@ -241,6 +250,40 @@ If a reverse proxy maps the frontend and backend to the same domain, you may use
 ```env
 VITE_API_URL=/api
 ```
+
+## 8.1 Google Calendar Setup
+
+Google Calendar sync is optional. Keep it disabled until the Google Cloud setup and production environment variables are complete.
+
+Google Cloud setup:
+
+1. Open Google Cloud Console and create or select a project.
+2. Enable Google Calendar API for the project.
+3. Create a service account for ComPort.
+4. Create a JSON key for the service account.
+5. Open the target Google Calendar settings.
+6. Share the calendar with the service-account `client_email`.
+7. Grant `Make changes to events` permission.
+
+Backend variables:
+
+```env
+GOOGLE_CALENDAR_ENABLED=true
+GOOGLE_CALENDAR_ID=your_calendar_id@group.calendar.google.com
+GOOGLE_CLIENT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
+GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+GOOGLE_PROJECT_ID=your-google-cloud-project-id
+GOOGLE_CALENDAR_TIME_ZONE=Asia/Manila
+```
+
+DigitalOcean notes:
+
+- Add these values only to the backend app or backend service environment.
+- Do not add Google private keys to the frontend app.
+- Store `GOOGLE_PRIVATE_KEY` with escaped newline characters (`\n`) if the dashboard accepts single-line values.
+- Keep the full key wrapper: `-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n`.
+- Keep `GOOGLE_CALENDAR_ENABLED=false` if the calendar is not ready. Reservation approval will continue to work.
+- After adding the migration, let the backend start command run `prisma migrate deploy`, or run `npm run prisma:migrate:deploy --workspace backend` during release.
 
 ## 9. Production Database Migration
 
@@ -289,12 +332,16 @@ Production real SMTP mode:
 
 - `RESET_TOKEN_PREVIEW=false`
 - `NOTIFICATION_EMAIL_PREVIEW=false`
-- configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM`
+- for Brevo, use `SMTP_HOST=smtp-relay.brevo.com`, `SMTP_PORT=587`, and `SMTP_SECURE=false`
+- use the Brevo SMTP login and SMTP key, not a Brevo API key
+- configure `SMTP_FROM` with a sender email that is verified in Brevo
+- keep `SMTP_TLS_REJECT_UNAUTHORIZED=true` in production
 
 Behavior:
 
 - In development, missing SMTP falls back to safe preview mode
 - In production, missing SMTP does not crash the app at boot, but email-required flows such as registration verification and password reset will fail clearly until SMTP is configured
+- `SMTP_TLS_REJECT_UNAUTHORIZED=false` is a development-only escape hatch for local certificate interception and is ignored in production
 
 ## 12. AI Provider Setup
 
@@ -345,6 +392,9 @@ After deploying:
 8. Confirm the assistant answers reservation questions
 9. Confirm unrelated questions are refused
 10. Test a basic reservation flow end to end
+11. With `GOOGLE_CALENDAR_ENABLED=false`, approve a reservation and confirm approval succeeds with calendar disabled status
+12. With Google variables configured, approve a test reservation and confirm a Google Calendar event is created
+13. Temporarily use an invalid calendar ID in a non-production test environment and confirm approval still succeeds while sync status becomes failed
 
 ## 14. Troubleshooting
 
@@ -389,7 +439,8 @@ npm run prisma:migrate:reset --workspace backend
 ### Registration or password reset returns `503`
 
 - SMTP is not configured for production delivery, or preview mode is disabled without valid SMTP settings
-- Check `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
+- Check `SMTP_HOST=smtp-relay.brevo.com`, `SMTP_PORT=587`, `SMTP_SECURE=false`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM`
+- Confirm `SMTP_PASS` is a Brevo SMTP key and the sender email in `SMTP_FROM` is verified
 - In local development, enable preview mode
 
 ### `VITE_API_URL` is missing during production build
@@ -418,3 +469,19 @@ VITE_API_URL=https://comport-pm3ss.ondigitalocean.app/api
 
 - Double-check `AI_PROVIDER`, `AI_API_KEY`, `AI_MODEL`, and `AI_API_BASE_URL` when using `custom`
 - If values are absent, the assistant falls back to deterministic replies using live system data
+
+### Google Calendar event is not created
+
+- Confirm `GOOGLE_CALENDAR_ENABLED=true` on the backend service
+- Confirm Google Calendar API is enabled in the Google Cloud project
+- Confirm the target calendar is shared with `GOOGLE_CLIENT_EMAIL`
+- Confirm `GOOGLE_CALENDAR_ID` is the calendar ID, not the human display name
+- Confirm `GOOGLE_PRIVATE_KEY` includes valid escaped newline characters
+- If the server logs mention `DECODER routines::unsupported`, re-copy `private_key` from the service-account JSON and store it as `"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"`
+- Check the reservation row: `calendarSyncStatus` should show `SYNCED`, `FAILED`, `DISABLED`, or `NOT_ATTEMPTED`
+
+### Reservation approval works but calendar sync failed
+
+- This is expected fail-open behavior. ComPort saves the approval first, then records the calendar failure.
+- Fix the backend Google variables or calendar sharing, then manually recreate the event or re-review a fresh test reservation.
+- Do not expose service-account credentials to the frontend while troubleshooting.

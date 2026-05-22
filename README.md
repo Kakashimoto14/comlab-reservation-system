@@ -505,10 +505,35 @@ All backend routes are registered under `/api`.
 | Integration | Purpose | Where It Is Used | Environment Variables | Notes |
 | --- | --- | --- | --- | --- |
 | PostgreSQL connection, including Supabase-style connection strings | Main relational database connection | `backend/prisma/schema.prisma`, `backend/src/config/env.ts`, `backend/.env.example` | `DATABASE_URL`, `DIRECT_URL` | The repository shows PostgreSQL use directly; Supabase is referenced as a connection style, not as a replacement API layer. |
-| SMTP through Nodemailer | Email verification, password reset, and reservation notification delivery | `backend/src/services/EmailService.ts`, `backend/src/services/AuthService.ts`, `backend/src/services/NotificationService.ts` | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME`, `NOTIFICATION_EMAIL_PREVIEW` | In development or incomplete SMTP configuration, preview mode can log or expose preview links instead of sending email. |
+| SMTP through Nodemailer | Email verification, password reset, and reservation notification delivery | `backend/src/services/EmailService.ts`, `backend/src/services/AuthService.ts`, `backend/src/services/NotificationService.ts` | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME`, `SMTP_TLS_REJECT_UNAUTHORIZED`, `NOTIFICATION_EMAIL_PREVIEW` | Brevo should use `smtp-relay.brevo.com`, port `587`, and `SMTP_SECURE=false`. In development or incomplete SMTP configuration, preview mode can log or expose preview links instead of sending email. |
 | Optional AI provider | Assistant response rewriting and optional external completion calls | `backend/src/services/ReservationAssistantService.ts` | `AI_PROVIDER`, `AI_API_KEY`, `AI_MODEL`, `AI_API_BASE_URL`, `OPENROUTER_SITE_URL`, `OPENROUTER_APP_NAME` | Supported values are `groq`, `openrouter`, `openai`, and `custom`. If not configured, deterministic fallback replies are used. |
+| Optional Google Calendar API | Creates Google Calendar events after approved reservations | `backend/src/services/GoogleCalendarService.ts`, `backend/src/services/ReservationService.ts` | `GOOGLE_CALENDAR_ENABLED`, `GOOGLE_CALENDAR_ID`, `GOOGLE_CLIENT_EMAIL`, `GOOGLE_PRIVATE_KEY`, `GOOGLE_PROJECT_ID`, `GOOGLE_CALENDAR_TIME_ZONE` | Backend-only service-account integration. If disabled or failing, reservation approval still succeeds and sync status is stored on the reservation. |
 
 No payment API, map API, SMS API, file storage API, or external authentication provider is explicitly shown in the repository.
+
+### Google Calendar Setup
+
+Google Calendar sync is optional and disabled by default. It runs only in the backend after an admin or laboratory staff member approves a reservation. The frontend never receives Google private keys or service-account credentials.
+
+Recommended setup:
+
+1. Create or select a Google Cloud project.
+2. Enable the Google Calendar API.
+3. Create a service account for ComPort calendar sync.
+4. Create a JSON key for that service account and keep it secret.
+5. Share the target Google Calendar with the service-account email and grant `Make changes to events`.
+6. Set the backend environment variables listed below.
+7. Deploy migrations so reservation sync metadata fields exist.
+
+When `GOOGLE_CALENDAR_ENABLED=false`, approved reservations remain valid in ComPort and are marked as calendar-disabled. When it is enabled but credentials or Google API access are invalid, approval still succeeds and the reservation is marked as calendar sync failed.
+
+Use this backend-only key format for deployment dashboards that store single-line values:
+
+```env
+GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nKEY_CONTENT_HERE\n-----END PRIVATE KEY-----\n"
+```
+
+If the log mentions `DECODER routines::unsupported`, the private key is usually missing escaped newline characters or the PEM wrapper was copied incorrectly.
 
 ## Database Design
 
@@ -1281,7 +1306,21 @@ Visible container targets in `docker-compose.yml`:
 | `SMTP_FROM` | Full sender value | Conditional | Alternative to separate sender fields |
 | `SMTP_FROM_EMAIL` | Sender email | Conditional | Used if `SMTP_FROM` is absent |
 | `SMTP_FROM_NAME` | Sender display name | Conditional | Used with `SMTP_FROM_EMAIL` |
+| `SMTP_TLS_REJECT_UNAUTHORIZED` | SMTP TLS certificate validation | No | Keep `true` in production; `false` is only for local development with certificate interception |
 | `NOTIFICATION_EMAIL_PREVIEW` | Preview emails instead of sending them | Conditional | Auto-enabled in development without full SMTP config |
+
+For Brevo, use:
+
+```env
+SMTP_HOST=smtp-relay.brevo.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your_brevo_smtp_login
+SMTP_PASS=your_brevo_smtp_key
+SMTP_FROM="ComPort <verified_sender@example.com>"
+```
+
+Use a Brevo SMTP key, not a Brevo API key, and make sure the sender email is verified in Brevo.
 
 #### Assistant and External AI
 
@@ -1293,6 +1332,17 @@ Visible container targets in `docker-compose.yml`:
 | `AI_API_BASE_URL` | Base URL for custom or overridden provider | Conditional | Used for `custom` and optional overrides |
 | `OPENROUTER_SITE_URL` | OpenRouter referer header value | Conditional | Used only for OpenRouter-style requests |
 | `OPENROUTER_APP_NAME` | OpenRouter app title header | Conditional | Used only for OpenRouter-style requests |
+
+#### Google Calendar Sync
+
+| Variable | Purpose | Required | Notes |
+| --- | --- | --- | --- |
+| `GOOGLE_CALENDAR_ENABLED` | Feature flag for reservation calendar sync | Conditional | Defaults to `false`; set `true` only after Google setup is complete |
+| `GOOGLE_CALENDAR_ID` | Target Google Calendar ID | Conditional | Required when calendar sync is enabled |
+| `GOOGLE_CLIENT_EMAIL` | Google service-account email | Conditional | Required when calendar sync is enabled |
+| `GOOGLE_PRIVATE_KEY` | Google service-account private key | Conditional | Required when calendar sync is enabled; keep backend-only |
+| `GOOGLE_PROJECT_ID` | Google Cloud project ID | Conditional | Documented for deployment traceability |
+| `GOOGLE_CALENDAR_TIME_ZONE` | Event timezone | Conditional | Defaults to `Asia/Manila` |
 
 #### Rate Limiting
 
@@ -1583,6 +1633,7 @@ docker compose up --build
 - Production cookies may need `AUTH_COOKIE_SAME_SITE=none`.
 - Production email delivery requires SMTP settings.
 - Production assistant rewriting requires AI provider settings.
+- Optional Google Calendar sync requires backend-only service-account settings and can be safely disabled with `GOOGLE_CALENDAR_ENABLED=false`.
 - Production frontend build requires `VITE_API_URL`.
 
 ### What Is Not Explicitly Shown

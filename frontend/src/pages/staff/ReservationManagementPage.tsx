@@ -13,6 +13,7 @@ import toast from "react-hot-toast";
 
 import { reservationApi, staffApi } from "../../api/services";
 import { Button } from "../../components/ui/Button";
+import { CalendarSyncStatusBadge } from "../../components/reservations/CalendarSyncStatusBadge";
 import { Card } from "../../components/ui/Card";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { Input } from "../../components/ui/Input";
@@ -23,7 +24,7 @@ import { StatCard } from "../../components/ui/StatCard";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { Textarea } from "../../components/ui/Textarea";
 import { useAuth } from "../../store/AuthContext";
-import type { Reservation } from "../../types/api";
+import type { Reservation, ReservationReviewResponse } from "../../types/api";
 import { downloadCsv } from "../../utils/csv";
 import { formatDate, formatDateTime, formatTimeRange, fullName } from "../../utils/format";
 
@@ -39,6 +40,20 @@ const getErrorMessage = (error: unknown, fallbackMessage: string) => {
   return fallbackMessage;
 };
 
+const getReviewedReservation = (response: ReservationReviewResponse): Reservation =>
+  response.reservation ?? response;
+
+const hasReviewWarning = (response: ReservationReviewResponse) =>
+  response.calendar?.status === "failed" || response.notification?.email === "failed";
+
+const getReviewToastMessage = (
+  response: ReservationReviewResponse,
+  status: "APPROVED" | "REJECTED"
+) =>
+  response.message ??
+  response.calendarSyncMessage ??
+  `Reservation ${status === "APPROVED" ? "approved" : "rejected"}.`;
+
 export const ReservationManagementPage = () => {
   const { user } = useAuth();
   const isStaff = user?.role === "LABORATORY_STAFF";
@@ -51,9 +66,10 @@ export const ReservationManagementPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [remarks, setRemarks] = useState("");
+  const reservationQueryKey = [isStaff ? "staff-reservations" : "reservations"];
 
   const { data, isLoading } = useQuery({
-    queryKey: [isStaff ? "staff-reservations" : "reservations"],
+    queryKey: reservationQueryKey,
     queryFn: () => (isStaff ? staffApi.getMyLabReservations() : reservationApi.list())
   });
 
@@ -145,7 +161,7 @@ export const ReservationManagementPage = () => {
   }, [currentPage, filteredReservations]);
 
   const refreshReservations = async () => {
-    await queryClient.invalidateQueries({ queryKey: [isStaff ? "staff-reservations" : "reservations"] });
+    await queryClient.invalidateQueries({ queryKey: reservationQueryKey });
     await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     setSelectedReservation(null);
     setRemarks("");
@@ -164,13 +180,63 @@ export const ReservationManagementPage = () => {
       isStaff
         ? staffApi.updateMyLabReservation(id, { status, remarks: message })
         : reservationApi.review(id, { status, remarks: message }),
-    onSuccess: async (_data, variables) => {
-      toast.success(
-        `Reservation ${variables.status === "APPROVED" ? "approved" : "rejected"}.`
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: reservationQueryKey });
+
+      const previousReservations = queryClient.getQueryData<Reservation[]>(reservationQueryKey);
+      const reviewedAt = new Date().toISOString();
+
+      queryClient.setQueryData<Reservation[] | undefined>(reservationQueryKey, (current) =>
+        current?.map((reservation) =>
+          reservation.id === variables.id
+            ? {
+                ...reservation,
+                status: variables.status,
+                remarks: variables.remarks ?? null,
+                reviewedAt
+              }
+            : reservation
+        )
       );
+
+      setSelectedReservation((current) =>
+        current?.id === variables.id
+          ? {
+              ...current,
+              status: variables.status,
+              remarks: variables.remarks ?? null,
+              reviewedAt
+            }
+          : current
+      );
+
+      return { previousReservations };
+    },
+    onSuccess: async (data, variables) => {
+      const reviewedReservation = getReviewedReservation(data);
+      const toastMessage = getReviewToastMessage(data, variables.status);
+
+      queryClient.setQueryData<Reservation[] | undefined>(reservationQueryKey, (current) =>
+        current?.map((reservation) =>
+          reservation.id === reviewedReservation.id ? reviewedReservation : reservation
+        )
+      );
+
+      if (hasReviewWarning(data)) {
+        toast(toastMessage, { icon: "!" });
+      } else {
+        toast.success(toastMessage);
+      }
+
       await refreshReservations();
     },
-    onError: (error) => toast.error(getErrorMessage(error, "Unable to review reservation."))
+    onError: (error, _variables, context) => {
+      if (context?.previousReservations) {
+        queryClient.setQueryData(reservationQueryKey, context.previousReservations);
+      }
+
+      toast.error(getErrorMessage(error, "Unable to review reservation."));
+    }
   });
 
   const completeMutation = useMutation({
@@ -365,7 +431,15 @@ export const ReservationManagementPage = () => {
                         {formatTimeRange(reservation.startTime, reservation.endTime)}
                       </p>
                     </div>
-                    <StatusBadge status={reservation.status} />
+                    <div className="flex flex-col items-end gap-2">
+                      <StatusBadge status={reservation.status} />
+                      {reservation.status === "APPROVED" ? (
+                        <CalendarSyncStatusBadge
+                          status={reservation.calendarSyncStatus}
+                          compact
+                        />
+                      ) : null}
+                    </div>
                   </div>
                   <p className="mt-3 text-sm text-slate-700">
                     {fullName(reservation.student?.firstName, reservation.student?.lastName)}
@@ -390,6 +464,7 @@ export const ReservationManagementPage = () => {
                     </Button>
                     {reservation.status === "APPROVED" ? (
                       <Button
+                        disabled={completeMutation.isPending}
                         onClick={() =>
                           completeMutation.mutate({
                             id: reservation.id,
@@ -447,6 +522,11 @@ export const ReservationManagementPage = () => {
                       </td>
                       <td className="py-4 pr-4 align-top">
                         <StatusBadge status={reservation.status} />
+                        {reservation.status === "APPROVED" ? (
+                          <div className="mt-2">
+                            <CalendarSyncStatusBadge status={reservation.calendarSyncStatus} />
+                          </div>
+                        ) : null}
                         {reservation.remarks ? (
                           <p className="mt-2 text-slate-500">{reservation.remarks}</p>
                         ) : null}
@@ -464,6 +544,7 @@ export const ReservationManagementPage = () => {
                           </Button>
                           {reservation.status === "APPROVED" ? (
                             <Button
+                              disabled={completeMutation.isPending}
                               onClick={() =>
                                 completeMutation.mutate({
                                   id: reservation.id,
@@ -585,7 +666,14 @@ export const ReservationManagementPage = () => {
           <div className="rounded-2xl border border-slate-200 p-4">
             <div className="flex items-center justify-between gap-3">
               <p className="font-semibold text-slate-900">Current Status</p>
-              {selectedReservation ? <StatusBadge status={selectedReservation.status} /> : null}
+              {selectedReservation ? (
+                <div className="flex flex-wrap justify-end gap-2">
+                  <StatusBadge status={selectedReservation.status} />
+                  {selectedReservation.status === "APPROVED" ? (
+                    <CalendarSyncStatusBadge status={selectedReservation.calendarSyncStatus} />
+                  ) : null}
+                </div>
+              ) : null}
             </div>
             {selectedReservation?.reviewedBy ? (
               <p className="mt-2 text-sm text-slate-500">
@@ -626,6 +714,7 @@ export const ReservationManagementPage = () => {
                 <Button
                   fullWidth
                   variant="danger"
+                  disabled={reviewMutation.isPending}
                   onClick={() =>
                     selectedReservation
                       ? reviewMutation.mutate({
@@ -636,10 +725,11 @@ export const ReservationManagementPage = () => {
                       : undefined
                   }
                 >
-                  Reject
+                  {reviewMutation.isPending ? "Rejecting..." : "Reject"}
                 </Button>
                 <Button
                   fullWidth
+                  disabled={reviewMutation.isPending}
                   onClick={() =>
                     selectedReservation
                       ? reviewMutation.mutate({
@@ -650,7 +740,7 @@ export const ReservationManagementPage = () => {
                       : undefined
                   }
                 >
-                  Approve
+                  {reviewMutation.isPending ? "Approving..." : "Approve"}
                 </Button>
               </>
             ) : null}

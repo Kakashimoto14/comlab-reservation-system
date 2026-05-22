@@ -1,80 +1,91 @@
----
+﻿---
 name: comport-ai-assistant-workflow
-description: Use this skill when working on ComPort GPT assistant features, especially role-aware AI commands, multi-turn workflows, pending action drafts, schedule creation, approval workflows, and grounded system answers.
+description: Use this skill when working on ComPort GPT assistant features, including role-aware commands, multi-turn workflows, pending action drafts, bulk schedule creation, approval workflows, grounded answers, and English/Tagalog/Taglish assistant behavior.
 ---
 
 # ComPort AI Assistant Workflow Skill
 
-You are working on the ComPort / ComLab Reservation System.
+## Purpose
 
-## Main goal
+Use this skill when improving or fixing ComPort GPT, the AI assistant of the ComPort / ComLab Reservation System.
 
-Improve ComPort GPT so it behaves like a reliable role-aware system assistant, not a generic chatbot.
+The assistant must behave like a reliable system assistant, not a generic chatbot. It must understand the user role, continue multi-turn commands, use grounded system data, and safely prepare drafts before executing sensitive actions.
 
-## Required principles
+## Core Rules
 
 1. Always inspect the existing repository before changing code.
-2. Do not hallucinate routes, models, services, tables, or features.
+2. Do not hallucinate routes, models, services, database tables, API endpoints, or features.
 3. Preserve existing assistant features unless the task explicitly asks to change them.
-4. Keep AI actions role-safe.
-5. Never let students access admin or laboratory staff actions.
-6. For system-changing actions, always use draft → review → confirm → execute.
-7. Do not execute destructive or bulk actions immediately after one message.
+4. Keep all assistant actions role-safe.
+5. Students must never access admin or laboratory staff actions.
+6. For system-changing actions, always use: draft → review → confirm → execute.
+7. Never execute destructive, bulk, or system-changing actions immediately.
 8. Support English, Tagalog, and Taglish where practical.
-9. Keep responses beginner-friendly and clear.
+9. Keep assistant responses clear, beginner-friendly, and professional.
+10. Do not break existing assistant UI or chat history behavior.
 
-## Role rules
+## Role Rules
 
 ### Admin
 
-Allowed assistant actions may include:
+Admin assistant actions may include:
 - system summaries
-- user, reservation, laboratory, and schedule summaries
+- reservation summaries
+- laboratory summaries
+- schedule summaries
+- pending approval summaries
 - schedule draft creation
 - bulk schedule draft creation
-- approval workflow assistance
+- safe approval workflow assistance
 - safe system-management drafts
 
 ### Laboratory Staff
 
-Allowed assistant actions may include:
-- view assigned or pending reservations
-- approve or reject reservation drafts if supported
-- schedule-related assistance if the existing system allows it
+Laboratory Staff assistant actions may include:
+- view relevant pending reservations
+- review reservation requests
+- approve or reject reservation drafts if supported by existing system logic
+- check schedules and laboratory availability
+- receive reservation and schedule guidance
 
 ### Student
 
-Allowed assistant actions may include:
+Student assistant actions may include:
 - ask how to reserve
 - view own reservations
 - check available schedules
 - understand reservation status
-- receive reservation guidance
+- ask reservation rules
+- receive beginner-friendly help
 
 Students must not be allowed to:
 - create schedules
 - bulk-create schedules
-- approve all reservations
+- approve reservations
+- reject reservations
 - manage users
 - manage laboratories
-- access admin summaries
+- access admin-only reports
+- access staff-only workflows
 
-## Multi-turn workflow rule
+## Multi-Turn Workflow Rule
 
-Before treating a user message as a new request, check if there is an active pending assistant action for that user/session.
+Before treating any user message as a new request, check if there is an active pending assistant action for that user or session.
 
 If a pending action exists:
-1. Try to fill missing fields from the new message.
-2. Merge the new information into the pending action.
-3. If the action is still incomplete, ask only for the next missing field.
-4. If complete, generate a safe draft.
-5. Ask for confirmation before execution.
+
+1. Parse the latest user message as a possible continuation.
+2. Fill missing fields from the latest reply.
+3. Merge new information into the existing pending action.
+4. If the action is still incomplete, ask only for the next missing field.
+5. If the action is complete, create a safe draft.
+6. Ask for confirmation before execution.
 
 Never respond with a generic system summary when the user reply clearly fills a missing field.
 
-## Bulk schedule workflow
+## Bulk Schedule Workflow
 
-Intent:
+Intent name:
 
 CREATE_BULK_SCHEDULE
 
@@ -84,13 +95,13 @@ Required fields:
 - start time
 - end time
 
-Accepted laboratory values:
+Accepted laboratory inputs:
 - all active labs
 - all labs
 - every lab
 - lahat ng lab
 - lahat ng active labs
-- specific laboratory codes such as CL-301 or CL-302
+- specific laboratory codes such as CL-301, CL-302, CL-303
 
 Accepted date inputs:
 - next week
@@ -98,6 +109,8 @@ Accepted date inputs:
 - May 26-29
 - May 26 to May 29
 - May 26 until May 29
+- specific dates
+- Tagalog or Taglish equivalents when practical
 
 Accepted time inputs:
 - 8-5
@@ -105,19 +118,57 @@ Accepted time inputs:
 - 8:00 AM - 5:00 PM
 - start time is 8am, end time is 4pm
 
-Validation:
+## Required Validation
+
+Before creating a schedule draft:
 - End time must be after start time.
 - Date range must be valid.
-- Laboratories must exist and be active.
-- Check existing schedules for overlap.
-- Warn or block conflicts based on existing business logic.
-- Require confirmation before actual creation.
+- Laboratories must exist.
+- Laboratories must be active.
+- Existing schedules must be checked for overlap.
+- Role permission must be verified.
+- Bulk creation must require confirmation.
 
-## Required checks before finishing
+## Correct Behavior Example
+
+User:
+
+Create bulk schedule next week 8-5.
+
+Assistant:
+
+Ask only for the missing laboratory field.
+
+User:
+
+all active labs
+
+Assistant:
+
+Continue the pending CREATE_BULK_SCHEDULE action. Fill laboratories as ALL_ACTIVE_LABS. Prepare a draft. Do not give a generic system summary.
+
+The draft must include:
+- laboratories included
+- dates included
+- start time
+- end time
+- total schedule blocks
+- conflict warnings
+- confirmation options
+
+## Confirmation Options
+
+Use clear confirmation options such as:
+- Confirm Create Schedule
+- Cancel
+- Edit Draft
+
+## Before Finishing
 
 Before completing any assistant-related task:
-1. Run the relevant typecheck, build, or test commands available in the repo.
-2. Manually test at least one admin assistant command.
-3. Manually test one student denial case for restricted actions.
+1. Run the relevant build, typecheck, lint, or test commands available in the repo.
+2. Test at least one admin assistant command.
+3. Test one student restricted-action denial.
 4. Confirm existing assistant features still work.
-5. Summarize changed files and test results.
+5. Confirm no merge conflict markers remain.
+6. Summarize changed files and test results.

@@ -7,7 +7,8 @@ import {
   LineElement,
   LinearScale,
   PointElement,
-  Tooltip
+  Tooltip,
+  Filler
 } from "chart.js";
 import {
   Activity,

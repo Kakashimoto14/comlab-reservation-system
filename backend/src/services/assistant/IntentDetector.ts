@@ -182,6 +182,23 @@ const NOTIFICATION_KEYWORDS = [
   "ano notification ko"
 ];
 
+const CALENDAR_SYNC_KEYWORDS = [
+  "google calendar",
+  "calendar sync",
+  "calendar integration",
+  "appear in calendar",
+  "appear in google calendar",
+  "reservation in calendar",
+  "not in calendar",
+  "approved reservation sync",
+  "sync to calendar",
+  "synced to calendar",
+  "use calendar sync",
+  "why is my reservation not in calendar",
+  "will my reservation appear in google calendar",
+  "does approved reservation sync to calendar"
+];
+
 const ADMIN_STATS_KEYWORDS = [
   "how many pending reservations",
   "ilang pending reservation",
@@ -344,6 +361,16 @@ export class IntentDetector {
 
     if (hasAnyKeyword(normalizedMessage, NOTIFICATION_KEYWORDS)) {
       return this.buildIntent("notifications", {
+        range,
+        laboratory: null,
+        language,
+        normalizedMessage,
+        previousQuery
+      });
+    }
+
+    if (hasAnyKeyword(normalizedMessage, CALENDAR_SYNC_KEYWORDS)) {
+      return this.buildIntent("calendar_sync", {
         range,
         laboratory: null,
         language,

@@ -7,6 +7,7 @@ import { StaffAccessService } from "../StaffAccessService.js";
 import { ScheduleLookupService } from "./ScheduleLookupService.js";
 import type {
   AssistantCapabilityMatrix,
+  CalendarSyncContextResult,
   CurrentUser,
   CurrentUserContextResult,
   DateRange,
@@ -47,7 +48,11 @@ const reservationSummaryInclude = {
       firstName: true,
       lastName: true
     }
-  }
+  },
+  googleCalendarEventId: true,
+  calendarSyncStatus: true,
+  calendarSyncError: true,
+  calendarSyncedAt: true
 } as const;
 
 export class AssistantToolService {
@@ -164,6 +169,10 @@ export class AssistantToolService {
 
   getSystemInfo(): Promise<SystemInfoContextResult> {
     return this.lookupService.getSystemInfo();
+  }
+
+  getCalendarSyncContext(currentUser: CurrentUser): Promise<CalendarSyncContextResult> {
+    return this.lookupService.getCalendarSyncContext(currentUser);
   }
 
   getGeneralHelpContext(range: DateRange) {
@@ -551,6 +560,10 @@ export class AssistantToolService {
         firstName: string;
         lastName: string;
       } | null;
+      googleCalendarEventId: string | null;
+      calendarSyncStatus: ReservationSummary["calendarSyncStatus"];
+      calendarSyncError: string | null;
+      calendarSyncedAt: Date | null;
     }
   ): ReservationSummary {
     return {
@@ -570,7 +583,11 @@ export class AssistantToolService {
       remarks: reservation.remarks ?? null,
       reviewedByName: reservation.reviewedBy
         ? `${reservation.reviewedBy.firstName} ${reservation.reviewedBy.lastName}`.trim()
-        : null
+        : null,
+      googleCalendarEventId: reservation.googleCalendarEventId ?? null,
+      calendarSyncStatus: reservation.calendarSyncStatus,
+      calendarSyncError: reservation.calendarSyncError ?? null,
+      calendarSyncedAt: reservation.calendarSyncedAt?.toISOString() ?? null
     };
   }
 }

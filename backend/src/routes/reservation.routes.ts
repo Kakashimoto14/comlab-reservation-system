@@ -21,11 +21,15 @@ const reservationCreateRateLimit = createRateLimiter({
   message: "Too many reservation submissions. Please wait a moment and try again."
 });
 
+const reservationReadRoles = ["STUDENT", "LABORATORY_STAFF", "ADMIN"] as const;
+const reservationCreateRoles = ["STUDENT"] as const;
+const reservationReviewRoles = ["ADMIN", "LABORATORY_STAFF"] as const;
+
 router.use(authenticate);
-router.get("/", authorizeRoles("STUDENT", "CUSTODIAN", "ADMIN"), asyncHandler(ReservationController.list));
+router.get("/", authorizeRoles(...reservationReadRoles), asyncHandler(ReservationController.list));
 router.post(
   "/",
-  authorizeRoles("STUDENT"),
+  authorizeRoles(...reservationCreateRoles),
   reservationCreateRateLimit,
   validate(createReservationSchema),
   asyncHandler(ReservationController.create)
@@ -38,13 +42,13 @@ router.patch(
 );
 router.patch(
   "/:id/review",
-  authorizeRoles("ADMIN", "CUSTODIAN"),
+  authorizeRoles(...reservationReviewRoles),
   validate(reviewReservationSchema),
   asyncHandler(ReservationController.review)
 );
 router.patch(
   "/:id/complete",
-  authorizeRoles("ADMIN", "CUSTODIAN"),
+  authorizeRoles(...reservationReviewRoles),
   validate(completeReservationSchema),
   asyncHandler(ReservationController.complete)
 );

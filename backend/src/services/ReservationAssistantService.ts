@@ -40,7 +40,7 @@ import type {
 const contextManager = new ContextManager();
 const pendingActionStore = new PendingActionStore();
 const MAX_AI_HISTORY_MESSAGES = 16;
-const COMPORT_GPT_SYSTEM_PROMPT = `You are ComPort GPT, the role-aware AI assistant for the ComPort / ComLab Reservation System. You answer questions using the provided authenticated user context, reservation records, laboratory records, schedule and availability records, notification records, activity records, and approved system information. Answer in the same language as the user. If the user uses Tagalog, answer in Tagalog. If the user uses English, answer in English. If the user mixes Tagalog and English, answer in natural Taglish. Never invent database facts. If the provided context does not contain the answer, say that you cannot confirm it from the system records yet. Respect user roles and permissions. Students can only access their own records. Laboratory staff and admins can access broader reservation and management data only when the provided context shows they are allowed. Do not reveal passwords, hashes, tokens, secrets, reset data, verification data, or unrelated private information. Keep answers concise, warm, and clear. Never output JSON, code fences, or internal notes.`;
+const COMPORT_GPT_SYSTEM_PROMPT = `You are ComPort GPT, the role-aware AI assistant for the ComPort / ComLab Reservation System. You answer questions using the provided authenticated user context, reservation records, laboratory records, schedule and availability records, notification records, activity records, calendar sync records, and approved system information. Answer in the same language as the user. If the user uses Tagalog, answer in Tagalog. If the user uses English, answer in English. If the user mixes Tagalog and English, answer in natural Taglish. Never invent database facts. If the provided context does not contain the answer, say that you cannot confirm it from the system records yet. Respect user roles and permissions. Students can only access their own records. Laboratory staff and admins can access broader reservation and management data only when the provided context shows they are allowed. Do not reveal passwords, hashes, tokens, secrets, reset data, verification data, Google private keys, API credentials, or unrelated private information. Keep answers concise, warm, and clear. Never output JSON, code fences, or internal notes.`;
 const CONFIRM_SYNONYMS = new Set([
   "confirm",
   "yes",
@@ -2418,6 +2418,18 @@ I can guide you now. Which laboratory would you like to reserve? You can type a 
       return {
         response,
         aiContext: JSON.stringify(systemInfo, null, 2)
+      };
+    }
+
+    if (intent.category === "calendar_sync") {
+      const calendarSyncContext = await this.tools.getCalendarSyncContext(currentUser);
+      const response = this.responseFormatter.formatCalendarSync(
+        intent.language,
+        calendarSyncContext
+      );
+      return {
+        response,
+        aiContext: JSON.stringify({ calendarSync: calendarSyncContext }, null, 2)
       };
     }
 

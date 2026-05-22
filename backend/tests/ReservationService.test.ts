@@ -6,7 +6,8 @@ const createMockDb = () => {
   const db = {
     $queryRaw: vi.fn(),
     user: {
-      findUnique: vi.fn()
+      findUnique: vi.fn(),
+      findMany: vi.fn()
     },
     laboratory: {
       findFirst: vi.fn(),
@@ -24,6 +25,11 @@ const createMockDb = () => {
     },
     activityLog: {
       create: vi.fn()
+    },
+    notification: {
+      findUnique: vi.fn(),
+      upsert: vi.fn(),
+      update: vi.fn()
     }
   } as any;
 
@@ -85,6 +91,7 @@ describe("ReservationService", () => {
       createdAt: new Date(),
       updatedAt: new Date()
     });
+    db.user.findMany.mockResolvedValue([{ id: 2 }, { id: 4 }]);
     db.laboratory.findFirst.mockResolvedValue({
       id: 1
     });
@@ -105,11 +112,26 @@ describe("ReservationService", () => {
       cancelledAt: null,
       createdAt: new Date(),
       updatedAt: new Date(),
+      calendarSyncStatus: "NOT_ATTEMPTED",
       laboratory: {
         id: 1,
         name: "Systems Development Laboratory",
         roomCode: "CL-301"
-      }
+      },
+      student: {
+        id: 4,
+        firstName: "Brian",
+        lastName: "Santos",
+        email: "brian@student.edu",
+        studentNumber: "2024-0002"
+      },
+      reviewedBy: {
+        id: 2,
+        firstName: "Daniel",
+        lastName: "Reyes",
+        role: "LABORATORY_STAFF"
+      },
+      pc: null
     });
     db.reservation.findFirst.mockResolvedValue(null);
     db.reservation.update.mockResolvedValue({
@@ -134,8 +156,27 @@ describe("ReservationService", () => {
         firstName: "Daniel",
         lastName: "Reyes",
         role: "LABORATORY_STAFF"
-      }
+      },
+      calendarSyncStatus: "DISABLED",
+      googleCalendarEventId: null,
+      calendarSyncError: null,
+      calendarSyncedAt: null,
+      updatedAt: new Date()
     });
+    db.notification.findUnique.mockResolvedValue(null);
+    db.notification.upsert.mockImplementation(async ({ create }: any) => ({
+      id: create.channel === "EMAIL" ? 11 : 12,
+      ...create,
+      readAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }));
+    db.notification.update.mockImplementation(async ({ where, data }: any) => ({
+      id: where.id,
+      ...data,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }));
 
     const service = new ReservationService(db);
 
@@ -152,8 +193,22 @@ describe("ReservationService", () => {
     );
 
     expect(result.status).toBe("APPROVED");
+    expect((result as any).message).toBe("Reservation approved successfully.");
+    expect((result as any).notification.email).toBe("skipped");
+    expect((result as any).calendar.status).toBe("disabled");
+    expect((result as any).calendarSyncMessage).toMatch(/disabled/i);
     expect(db.$queryRaw).toHaveBeenCalled();
     expect(db.reservation.update).toHaveBeenCalled();
+    expect(db.reservation.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          calendarSyncStatus: "DISABLED",
+          googleCalendarEventId: null,
+          calendarSyncError: null,
+          calendarSyncedAt: null
+        })
+      })
+    );
     expect(db.activityLog.create).toHaveBeenCalled();
   });
 });

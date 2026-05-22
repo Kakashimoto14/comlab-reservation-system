@@ -8,6 +8,7 @@ import { Link } from "react-router-dom";
 import { reservationApi } from "../../api/services";
 import type { Reservation } from "../../types/api";
 import { Button } from "../../components/ui/Button";
+import { CalendarSyncStatusBadge } from "../../components/reservations/CalendarSyncStatusBadge";
 import { Card } from "../../components/ui/Card";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { Input } from "../../components/ui/Input";
@@ -167,6 +168,12 @@ export const MyReservationsPage = () => {
                         {reservation.reservationCode}
                       </p>
                       <StatusBadge status={reservation.status} />
+                      {reservation.status === "APPROVED" ? (
+                        <CalendarSyncStatusBadge
+                          status={reservation.calendarSyncStatus}
+                          compact
+                        />
+                      ) : null}
                     </div>
                     <p className="text-sm leading-7 text-slate-600">{reservation.purpose}</p>
                   </div>

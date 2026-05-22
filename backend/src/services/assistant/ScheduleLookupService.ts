@@ -1,11 +1,13 @@
 import dayjs from "dayjs";
 import type { Prisma, PrismaClient, ReservationStatus, UserRole } from "@prisma/client";
 
+import { env } from "../../config/env.js";
 import { toDateOnly } from "../../utils/time.js";
 import { NotificationInboxService } from "../NotificationInboxService.js";
 import { StaffAccessService } from "../StaffAccessService.js";
 import type {
   ActivitySummary,
+  CalendarSyncContextResult,
   CalendarNote,
   CurrentUser,
   CurrentUserContextResult,
@@ -87,7 +89,11 @@ const reservationSummaryInclude = {
       firstName: true,
       lastName: true
     }
-  }
+  },
+  googleCalendarEventId: true,
+  calendarSyncStatus: true,
+  calendarSyncError: true,
+  calendarSyncedAt: true
 } as const;
 
 type ReservationSummaryRecord = Prisma.ReservationGetPayload<{
@@ -175,6 +181,32 @@ export class ScheduleLookupService {
     return {
       summary:
         "ComPort is the ComLab reservation system for laboratory schedules, reservation requests, approvals, notifications, and role-based laboratory management."
+    };
+  }
+
+  async getCalendarSyncContext(
+    currentUser: CurrentUser
+  ): Promise<CalendarSyncContextResult> {
+    const where =
+      currentUser.role === "STUDENT"
+        ? {
+            studentId: currentUser.id
+          }
+        : await this.buildManagementReservationWhere(currentUser);
+
+    const reservation = await this.db.reservation.findFirst({
+      where: {
+        ...where,
+        status: "APPROVED"
+      },
+      include: reservationSummaryInclude,
+      orderBy: [{ reviewedAt: "desc" }, { reservationDate: "desc" }, { startTime: "desc" }]
+    });
+
+    return {
+      enabled: env.GOOGLE_CALENDAR_ENABLED,
+      reservation: reservation ? this.mapReservationSummary(reservation) : null,
+      scope: currentUser.role === "STUDENT" ? "own" : "managed"
     };
   }
 
@@ -760,7 +792,11 @@ export class ScheduleLookupService {
       remarks: reservation.remarks ?? null,
       reviewedByName: reservation.reviewedBy
         ? this.formatName(reservation.reviewedBy.firstName, reservation.reviewedBy.lastName)
-        : null
+        : null,
+      googleCalendarEventId: reservation.googleCalendarEventId ?? null,
+      calendarSyncStatus: reservation.calendarSyncStatus,
+      calendarSyncError: reservation.calendarSyncError ?? null,
+      calendarSyncedAt: reservation.calendarSyncedAt?.toISOString() ?? null
     };
   }
 

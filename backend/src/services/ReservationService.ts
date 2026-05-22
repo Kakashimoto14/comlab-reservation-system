@@ -14,7 +14,13 @@ import { UserFactory } from "../domain/UserFactory.js";
 import { ApiError } from "../utils/ApiError.js";
 import { formatReservationCode, isValidTimeRange, toDateOnly } from "../utils/time.js";
 import { ActivityLogService } from "./ActivityLogService.js";
+import { GoogleCalendarService, type GoogleCalendarSyncResult } from "./GoogleCalendarService.js";
 import { LaboratoryService } from "./LaboratoryService.js";
+import {
+  NotificationService,
+  type ReservationNotificationResult
+} from "./NotificationService.js";
+import { notificationRealtimeService } from "./NotificationRealtimeService.js";
 import { ScheduleService } from "./ScheduleService.js";
 import { StaffAccessService } from "./StaffAccessService.js";
 
@@ -36,6 +42,18 @@ type ReviewReservationInput = {
 type CurrentUser = {
   id: number;
   role: UserRole;
+};
+
+type CalendarReviewStatus = "synced" | "failed" | "disabled" | "skipped";
+
+type ReservationReviewSideEffects = {
+  message: string;
+  calendarSyncMessage?: string;
+  notification: ReservationNotificationResult;
+  calendar: {
+    status: CalendarReviewStatus;
+    message: string;
+  };
 };
 
 type ConflictCheckInput = {
@@ -94,11 +112,15 @@ export class ReservationService {
   private readonly laboratoryService: LaboratoryService;
   private readonly scheduleService: ScheduleService;
   private readonly staffAccessService: StaffAccessService;
+  private readonly googleCalendarService: GoogleCalendarService;
+  private readonly notificationService: NotificationService;
 
   constructor(private readonly db: PrismaClient) {
     this.laboratoryService = new LaboratoryService(db);
     this.scheduleService = new ScheduleService(db);
     this.staffAccessService = new StaffAccessService(db);
+    this.googleCalendarService = new GoogleCalendarService();
+    this.notificationService = new NotificationService(db);
   }
 
   async listReservations(currentUser: CurrentUser) {
@@ -227,6 +249,11 @@ export class ReservationService {
       reservationId: createdReservation.id,
       actorUserId: studentId
     });
+    await this.publishReservationRealtimeUpdate(
+      createdReservation.id,
+      "reservation.created",
+      studentId
+    );
 
     return createdReservation;
   }
@@ -281,6 +308,11 @@ export class ReservationService {
       reservationId: updatedReservation.id,
       actorUserId: studentId
     });
+    await this.publishReservationRealtimeUpdate(
+      updatedReservation.id,
+      "reservation.cancelled",
+      studentId
+    );
 
     return updatedReservation;
   }
@@ -420,21 +452,257 @@ export class ReservationService {
       return updatedReservation;
     });
 
+    await this.publishReservationRealtimeUpdate(
+      updatedReservation.id,
+      updatedReservation.status === "APPROVED"
+        ? "reservation.approved"
+        : "reservation.rejected",
+      currentUser.id
+    );
+
     if (updatedReservation.status === "APPROVED") {
-      notificationEventBus.publish("reservation.confirmed", {
-        reservationId: updatedReservation.id,
-        actorUserId: currentUser.id
+      const [calendarSyncResult, notificationResult] = await Promise.all([
+        this.syncApprovedReservationToCalendar(updatedReservation),
+        this.sendReviewNotification(updatedReservation.id, "APPROVED")
+      ]);
+
+      await this.publishReservationRealtimeUpdate(
+        calendarSyncResult.reservation.id,
+        "reservation.updated",
+        currentUser.id
+      );
+
+      return this.withReviewSideEffects(calendarSyncResult.reservation, {
+        notification: notificationResult,
+        calendar: this.toCalendarReviewResult(calendarSyncResult.syncResult),
+        calendarSyncMessage: calendarSyncResult.message
       });
     }
 
     if (updatedReservation.status === "REJECTED") {
-      notificationEventBus.publish("reservation.rejected", {
-        reservationId: updatedReservation.id,
-        actorUserId: currentUser.id
+      const notificationResult = await this.sendReviewNotification(
+        updatedReservation.id,
+        "REJECTED"
+      );
+
+      return this.withReviewSideEffects(updatedReservation, {
+        notification: notificationResult,
+        calendar: {
+          status: "skipped",
+          message: "Google Calendar sync is skipped for rejected reservations."
+        }
       });
     }
 
     return updatedReservation;
+  }
+
+  private async syncApprovedReservationToCalendar(
+    reservation: Prisma.ReservationGetPayload<{ include: typeof reservationListInclude }>
+  ) {
+    const syncResult = await this.googleCalendarService.createReservationEvent(reservation);
+
+    try {
+      const updatedReservation = await this.saveCalendarSyncResult(
+        reservation.id,
+        syncResult
+      );
+
+      return {
+        reservation: updatedReservation,
+        message: syncResult.message,
+        syncResult
+      };
+    } catch (error) {
+      console.error("[calendar] Failed to save reservation calendar sync status.", {
+        reservationId: reservation.id,
+        reservationCode: reservation.reservationCode,
+        error: error instanceof Error ? error.message : "Unknown persistence error."
+      });
+
+      return {
+        reservation,
+        message:
+          "Reservation approved, but Google Calendar sync status could not be saved. Please check server logs.",
+        syncResult
+      };
+    }
+  }
+
+  private saveCalendarSyncResult(
+    reservationId: number,
+    syncResult: GoogleCalendarSyncResult
+  ) {
+    return this.db.reservation.update({
+      where: { id: reservationId },
+      data: {
+        googleCalendarEventId: syncResult.eventId,
+        calendarSyncStatus: syncResult.status,
+        calendarSyncError: syncResult.error,
+        calendarSyncedAt: syncResult.syncedAt
+      },
+      include: reservationListInclude
+    });
+  }
+
+  private async sendReviewNotification(
+    reservationId: number,
+    status: ReviewReservationInput["status"]
+  ): Promise<ReservationNotificationResult> {
+    try {
+      return status === "APPROVED"
+        ? await this.notificationService.notifyReservationConfirmed({ reservationId })
+        : await this.notificationService.notifyReservationRejected({ reservationId });
+    } catch (error) {
+      console.error("[notification] Reservation review notification failed.", {
+        reservationId,
+        status,
+        error: error instanceof Error ? error.message : "Unknown notification error."
+      });
+
+      return {
+        email: "failed",
+        realtime: "failed"
+      };
+    }
+  }
+
+  private withReviewSideEffects<
+    TReservation extends Prisma.ReservationGetPayload<{ include: typeof reservationListInclude }>
+  >(reservation: TReservation, sideEffects: Omit<ReservationReviewSideEffects, "message">) {
+    const message = this.buildReviewMessage(reservation.status, sideEffects);
+
+    return {
+      ...reservation,
+      message,
+      reservation,
+      calendarSyncMessage: sideEffects.calendarSyncMessage,
+      notification: sideEffects.notification,
+      calendar: sideEffects.calendar
+    };
+  }
+
+  private buildReviewMessage(
+    status: ReservationStatus,
+    sideEffects: Omit<ReservationReviewSideEffects, "message">
+  ) {
+    if (status === "REJECTED") {
+      return sideEffects.notification.email === "failed"
+        ? "Reservation rejected, but email notification failed."
+        : "Reservation rejected successfully.";
+    }
+
+    const warnings = [
+      sideEffects.calendar.status === "failed" ? "Google Calendar sync failed" : null,
+      sideEffects.notification.email === "failed" ? "email notification failed" : null
+    ].filter(Boolean);
+
+    if (warnings.length) {
+      return `Reservation approved, but ${warnings.join(" and ")}.`;
+    }
+
+    return "Reservation approved successfully.";
+  }
+
+  private toCalendarReviewResult(syncResult: GoogleCalendarSyncResult) {
+    const statusMap: Record<GoogleCalendarSyncResult["status"], CalendarReviewStatus> = {
+      DISABLED: "disabled",
+      FAILED: "failed",
+      SYNCED: "synced"
+    };
+
+    return {
+      status: statusMap[syncResult.status],
+      message: syncResult.message
+    };
+  }
+
+  private async publishReservationRealtimeUpdate(
+    reservationId: number,
+    eventName:
+      | "reservation.created"
+      | "reservation.updated"
+      | "reservation.approved"
+      | "reservation.rejected"
+      | "reservation.cancelled"
+      | "reservation.completed",
+    actorUserId?: number
+  ) {
+    try {
+      const reservation = await this.db.reservation.findUnique({
+        where: { id: reservationId },
+        select: {
+          id: true,
+          reservationCode: true,
+          studentId: true,
+          laboratoryId: true,
+          status: true,
+          updatedAt: true,
+          calendarSyncStatus: true,
+          laboratory: {
+            select: {
+              id: true,
+              name: true,
+              roomCode: true
+            }
+          }
+        }
+      });
+
+      if (!reservation) {
+        return;
+      }
+
+      const recipientIds = await this.resolveReservationRealtimeRecipients(
+        reservation.studentId,
+        reservation.laboratoryId
+      );
+      const payload = {
+        type: eventName,
+        reservationId: reservation.id,
+        reservationCode: reservation.reservationCode,
+        status: reservation.status,
+        updatedAt: reservation.updatedAt.toISOString(),
+        actorUserId,
+        calendarSyncStatus: reservation.calendarSyncStatus,
+        laboratory: reservation.laboratory
+      };
+
+      for (const userId of recipientIds) {
+        notificationRealtimeService.publishEventToUser(userId, eventName, payload);
+      }
+    } catch (error) {
+      console.error("[reservation] Failed to publish realtime reservation update.", {
+        reservationId,
+        eventName,
+        error: error instanceof Error ? error.message : "Unknown realtime error."
+      });
+    }
+  }
+
+  private async resolveReservationRealtimeRecipients(studentId: number, laboratoryId: number) {
+    const users = await this.db.user.findMany({
+      where: {
+        status: "ACTIVE",
+        OR: [
+          { id: studentId },
+          { role: "ADMIN" },
+          {
+            role: "LABORATORY_STAFF",
+            assignedLaboratories: {
+              some: {
+                id: laboratoryId
+              }
+            }
+          }
+        ]
+      },
+      select: {
+        id: true
+      }
+    });
+
+    return Array.from(new Set(users.map((user) => user.id)));
   }
 
   async completeReservation(reservationId: number, currentUser: CurrentUser, remarks?: string) {
@@ -491,7 +759,7 @@ export class ReservationService {
       );
     }
 
-    return this.runTransaction(async (tx) => {
+    const updatedReservation = await this.runTransaction(async (tx) => {
       const currentReservation = await tx.reservation.findUnique({
         where: { id: reservationId },
         select: {
@@ -562,6 +830,14 @@ export class ReservationService {
 
       return updatedReservation;
     });
+
+    await this.publishReservationRealtimeUpdate(
+      updatedReservation.id,
+      "reservation.completed",
+      currentUser.id
+    );
+
+    return updatedReservation;
   }
 
   private runTransaction<T>(callback: (tx: Prisma.TransactionClient) => Promise<T>) {

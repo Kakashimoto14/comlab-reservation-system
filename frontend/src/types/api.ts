@@ -11,6 +11,7 @@ export type ReservationStatus =
 export type ReservationType = "LAB" | "PC";
 export type PCStatus = "AVAILABLE" | "OCCUPIED" | "MAINTENANCE";
 export type CalendarEventType = "MAINTENANCE" | "HOLIDAY";
+export type CalendarSyncStatus = "NOT_ATTEMPTED" | "DISABLED" | "SYNCED" | "FAILED";
 export type NotificationChannel = "EMAIL" | "IN_APP";
 export type NotificationType =
   | "RESERVATION_CREATED"
@@ -114,12 +115,30 @@ export type Reservation = {
   reviewedById?: number | null;
   reviewedAt?: string | null;
   cancelledAt?: string | null;
+  googleCalendarEventId?: string | null;
+  calendarSyncStatus: CalendarSyncStatus;
+  calendarSyncError?: string | null;
+  calendarSyncedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   student?: Pick<User, "id" | "firstName" | "lastName" | "email" | "studentNumber">;
   laboratory?: Laboratory;
   pc?: PC | null;
   reviewedBy?: Pick<User, "id" | "firstName" | "lastName" | "role">;
+};
+
+export type ReservationReviewResponse = Reservation & {
+  calendarSyncMessage?: string;
+  message?: string;
+  reservation?: Reservation;
+  notification?: {
+    email: "sent" | "failed" | "skipped";
+    realtime: "sent" | "failed" | "skipped";
+  };
+  calendar?: {
+    status: "synced" | "failed" | "disabled" | "skipped";
+    message: string;
+  };
 };
 
 export type ActivityLog = {
@@ -229,6 +248,7 @@ export type ReservationAssistantCategory =
   | "reservation_submitter"
   | "reservation_guide"
   | "reservation_rules"
+  | "calendar_sync"
   | "laboratory_lookup"
   | "laboratory_catalog"
   | "usage_analytics"
@@ -325,6 +345,10 @@ export type ReservationAssistantPresentation =
           studentNumber?: string | null;
           remarks?: string | null;
           reviewedByName?: string | null;
+          googleCalendarEventId?: string | null;
+          calendarSyncStatus?: CalendarSyncStatus;
+          calendarSyncError?: string | null;
+          calendarSyncedAt?: string | null;
         }>;
       }
     | {

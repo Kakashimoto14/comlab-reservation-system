@@ -1,5 +1,6 @@
 import type {
   LaboratoryStatus,
+  CalendarSyncStatus,
   ReservationStatus,
   ReservationType,
   ScheduleStatus,
@@ -24,6 +25,7 @@ export type AssistantCategory =
   | "reservation_submitter"
   | "reservation_guide"
   | "reservation_rules"
+  | "calendar_sync"
   | "laboratory_lookup"
   | "laboratory_catalog"
   | "usage_analytics"
@@ -104,6 +106,10 @@ export type ReservationSummary = {
   studentNumber?: string | null;
   remarks?: string | null;
   reviewedByName?: string | null;
+  googleCalendarEventId?: string | null;
+  calendarSyncStatus?: CalendarSyncStatus;
+  calendarSyncError?: string | null;
+  calendarSyncedAt?: string | null;
 };
 
 export type ReservationRule = {
@@ -176,6 +182,12 @@ export type StaffDirectoryContextResult = {
 
 export type SystemInfoContextResult = {
   summary: string;
+};
+
+export type CalendarSyncContextResult = {
+  enabled: boolean;
+  reservation: ReservationSummary | null;
+  scope: "own" | "managed";
 };
 
 export type AssistantConversationMessage = {

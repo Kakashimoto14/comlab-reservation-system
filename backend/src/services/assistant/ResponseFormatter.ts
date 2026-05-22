@@ -2,6 +2,7 @@ import type {
   ActivitySummary,
   AssistantLanguage,
   AssistantPresentation,
+  CalendarSyncContextResult,
   CurrentUserContextResult,
   DateRange,
   GeneralHelpContext,
@@ -548,6 +549,103 @@ export class ResponseFormatter {
           "Sino ako?"
         ],
         taglish: ["Ano reservation rules?", "What schedules are available this week?", "Who am I?"]
+      })
+    };
+  }
+
+  formatCalendarSync(
+    language: AssistantLanguage,
+    context: CalendarSyncContextResult
+  ): BaseResponse {
+    if (!context.enabled) {
+      return {
+        category: "calendar_sync",
+        reply: this.pick(language, {
+          english:
+            "Google Calendar sync is currently disabled in ComPort. Approved reservations stay valid in ComPort, but they will not be created in Google Calendar until an admin enables the backend integration.",
+          tagalog:
+            "Naka-disable ngayon ang Google Calendar sync sa ComPort. Valid pa rin ang approved reservations sa ComPort, pero hindi sila gagawin sa Google Calendar hangga't hindi ito ini-enable ng admin sa backend.",
+          taglish:
+            "Disabled ngayon ang Google Calendar sync sa ComPort. Valid pa rin ang approved reservations sa ComPort, pero hindi sila mace-create sa Google Calendar until i-enable ito ng admin sa backend."
+        }),
+        suggestions: this.pick(language, {
+          english: ["Show my reservations.", "What is my latest reservation status?"],
+          tagalog: ["Ipakita ang reservations ko.", "Ano ang latest reservation status ko?"],
+          taglish: ["Show my reservations.", "Ano latest reservation status ko?"]
+        })
+      };
+    }
+
+    if (!context.reservation) {
+      return {
+        category: "calendar_sync",
+        reply: this.pick(language, {
+          english:
+            context.scope === "own"
+              ? "I cannot find an approved reservation for your account to check against Google Calendar sync yet."
+              : "I cannot find an approved reservation in your visible management scope to check against Google Calendar sync yet.",
+          tagalog:
+            context.scope === "own"
+              ? "Wala pa akong makitang approved reservation sa account mo para i-check sa Google Calendar sync."
+              : "Wala pa akong makitang approved reservation sa visible management scope mo para i-check sa Google Calendar sync.",
+          taglish:
+            context.scope === "own"
+              ? "Wala pa akong makitang approved reservation sa account mo to check against Google Calendar sync."
+              : "Wala pa akong makitang approved reservation sa visible management scope mo to check against Google Calendar sync."
+        }),
+        suggestions: this.pick(language, {
+          english: ["Show my reservations.", "What schedules are available this week?"],
+          tagalog: ["Ipakita ang reservations ko.", "Anong schedules ang available ngayong linggo?"],
+          taglish: ["Show my reservations.", "What schedules are available this week?"]
+        })
+      };
+    }
+
+    const reservation = context.reservation;
+
+    if (reservation.calendarSyncStatus === "SYNCED") {
+      return {
+        category: "calendar_sync",
+        reply: this.pick(language, {
+          english: `Reservation ${reservation.reservationCode} for ${reservation.roomCode} is marked as synced to Google Calendar in the ComPort records.`,
+          tagalog: `Ang reservation ${reservation.reservationCode} para sa ${reservation.roomCode} ay naka-mark na synced sa Google Calendar sa ComPort records.`,
+          taglish: `Reservation ${reservation.reservationCode} for ${reservation.roomCode} is marked as synced sa Google Calendar sa ComPort records.`
+        }),
+        suggestions: this.pick(language, {
+          english: ["Show my reservations.", "What notifications do I have?"],
+          tagalog: ["Ipakita ang reservations ko.", "Ano ang notifications ko?"],
+          taglish: ["Show my reservations.", "Ano notifications ko?"]
+        })
+      };
+    }
+
+    if (reservation.calendarSyncStatus === "FAILED") {
+      return {
+        category: "calendar_sync",
+        reply: this.pick(language, {
+          english: `Reservation ${reservation.reservationCode} is approved, but ComPort records show Google Calendar sync failed. The reservation is still approved in ComPort; an admin or lab staff member should check the calendar configuration.`,
+          tagalog: `Approved ang reservation ${reservation.reservationCode}, pero ayon sa ComPort records ay failed ang Google Calendar sync. Approved pa rin ito sa ComPort; dapat i-check ng admin o lab staff ang calendar configuration.`,
+          taglish: `Approved ang reservation ${reservation.reservationCode}, pero ComPort records show na failed ang Google Calendar sync. Approved pa rin ito sa ComPort; admin or lab staff should check the calendar configuration.`
+        }),
+        suggestions: this.pick(language, {
+          english: ["Show my reservations.", "What notifications do I have?"],
+          tagalog: ["Ipakita ang reservations ko.", "Ano ang notifications ko?"],
+          taglish: ["Show my reservations.", "Ano notifications ko?"]
+        })
+      };
+    }
+
+    return {
+      category: "calendar_sync",
+      reply: this.pick(language, {
+        english: `Reservation ${reservation.reservationCode} is approved in ComPort, but it is not marked as synced to Google Calendar. Current sync status: ${reservation.calendarSyncStatus ?? "NOT_ATTEMPTED"}.`,
+        tagalog: `Approved ang reservation ${reservation.reservationCode} sa ComPort, pero hindi ito naka-mark na synced sa Google Calendar. Current sync status: ${reservation.calendarSyncStatus ?? "NOT_ATTEMPTED"}.`,
+        taglish: `Approved ang reservation ${reservation.reservationCode} sa ComPort, pero hindi siya marked as synced sa Google Calendar. Current sync status: ${reservation.calendarSyncStatus ?? "NOT_ATTEMPTED"}.`
+      }),
+      suggestions: this.pick(language, {
+        english: ["Show my reservations.", "What is my latest reservation status?"],
+        tagalog: ["Ipakita ang reservations ko.", "Ano ang latest reservation status ko?"],
+        taglish: ["Show my reservations.", "Ano latest reservation status ko?"]
       })
     };
   }

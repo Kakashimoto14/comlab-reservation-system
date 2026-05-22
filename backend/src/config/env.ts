@@ -77,6 +77,7 @@ const envSchema = z.object({
   SMTP_FROM: z.string().min(1).optional(),
   SMTP_FROM_EMAIL: z.string().email().optional(),
   SMTP_FROM_NAME: z.string().min(1).optional(),
+  SMTP_TLS_REJECT_UNAUTHORIZED: booleanEnvSchema,
   NOTIFICATION_EMAIL_PREVIEW: booleanEnvSchema,
   AI_PROVIDER: optionalAiProviderSchema,
   AI_API_KEY: optionalNonEmptyStringSchema,
@@ -89,6 +90,12 @@ const envSchema = z.object({
   AI_API_BASE_URL: optionalUrlSchema,
   OPENROUTER_SITE_URL: optionalUrlSchema,
   OPENROUTER_APP_NAME: z.string().min(1).optional(),
+  GOOGLE_CALENDAR_ENABLED: booleanEnvSchema,
+  GOOGLE_CALENDAR_ID: optionalNonEmptyStringSchema,
+  GOOGLE_CLIENT_EMAIL: optionalNonEmptyStringSchema,
+  GOOGLE_PRIVATE_KEY: optionalNonEmptyStringSchema,
+  GOOGLE_PROJECT_ID: optionalNonEmptyStringSchema,
+  GOOGLE_CALENDAR_TIME_ZONE: z.string().min(1).default("Asia/Manila"),
   RESERVATION_REMINDER_LEAD_MINUTES: z.coerce.number().int().positive().default(60),
   RESERVATION_REMINDER_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
   LOGIN_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
@@ -174,6 +181,7 @@ export const env = {
   ENABLE_BACKGROUND_WORKERS: parsedEnv.ENABLE_BACKGROUND_WORKERS ?? true,
   AI_MODEL: resolvedAiModel,
   AI_FALLBACK_MODEL: resolvedAiFallbackModel,
+  GOOGLE_CALENDAR_ENABLED: parsedEnv.GOOGLE_CALENDAR_ENABLED ?? false,
   NOTIFICATION_EMAIL_PREVIEW:
     parsedEnv.NOTIFICATION_EMAIL_PREVIEW ??
     (!hasSmtpConfig || parsedEnv.NODE_ENV !== "production")

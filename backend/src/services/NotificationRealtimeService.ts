@@ -33,17 +33,23 @@ export class NotificationRealtimeService {
   }
 
   publishToUser(userId: number, payload: NotificationStreamPayload) {
+    return this.publishEventToUser(userId, "notification", payload);
+  }
+
+  publishEventToUser(userId: number, eventName: string, payload: NotificationStreamPayload) {
     const subscribers = this.clients.get(userId);
 
     if (!subscribers?.size) {
-      return;
+      return false;
     }
 
     const serializedPayload = JSON.stringify(payload);
 
     for (const client of subscribers) {
-      client.write(`event: notification\ndata: ${serializedPayload}\n\n`);
+      client.write(`event: ${eventName}\ndata: ${serializedPayload}\n\n`);
     }
+
+    return true;
   }
 }
 

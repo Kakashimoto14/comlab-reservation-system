@@ -73,6 +73,13 @@ type ReservationEmailPayload = {
   inAppMessage: string;
 };
 
+export type NotificationDeliveryStatus = "sent" | "failed" | "skipped";
+
+export type ReservationNotificationResult = {
+  email: NotificationDeliveryStatus;
+  realtime: NotificationDeliveryStatus;
+};
+
 type ReservationDetail = {
   label: string;
   value: string;
@@ -93,12 +100,12 @@ export class NotificationService {
       eventBus.subscribe("reservation.created", (payload) =>
         this.handleReservationCreated(payload)
       ),
-      eventBus.subscribe("reservation.confirmed", (payload) =>
-        this.handleReservationConfirmed(payload)
-      ),
-      eventBus.subscribe("reservation.rejected", (payload) =>
-        this.handleReservationRejected(payload)
-      ),
+      eventBus.subscribe("reservation.confirmed", async (payload) => {
+        await this.notifyReservationConfirmed(payload);
+      }),
+      eventBus.subscribe("reservation.rejected", async (payload) => {
+        await this.notifyReservationRejected(payload);
+      }),
       eventBus.subscribe("reservation.cancelled", (payload) =>
         this.handleReservationCancelled(payload)
       ),
@@ -143,14 +150,16 @@ export class NotificationService {
     );
   }
 
-  private async handleReservationConfirmed(payload: NotificationEventPayload) {
+  async notifyReservationConfirmed(
+    payload: NotificationEventPayload
+  ): Promise<ReservationNotificationResult> {
     const reservation = await this.loadReservationContext(payload.reservationId);
 
     if (!reservation) {
-      return;
+      return this.skippedNotificationResult();
     }
 
-    await this.notifyRecipient({
+    return this.notifyRecipient({
       recipient: this.toRecipient(reservation.student),
       reservation,
       type: "RESERVATION_CONFIRMED",
@@ -158,14 +167,16 @@ export class NotificationService {
     });
   }
 
-  private async handleReservationRejected(payload: NotificationEventPayload) {
+  async notifyReservationRejected(
+    payload: NotificationEventPayload
+  ): Promise<ReservationNotificationResult> {
     const reservation = await this.loadReservationContext(payload.reservationId);
 
     if (!reservation) {
-      return;
+      return this.skippedNotificationResult();
     }
 
-    await this.notifyRecipient({
+    return this.notifyRecipient({
       recipient: this.toRecipient(reservation.student),
       reservation,
       type: "RESERVATION_REJECTED",
@@ -224,7 +235,9 @@ export class NotificationService {
     reservation: ReservationNotificationContext;
     type: NotificationType;
     email: ReservationEmailPayload;
-  }) {
+  }): Promise<ReservationNotificationResult> {
+    let emailStatus: NotificationDeliveryStatus = "skipped";
+    let realtimeStatus: NotificationDeliveryStatus = "skipped";
     const metadata: Prisma.InputJsonValue = {
       reservationCode: input.reservation.reservationCode,
       reservationStatus: input.reservation.status,
@@ -270,12 +283,13 @@ export class NotificationService {
       });
 
       try {
-        await this.emailService.sendMail({
+        const delivery = await this.emailService.sendMail({
           to: input.recipient.email,
           subject: input.email.subject,
           text: input.email.text,
           html: input.email.html
         });
+        emailStatus = delivery.preview ? "skipped" : "sent";
 
         await this.db.notification.update({
           where: { id: emailNotification.id },
@@ -285,20 +299,27 @@ export class NotificationService {
           }
         });
       } catch (error) {
+        emailStatus = "failed";
+        const safeError = this.toSafeNotificationError(error);
+
         await this.db.notification.update({
           where: { id: emailNotification.id },
           data: {
             status: "FAILED",
             metadata: {
               ...((metadata as Record<string, unknown>) ?? {}),
-              deliveryError: error instanceof Error ? error.message : "Unknown error"
+              deliveryError: safeError
             }
           }
         });
 
         console.error(
-          `[notification] Email delivery failed for ${input.type} to ${input.recipient.email}.`,
-          error
+          `[notification] Email delivery failed for ${input.type}.`,
+          {
+            recipientUserId: input.recipient.userId,
+            reservationId: input.reservation.id,
+            reason: safeError
+          }
         );
       }
     }
@@ -340,8 +361,13 @@ export class NotificationService {
         }
       });
 
-      this.broadcastInAppNotification(inAppNotification);
+      realtimeStatus = this.broadcastInAppNotification(inAppNotification);
     }
+
+    return {
+      email: emailStatus,
+      realtime: realtimeStatus
+    };
   }
 
   private async hasDeliveredNotification(
@@ -368,8 +394,10 @@ export class NotificationService {
     return notification?.status === "SENT";
   }
 
-  private broadcastInAppNotification(notification: Notification) {
-    notificationRealtimeService.publishToUser(notification.userId, notification);
+  private broadcastInAppNotification(notification: Notification): NotificationDeliveryStatus {
+    return notificationRealtimeService.publishToUser(notification.userId, notification)
+      ? "sent"
+      : "skipped";
   }
 
   private async loadReservationContext(reservationId: number) {
@@ -429,6 +457,25 @@ export class NotificationService {
       firstName: user.firstName,
       lastName: user.lastName
     };
+  }
+
+  private skippedNotificationResult(): ReservationNotificationResult {
+    return {
+      email: "skipped",
+      realtime: "skipped"
+    };
+  }
+
+  private toSafeNotificationError(error: unknown) {
+    let message = error instanceof Error ? error.message : "Unknown email delivery error.";
+
+    for (const secret of [env.SMTP_PASS, env.SMTP_USER]) {
+      if (secret) {
+        message = message.replace(secret, "[redacted]");
+      }
+    }
+
+    return message;
   }
 
   private async resolveStaffRecipients(reservation: ReservationNotificationContext) {

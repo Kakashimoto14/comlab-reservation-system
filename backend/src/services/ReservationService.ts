@@ -8,6 +8,7 @@ import type {
 import { randomUUID } from "crypto";
 import { StatusCodes } from "http-status-codes";
 
+import { env } from "../config/env.js";
 import { Reservation } from "../domain/Reservation.js";
 import { notificationEventBus } from "../notifications/NotificationEventBus.js";
 import { UserFactory } from "../domain/UserFactory.js";
@@ -42,18 +43,6 @@ type ReviewReservationInput = {
 type CurrentUser = {
   id: number;
   role: UserRole;
-};
-
-type CalendarReviewStatus = "synced" | "failed" | "disabled" | "skipped";
-
-type ReservationReviewSideEffects = {
-  message: string;
-  calendarSyncMessage?: string;
-  notification: ReservationNotificationResult;
-  calendar: {
-    status: CalendarReviewStatus;
-    message: string;
-  };
 };
 
 type ConflictCheckInput = {
@@ -108,6 +97,10 @@ const reservationListInclude = {
   }
 } satisfies Prisma.ReservationInclude;
 
+type ReservationListRecord = Prisma.ReservationGetPayload<{
+  include: typeof reservationListInclude;
+}>;
+
 export class ReservationService {
   private readonly laboratoryService: LaboratoryService;
   private readonly scheduleService: ScheduleService;
@@ -135,11 +128,13 @@ export class ReservationService {
             }
           : undefined;
 
-    return this.db.reservation.findMany({
+    const reservations = await this.db.reservation.findMany({
       where,
       include: reservationListInclude,
       orderBy: [{ reservationDate: "desc" }, { startTime: "desc" }]
     });
+
+    return reservations.map((reservation) => this.normalizeReservationForResponse(reservation));
   }
 
   async createReservation(input: CreateReservationInput, studentId: number) {
@@ -461,37 +456,35 @@ export class ReservationService {
     );
 
     if (updatedReservation.status === "APPROVED") {
-      const [calendarSyncResult, notificationResult] = await Promise.all([
-        this.syncApprovedReservationToCalendar(updatedReservation),
-        this.sendReviewNotification(updatedReservation.id, "APPROVED")
-      ]);
+      void this.processApprovedReservationSideEffects(updatedReservation.id, currentUser.id);
 
-      await this.publishReservationRealtimeUpdate(
-        calendarSyncResult.reservation.id,
-        "reservation.updated",
-        currentUser.id
-      );
+      const responseReservation = this.normalizeReservationForResponse(updatedReservation);
 
-      return this.withReviewSideEffects(calendarSyncResult.reservation, {
-        notification: notificationResult,
-        calendar: this.toCalendarReviewResult(calendarSyncResult.syncResult),
-        calendarSyncMessage: calendarSyncResult.message
-      });
+      return {
+        ...responseReservation,
+        message: env.GOOGLE_CALENDAR_ENABLED
+          ? "Reservation approved. Email notification and calendar sync are processing in the background."
+          : "Reservation approved successfully.",
+        reservation: responseReservation,
+        calendar: {
+          status: env.GOOGLE_CALENDAR_ENABLED ? "skipped" : "disabled",
+          message: env.GOOGLE_CALENDAR_ENABLED
+            ? "Google Calendar sync is processing in the background."
+            : "Google Calendar sync is disabled."
+        }
+      };
     }
 
     if (updatedReservation.status === "REJECTED") {
-      const notificationResult = await this.sendReviewNotification(
-        updatedReservation.id,
-        "REJECTED"
-      );
+      void this.processRejectedReservationSideEffects(updatedReservation.id);
 
-      return this.withReviewSideEffects(updatedReservation, {
-        notification: notificationResult,
-        calendar: {
-          status: "skipped",
-          message: "Google Calendar sync is skipped for rejected reservations."
-        }
-      });
+      const responseReservation = this.normalizeReservationForResponse(updatedReservation);
+
+      return {
+        ...responseReservation,
+        message: "Reservation rejected successfully.",
+        reservation: responseReservation
+      };
     }
 
     return updatedReservation;
@@ -567,54 +560,67 @@ export class ReservationService {
     }
   }
 
-  private withReviewSideEffects<
-    TReservation extends Prisma.ReservationGetPayload<{ include: typeof reservationListInclude }>
-  >(reservation: TReservation, sideEffects: Omit<ReservationReviewSideEffects, "message">) {
-    const message = this.buildReviewMessage(reservation.status, sideEffects);
-
-    return {
-      ...reservation,
-      message,
-      reservation,
-      calendarSyncMessage: sideEffects.calendarSyncMessage,
-      notification: sideEffects.notification,
-      calendar: sideEffects.calendar
-    };
-  }
-
-  private buildReviewMessage(
-    status: ReservationStatus,
-    sideEffects: Omit<ReservationReviewSideEffects, "message">
+  private async processApprovedReservationSideEffects(
+    reservationId: number,
+    actorUserId: number
   ) {
-    if (status === "REJECTED") {
-      return sideEffects.notification.email === "failed"
-        ? "Reservation rejected, but email notification failed."
-        : "Reservation rejected successfully.";
+    try {
+      const reservation = await this.db.reservation.findUnique({
+        where: { id: reservationId },
+        include: reservationListInclude
+      });
+
+      if (!reservation || reservation.status !== "APPROVED") {
+        return;
+      }
+
+      const [calendarResult, notificationResult] = await Promise.allSettled([
+        this.syncApprovedReservationToCalendar(reservation),
+        this.sendReviewNotification(reservationId, "APPROVED")
+      ]);
+
+      if (calendarResult.status === "fulfilled") {
+        await this.publishReservationRealtimeUpdate(
+          calendarResult.value.reservation.id,
+          "reservation.updated",
+          actorUserId
+        );
+      } else {
+        console.error("[calendar] Approved reservation background sync failed.", {
+          reservationId,
+          error:
+            calendarResult.reason instanceof Error
+              ? calendarResult.reason.message
+              : "Unknown calendar background error."
+        });
+      }
+
+      if (notificationResult.status === "rejected") {
+        console.error("[notification] Approved reservation background notification failed.", {
+          reservationId,
+          error:
+            notificationResult.reason instanceof Error
+              ? notificationResult.reason.message
+              : "Unknown notification background error."
+        });
+      }
+    } catch (error) {
+      console.error("[reservation] Approved reservation side effects failed.", {
+        reservationId,
+        error: error instanceof Error ? error.message : "Unknown side-effect error."
+      });
     }
-
-    const warnings = [
-      sideEffects.calendar.status === "failed" ? "Google Calendar sync failed" : null,
-      sideEffects.notification.email === "failed" ? "email notification failed" : null
-    ].filter(Boolean);
-
-    if (warnings.length) {
-      return `Reservation approved, but ${warnings.join(" and ")}.`;
-    }
-
-    return "Reservation approved successfully.";
   }
 
-  private toCalendarReviewResult(syncResult: GoogleCalendarSyncResult) {
-    const statusMap: Record<GoogleCalendarSyncResult["status"], CalendarReviewStatus> = {
-      DISABLED: "disabled",
-      FAILED: "failed",
-      SYNCED: "synced"
-    };
-
-    return {
-      status: statusMap[syncResult.status],
-      message: syncResult.message
-    };
+  private async processRejectedReservationSideEffects(reservationId: number) {
+    try {
+      await this.sendReviewNotification(reservationId, "REJECTED");
+    } catch (error) {
+      console.error("[reservation] Rejected reservation side effects failed.", {
+        reservationId,
+        error: error instanceof Error ? error.message : "Unknown side-effect error."
+      });
+    }
   }
 
   private async publishReservationRealtimeUpdate(
@@ -961,6 +967,24 @@ export class ReservationService {
 
   private buildPendingReservationCode() {
     return `PENDING-${randomUUID()}`;
+  }
+
+  private normalizeReservationForResponse<T extends ReservationListRecord>(reservation: T): T {
+    if (
+      env.GOOGLE_CALENDAR_ENABLED ||
+      reservation.status !== "APPROVED" ||
+      reservation.calendarSyncStatus === "SYNCED"
+    ) {
+      return reservation;
+    }
+
+    return {
+      ...reservation,
+      googleCalendarEventId: null,
+      calendarSyncStatus: "DISABLED",
+      calendarSyncError: null,
+      calendarSyncedAt: null
+    };
   }
 
   private async logReservationAction(

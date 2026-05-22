@@ -1,6 +1,5 @@
-import type { PrismaClient, UserRole } from "@prisma/client";
+import { Prisma, type PrismaClient, type UserRole } from "@prisma/client";
 
-import { UserFactory } from "../domain/UserFactory.js";
 import { StaffAccessService } from "./StaffAccessService.js";
 
 export class DashboardService {
@@ -15,19 +14,8 @@ export class DashboardService {
       where: { id: currentUser.id },
       select: {
         id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        emailVerifiedAt: true,
-        passwordHash: true,
         role: true,
-        status: true,
-        studentNumber: true,
-        department: true,
-        yearLevel: true,
-        phone: true,
-        createdAt: true,
-        updatedAt: true
+        status: true
       }
     });
 
@@ -35,12 +23,10 @@ export class DashboardService {
       return null;
     }
 
-    const userEntity = UserFactory.create(user);
-
-    switch (userEntity.getDashboardScope()) {
-      case "student":
+    switch (user.role) {
+      case "STUDENT":
         return this.getStudentDashboard(currentUser.id);
-      case "staff":
+      case "LABORATORY_STAFF":
         return this.getStaffDashboard(currentUser.id);
       default:
         return this.getAdminDashboard();
@@ -207,34 +193,35 @@ export class DashboardService {
   }
 
   private async buildReservationTrend(laboratoryIds?: number[]) {
-    const recentReservations = await this.db.reservation.findMany({
-      where: {
-        createdAt: {
-          gte: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7)
-        },
-        ...(laboratoryIds
-          ? {
-              laboratoryId: {
-                in: laboratoryIds
-              }
-            }
-          : {})
-      },
-      select: {
-        createdAt: true
-      }
-    });
+    if (laboratoryIds && laboratoryIds.length === 0) {
+      return [];
+    }
 
-    const counts = new Map<string, number>();
+    const since = new Date(Date.now() - 1000 * 60 * 60 * 24 * 7);
+    const rows = laboratoryIds
+      ? await this.db.$queryRaw<Array<{ date: Date | string; count: bigint }>>`
+          SELECT DATE("createdAt") AS date, COUNT(*)::bigint AS count
+          FROM "Reservation"
+          WHERE "createdAt" >= ${since}
+            AND "laboratoryId" IN (${Prisma.join(laboratoryIds)})
+          GROUP BY DATE("createdAt")
+          ORDER BY DATE("createdAt") ASC
+        `
+      : await this.db.$queryRaw<Array<{ date: Date | string; count: bigint }>>`
+          SELECT DATE("createdAt") AS date, COUNT(*)::bigint AS count
+          FROM "Reservation"
+          WHERE "createdAt" >= ${since}
+          GROUP BY DATE("createdAt")
+          ORDER BY DATE("createdAt") ASC
+        `;
 
-    recentReservations.forEach((reservation) => {
-      const key = reservation.createdAt.toISOString().slice(0, 10);
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    });
-
-    return Array.from(counts.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, count]) => ({ date, count }));
+    return rows.map((row) => ({
+      date:
+        row.date instanceof Date
+          ? row.date.toISOString().slice(0, 10)
+          : row.date.slice(0, 10),
+      count: Number(row.count)
+    }));
   }
 
   private countStatus(

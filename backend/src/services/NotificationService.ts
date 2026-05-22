@@ -246,12 +246,12 @@ export class NotificationService {
       reservationType: input.reservation.reservationType
     };
 
-    const emailAlreadySent = await this.hasDeliveredNotification(
+    const deliveredChannels = await this.getDeliveredChannels(
       input.recipient.userId,
       input.reservation.id,
-      "EMAIL",
       input.type
     );
+    const emailAlreadySent = deliveredChannels.has("EMAIL");
 
     if (!emailAlreadySent) {
       const emailNotification = await this.db.notification.upsert({
@@ -324,12 +324,7 @@ export class NotificationService {
       }
     }
 
-    const inAppAlreadySent = await this.hasDeliveredNotification(
-      input.recipient.userId,
-      input.reservation.id,
-      "IN_APP",
-      input.type
-    );
+    const inAppAlreadySent = deliveredChannels.has("IN_APP");
 
     if (!inAppAlreadySent) {
       const inAppNotification = await this.db.notification.upsert({
@@ -370,28 +365,27 @@ export class NotificationService {
     };
   }
 
-  private async hasDeliveredNotification(
+  private async getDeliveredChannels(
     userId: number,
     reservationId: number,
-    channel: NotificationChannel,
     type: NotificationType
   ) {
-    const notification = await this.db.notification.findUnique({
+    const notifications = await this.db.notification.findMany({
       where: {
-        userId_reservationId_channel_type: {
-          userId,
-          reservationId,
-          channel,
-          type
+        userId,
+        reservationId,
+        type,
+        status: "SENT",
+        channel: {
+          in: ["EMAIL", "IN_APP"]
         }
       },
       select: {
-        id: true,
-        status: true
+        channel: true
       }
     });
 
-    return notification?.status === "SENT";
+    return new Set<NotificationChannel>(notifications.map((notification) => notification.channel));
   }
 
   private broadcastInAppNotification(notification: Notification): NotificationDeliveryStatus {

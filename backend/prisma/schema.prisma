@@ -151,6 +151,7 @@ model Schedule {
   reservations Reservation[]
 
   @@index([laboratoryId, date])
+  @@index([status, date])
   @@index([createdById])
 }
 
@@ -188,6 +189,8 @@ model Reservation {
   @@index([laboratoryId, reservationDate])
   @@index([status, reservationDate])
   @@index([calendarSyncStatus])
+  @@index([createdAt])
+  @@index([laboratoryId, createdAt])
   @@index([pcId, reservationDate])
   @@index([scheduleId])
   @@index([reviewedById])
@@ -318,6 +321,7 @@ model Notification {
 
   @@unique([userId, reservationId, channel, type])
   @@index([userId, channel, createdAt])
+  @@index([userId, channel, readAt, createdAt])
   @@index([channel, status, createdAt])
   @@index([reservationId, type])
 }

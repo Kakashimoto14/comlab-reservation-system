@@ -189,10 +189,14 @@ export const ReservationAssistantPage = () => {
     }
 
     if (statusCode === 400) {
-      const validationMessage =
+      const rawValidationMessage =
         axiosError.response?.data?.errors?.message?.[0] ??
         axiosError.response?.data?.message ??
         fallbackMessage;
+      const validationMessage =
+        rawValidationMessage === "Invalid request data."
+          ? "I couldn't process that assistant request. Please try a shorter question or choose one of the examples."
+          : rawValidationMessage;
       setAssistantError(validationMessage);
       toast.error(validationMessage);
       return;

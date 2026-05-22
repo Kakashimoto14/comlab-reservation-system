@@ -80,7 +80,7 @@ export const useNotifications = (limit = 8) => {
       });
       stream.close();
     };
-  }, [initialized, queryClient, user]);
+  }, [initialized, queryClient, user?.id]);
 
   const markAsReadMutation = useMutation({
     mutationFn: (id: number) => notificationApi.markAsRead(id),

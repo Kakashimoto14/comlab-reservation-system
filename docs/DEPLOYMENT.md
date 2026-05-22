@@ -55,7 +55,7 @@ FRONTEND_URL=http://localhost:5173
 APP_BASE_URL=http://localhost:5173
 CORS_ORIGINS=http://localhost:5173,http://localhost:5174
 
-DATABASE_URL="postgresql://postgres.PROJECT_REF:YOUR_PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres?pgbouncer=true&connection_limit=1&sslmode=require"
+DATABASE_URL="postgresql://postgres.PROJECT_REF:YOUR_PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres?pgbouncer=true&connection_limit=5&sslmode=require"
 DIRECT_URL="postgresql://postgres.PROJECT_REF:YOUR_PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require"
 
 JWT_SECRET=replace_this_with_a_real_long_random_secret
@@ -105,6 +105,7 @@ PASSWORD_RESET_RATE_LIMIT_MAX=5
 Notes:
 
 - `DATABASE_URL` is the Supabase pooler URL used by the running backend.
+- Start with `connection_limit=5` for the runtime pooler. This app can issue several short queries around dashboard loads, reservation review, notifications, and realtime refreshes.
 - `DIRECT_URL` is the Supabase session pooler URL used by Prisma migrations.
 - Replace `PROJECT_REF` with your Supabase project ref.
 - Replace `YOUR_PASSWORD` with your Supabase database password.
@@ -194,7 +195,7 @@ FRONTEND_URL=https://www.comlabreservation.app
 APP_BASE_URL=https://www.comlabreservation.app
 CORS_ORIGINS=https://www.comlabreservation.app,https://comlabreservation.app
 
-DATABASE_URL="postgresql://postgres.PROJECT_REF:YOUR_PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres?pgbouncer=true&connection_limit=1&sslmode=require"
+DATABASE_URL="postgresql://postgres.PROJECT_REF:YOUR_PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres?pgbouncer=true&connection_limit=5&sslmode=require"
 DIRECT_URL="postgresql://postgres.PROJECT_REF:YOUR_PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require"
 
 JWT_SECRET=generate_a_real_long_random_secret

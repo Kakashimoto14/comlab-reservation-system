@@ -10,6 +10,8 @@ const routeMeta = [
   { match: "/student/dashboard", title: "Student Dashboard", description: "Track your booking activity and latest reservation updates." },
   { match: "/student/laboratories", title: "Reserve Laboratory", description: "Choose a laboratory, review available schedules, and submit your reservation request." },
   { match: "/student/reservations", title: "Reservation History", description: "Review your requests, status changes, and staff remarks." },
+  { match: "/assistant", title: "ComPort Assistant", description: "Ask role-aware questions about reservations, schedules, notifications, and safe next steps." },
+  { match: "/laboratory-guide", title: "Laboratory Guide", description: "Browse laboratory availability and published schedules." },
   { match: "/dashboard", title: "Operations Dashboard", description: "Monitor reservation volume, approval queues, and laboratory usage." },
   { match: "/management/users", title: "User Administration", description: "Manage access, roles, and account status across the system." },
   { match: "/management/laboratories", title: "Laboratory Administration", description: "Maintain rooms, capacities, media, and availability status." },

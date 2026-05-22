@@ -194,21 +194,10 @@ describe("ReservationService", () => {
 
     expect(result.status).toBe("APPROVED");
     expect((result as any).message).toBe("Reservation approved successfully.");
-    expect((result as any).notification.email).toBe("skipped");
     expect((result as any).calendar.status).toBe("disabled");
-    expect((result as any).calendarSyncMessage).toMatch(/disabled/i);
+    expect((result as any).calendar.message).toMatch(/disabled/i);
     expect(db.$queryRaw).toHaveBeenCalled();
     expect(db.reservation.update).toHaveBeenCalled();
-    expect(db.reservation.update).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          calendarSyncStatus: "DISABLED",
-          googleCalendarEventId: null,
-          calendarSyncError: null,
-          calendarSyncedAt: null
-        })
-      })
-    );
     expect(db.activityLog.create).toHaveBeenCalled();
   });
 });

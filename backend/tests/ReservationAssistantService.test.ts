@@ -298,6 +298,21 @@ const matchesDateRange = (value: Date, range?: { gte?: Date; lte?: Date }) => {
   return true;
 };
 
+const reservationScalarIncludeKeys = [
+  "googleCalendarEventId",
+  "calendarSyncStatus",
+  "calendarSyncError",
+  "calendarSyncedAt"
+] as const;
+
+const expectNoScalarReservationInclude = (args?: any) => {
+  for (const key of reservationScalarIncludeKeys) {
+    if (args?.include?.[key]) {
+      throw new Error(`Invalid scalar field in reservation include: ${key}`);
+    }
+  }
+};
+
 const createMockDb = () => {
   const db = {
     laboratory: {
@@ -372,6 +387,8 @@ const createMockDb = () => {
     },
     reservation: {
       findMany: vi.fn(async (args?: any) => {
+        expectNoScalarReservationInclude(args);
+
         const filtered = reservationRecords.filter((reservation) => {
           if (typeof args?.where?.studentId === "number" && reservation.studentId !== args.where.studentId) {
             return false;
@@ -447,6 +464,8 @@ const createMockDb = () => {
           return true;
         }).length),
       findFirst: vi.fn(async (args?: any) => {
+        expectNoScalarReservationInclude(args);
+
         const filtered = reservationRecords.filter((reservation) => {
           if (args?.where?.reservationCode && reservation.reservationCode !== args.where.reservationCode) {
             return false;

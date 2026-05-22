@@ -55,4 +55,22 @@ describe("useRoleRoutes", () => {
     expect(labels).not.toContain("Assign Staff");
     expect(labels).not.toContain("Calendar");
   });
+
+  it.each<UserRole>(["ADMIN", "LABORATORY_STAFF"])(
+    "routes the management laboratory guide through the shared protected path for %s",
+    (role) => {
+      mockedUser = buildUser(role);
+
+      const { result } = renderHook(() => useRoleRoutes());
+
+      expect(result.current).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            label: "Laboratory Guide",
+            to: "/laboratory-guide"
+          })
+        ])
+      );
+    }
+  );
 });

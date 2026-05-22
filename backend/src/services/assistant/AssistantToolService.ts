@@ -1,5 +1,5 @@
 import dayjs from "dayjs";
-import type { PrismaClient, ReservationStatus, UserRole } from "@prisma/client";
+import type { Prisma, PrismaClient, ReservationStatus, UserRole } from "@prisma/client";
 
 import { toDateOnly } from "../../utils/time.js";
 import { ScheduleService } from "../ScheduleService.js";
@@ -48,12 +48,8 @@ const reservationSummaryInclude = {
       firstName: true,
       lastName: true
     }
-  },
-  googleCalendarEventId: true,
-  calendarSyncStatus: true,
-  calendarSyncError: true,
-  calendarSyncedAt: true
-} as const;
+  }
+} satisfies Prisma.ReservationInclude;
 
 export class AssistantToolService {
   private readonly lookupService: ScheduleLookupService;

@@ -35,6 +35,11 @@ export const CalendarSyncStatusBadge = ({
   compact = false
 }: CalendarSyncStatusBadgeProps) => {
   const config = statusConfig[status ?? "NOT_ATTEMPTED"];
+
+  if ((status ?? "NOT_ATTEMPTED") === "DISABLED") {
+    return null;
+  }
+
   const Icon = config.icon;
 
   return (

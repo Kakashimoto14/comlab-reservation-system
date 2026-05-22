@@ -525,7 +525,7 @@ Recommended setup:
 6. Set the backend environment variables listed below.
 7. Deploy migrations so reservation sync metadata fields exist.
 
-When `GOOGLE_CALENDAR_ENABLED=false`, approved reservations remain valid in ComPort and are marked as calendar-disabled. When it is enabled but credentials or Google API access are invalid, approval still succeeds and the reservation is marked as calendar sync failed.
+When `GOOGLE_CALENDAR_ENABLED=false`, approved reservations remain valid in ComPort and normal reservation pages suppress calendar warning badges. When it is enabled but credentials or Google API access are invalid, approval still succeeds and the reservation is marked as calendar sync failed.
 
 Use this backend-only key format for deployment dashboards that store single-line values:
 

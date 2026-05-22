@@ -8,6 +8,8 @@ import { toDateOnly } from "../utils/time.js";
 
 const GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+const GOOGLE_TOKEN_TIMEOUT_MS = 8_000;
+const GOOGLE_EVENT_TIMEOUT_MS = 8_000;
 
 const calendarReservationInclude = {
   laboratory: {
@@ -103,7 +105,8 @@ export class GoogleCalendarService {
             Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json"
           },
-          body: JSON.stringify(this.buildCalendarEvent(reservation))
+          body: JSON.stringify(this.buildCalendarEvent(reservation)),
+          signal: AbortSignal.timeout(GOOGLE_EVENT_TIMEOUT_MS)
         }
       );
 
@@ -200,6 +203,7 @@ export class GoogleCalendarService {
       headers: {
         "Content-Type": "application/x-www-form-urlencoded"
       },
+      signal: AbortSignal.timeout(GOOGLE_TOKEN_TIMEOUT_MS),
       body: new URLSearchParams({
         grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
         assertion

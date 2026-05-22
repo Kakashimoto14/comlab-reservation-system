@@ -17,9 +17,7 @@ Run:
 
 git status
 
-Check for merge conflict markers:
-
-git grep -n "<<<<<<<\|=======\|>>>>>>>" -- ":!frontend/node_modules" ":!backend/node_modules" ":!node_modules"
+Check for merge conflict markers with a grep pattern that searches for the three merge-marker tokens while excluding `node_modules`.
 
 If conflict markers are found in source files, fix them before continuing.
 

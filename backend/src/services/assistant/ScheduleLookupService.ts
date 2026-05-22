@@ -89,12 +89,8 @@ const reservationSummaryInclude = {
       firstName: true,
       lastName: true
     }
-  },
-  googleCalendarEventId: true,
-  calendarSyncStatus: true,
-  calendarSyncError: true,
-  calendarSyncedAt: true
-} as const;
+  }
+} satisfies Prisma.ReservationInclude;
 
 type ReservationSummaryRecord = Prisma.ReservationGetPayload<{
   include: typeof reservationSummaryInclude;

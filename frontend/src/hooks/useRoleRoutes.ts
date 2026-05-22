@@ -27,20 +27,20 @@ export const useRoleRoutes = () => {
     if (user.role === "STUDENT") {
       return [
         { label: "Dashboard", to: "/student/dashboard", icon: LayoutDashboard },
+        { label: "ComPort Assistant", to: "/assistant", icon: Bot },
         { label: "Reserve Laboratory", to: "/student/laboratories", icon: CalendarPlus },
         { label: "My Reservations", to: "/student/reservations", icon: ClipboardList },
-        { label: "ComPort Assistant", to: "/assistant", icon: Bot },
         { label: "Profile", to: "/profile", icon: UserRound }
       ];
     }
 
     const items = [
       { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
+      { label: "ComPort Assistant", to: "/assistant", icon: Bot },
       { label: "Laboratories", to: "/management/laboratories", icon: Building2 },
       { label: "Schedules", to: "/management/schedules", icon: CalendarClock },
       { label: "Reservations", to: "/management/reservations", icon: ClipboardList },
       { label: "Reports", to: "/management/reports", icon: LineChart },
-      { label: "ComPort Assistant", to: "/assistant", icon: Bot },
       { label: "Profile", to: "/profile", icon: UserRound }
     ];
 
@@ -65,7 +65,7 @@ export const useRoleRoutes = () => {
     if (isManagementRole(user.role)) {
       items.push({
         label: "Laboratory Guide",
-        to: "/student/laboratories",
+        to: "/laboratory-guide",
         icon: BookOpen
       });
     }

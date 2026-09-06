@@ -1,12 +1,13 @@
 import { Menu } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 
 import { Sidebar } from "../components/layout/Sidebar";
 import { Topbar } from "../components/layout/Topbar";
 import { Button } from "../components/ui/Button";
 
 export const DashboardLayout = () => {
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
   const drawerRef = useRef<HTMLDivElement | null>(null);
@@ -69,6 +70,8 @@ export const DashboardLayout = () => {
     menuButtonRef.current?.focus();
   };
 
+  const isAssistantPage = location.pathname.startsWith("/assistant");
+
   return (
     <div className="grid h-dvh min-h-0 overflow-hidden bg-slate-100 text-slate-900 lg:grid-cols-[280px_1fr]">
       <div className="hidden min-h-0 lg:block">
@@ -100,8 +103,14 @@ export const DashboardLayout = () => {
             Menu
           </Button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
-          <Topbar />
+        <div
+          className={
+            isAssistantPage
+              ? "flex min-h-0 flex-1 flex-col overflow-hidden px-3 py-3 sm:px-6 sm:py-4 lg:px-8 lg:py-6"
+              : "min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 lg:px-8 lg:py-6"
+          }
+        >
+          {!isAssistantPage ? <Topbar /> : null}
           <Outlet />
         </div>
       </main>

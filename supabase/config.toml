@@ -1,0 +1,7 @@
+project_id = "comlab-reservation-system"
+
+# JWT verification is disabled at the gateway only because this function also
+# serves the public /api/health route. Every non-public route must validate its
+# caller explicitly before it performs any work.
+[functions.api]
+verify_jwt = false

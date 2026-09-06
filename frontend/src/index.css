@@ -28,15 +28,18 @@ a {
   text-decoration: none;
 }
 
-.comport-assistant-shell {
-  display: flex;
-  flex-direction: column;
-}
-
-.comport-assistant-scroll,
-.comport-assistant-helper-scroll {
+.comport-assistant-scroll {
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+}
+
+.comport-assistant-prompt-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.comport-assistant-prompt-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 .comport-assistant-typing {
@@ -59,12 +62,6 @@ a {
 
 .comport-assistant-typing span:nth-child(3) {
   animation-delay: 240ms;
-}
-
-@media (min-width: 1024px) {
-  .comport-assistant-shell {
-    height: clamp(26rem, calc(100dvh - 13.75rem), 48rem);
-  }
 }
 
 .comport-page-reveal {

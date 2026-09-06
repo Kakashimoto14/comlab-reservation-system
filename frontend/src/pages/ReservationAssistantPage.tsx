@@ -3,12 +3,12 @@ import type { AxiosError } from "axios";
 import {
   Bot,
   CheckCircle2,
-  ChevronDown,
+  Ellipsis,
   MessageSquareText,
   RefreshCw,
   SendHorizonal,
   ShieldCheck,
-  Sparkles
+  X
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
@@ -16,7 +16,6 @@ import { useNavigate } from "react-router-dom";
 
 import { assistantApi } from "../api/services";
 import { Button } from "../components/ui/Button";
-import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
 import { Textarea } from "../components/ui/Textarea";
 import { useAuth } from "../store/AuthContext";
@@ -79,15 +78,10 @@ const promptSuggestionsByRole: Record<UserRole, string[]> = {
 const roleWorkspaceCopy: Record<
   UserRole,
   {
-    intro: (name?: string | null) => string;
-    helper: string;
     capabilities: string[];
   }
 > = {
   ADMIN: {
-    intro: (name) =>
-      `Hi${name ? ` ${name}` : ""}, I can help manage schedules, reservations, laboratories, reports, and system records based on your Admin permissions.`,
-    helper: "Use ComPort GPT for summaries, approval workflows, and safe draft-based system actions.",
     capabilities: [
       "View system-wide summaries, activity, laboratories, and reservations.",
       "Draft bulk approvals, rejections, and schedule creation with strong confirmation.",
@@ -95,9 +89,6 @@ const roleWorkspaceCopy: Record<
     ]
   },
   LABORATORY_STAFF: {
-    intro: (name) =>
-      `Hi${name ? ` ${name}` : ""}, I can help with your laboratory schedules, approval queue, reservations, and assigned-lab actions.`,
-    helper: "ComPort GPT keeps staff actions scoped to laboratories assigned to your account.",
     capabilities: [
       "Review pending reservations and lab activity in your assigned scope.",
       "Create schedule drafts for your laboratory with conflict-aware previews.",
@@ -105,9 +96,6 @@ const roleWorkspaceCopy: Record<
     ]
   },
   STUDENT: {
-    intro: (name) =>
-      `Hi${name ? ` ${name}` : ""}, I can help with your reservations, schedules, available laboratories, and safe reservation requests.`,
-    helper: "Student access stays limited to your own reservations, notifications, and public availability data.",
     capabilities: [
       "Check your reservation status, upcoming bookings, and notifications.",
       "Ask whether a lab is available on a date or time range.",
@@ -134,7 +122,9 @@ export const ReservationAssistantPage = () => {
     {}
   );
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  const [showTools, setShowTools] = useState(false);
   const messageViewportRef = useRef<HTMLDivElement | null>(null);
+  const toolsButtonRef = useRef<HTMLButtonElement | null>(null);
   const previousMessageCountRef = useRef(0);
   const shouldForceScrollRef = useRef(false);
   const storageKey = user ? `${ASSISTANT_SESSION_STORAGE_KEY}:${user.id}` : null;
@@ -142,18 +132,7 @@ export const ReservationAssistantPage = () => {
     ? promptSuggestionsByRole[user.role]
     : promptSuggestionsByRole.STUDENT;
   const composerPromptSuggestions = promptSuggestions.slice(0, 3);
-  const helperPromptSuggestions = promptSuggestions.slice(0, 5);
   const roleCopy = user ? roleWorkspaceCopy[user.role] : roleWorkspaceCopy.STUDENT;
-  const userDisplayName = user?.firstName ?? null;
-  const todayLabel = useMemo(
-    () =>
-      new Intl.DateTimeFormat("en-US", {
-        weekday: "short",
-        month: "short",
-        day: "numeric"
-      }).format(new Date()),
-    []
-  );
 
   const appendAssistantResponse = (response: ReservationAssistantResponse) => {
     setAssistantError(null);
@@ -378,6 +357,25 @@ export const ReservationAssistantPage = () => {
   }, [hasRestoredConversation, messages.length]);
 
   useEffect(() => {
+    if (!showTools) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowTools(false);
+        toolsButtonRef.current?.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showTools]);
+
+  useEffect(() => {
     if (!hasRestoredConversation) {
       return;
     }
@@ -440,52 +438,53 @@ export const ReservationAssistantPage = () => {
   const canSend = Boolean(draft.trim()) && !isBusy;
 
   return (
-    <div className="min-h-0 space-y-3 lg:space-y-4">
-      <section className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-soft sm:px-5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-600">
-              <img
-                src="/comport-logo.png"
-                alt="ComPort logo"
-                className="h-8 w-8 rounded-xl border border-slate-200 bg-white object-cover p-1"
+    <div className="flex min-h-0 flex-1 flex-col">
+      <section
+        aria-label="ComPort GPT assistant"
+        className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-soft"
+      >
+        <header className="relative z-10 flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <img
+              src="/comport-logo.png"
+              alt=""
+              className="h-9 w-9 shrink-0 rounded-xl border border-slate-200 bg-white object-cover p-1"
+            />
+            <div className="min-w-0">
+              <h1 className="truncate text-sm font-bold text-slate-900 sm:text-base">ComPort GPT</h1>
+              <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+                Ready <span className="text-slate-300" aria-hidden="true">·</span>
+                {user ? roleLabels[user.role] : "Role-aware"}
+              </p>
+            </div>
+          </div>
+
+          <div className="relative shrink-0">
+            <button
+              ref={toolsButtonRef}
+              type="button"
+              aria-label="Open assistant tools"
+              aria-expanded={showTools}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-300"
+              onClick={() => setShowTools((open) => !open)}
+            >
+              {showTools ? <X className="h-5 w-5" /> : <Ellipsis className="h-5 w-5" />}
+            </button>
+
+            {showTools ? (
+              <AssistantToolsPopover
+                capabilities={roleCopy.capabilities}
+                onClose={() => setShowTools(false)}
               />
-              <span>ComPort GPT</span>
-            </div>
-            <div className="mt-2 flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
-              <h1 className="text-xl font-bold leading-tight text-slate-900 sm:text-[1.7rem]">
-                Focused AI workspace
-              </h1>
-              <div className="flex flex-wrap gap-2">
-                <HeaderBadge label={user ? roleLabels[user.role] : "Role-aware"} />
-                <HeaderBadge label={todayLabel} />
-                <HeaderBadge label="Safe draft actions" />
-              </div>
-            </div>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{roleCopy.intro(userDisplayName)}</p>
+            ) : null}
           </div>
-        </div>
-      </section>
+        </header>
 
-      <div className="comport-assistant-shell min-h-0 gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_21rem]">
-        <Card className="relative flex min-h-[38rem] min-w-0 flex-col overflow-hidden p-0 shadow-soft lg:min-h-0">
-          <div className="border-b border-slate-200 bg-[linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(248,250,252,0.98))] px-4 py-3 sm:px-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-900">Chat with ComPort GPT</p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">{roleCopy.helper}</p>
-              </div>
-              <div className="hidden flex-wrap gap-2 text-[11px] font-semibold text-slate-500 sm:flex">
-                <span className="rounded-full bg-slate-100 px-2.5 py-1">English, Tagalog, Taglish</span>
-                <span className="rounded-full bg-slate-100 px-2.5 py-1">Grounded answers</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="relative min-h-0 flex-1 bg-slate-50/70">
+        <div className="relative min-h-0 flex-1 bg-slate-50/70">
             <div
               ref={messageViewportRef}
-              className="comport-assistant-scroll h-full min-h-0 overflow-y-auto px-3 py-3 sm:px-5 sm:py-4"
+              className="comport-assistant-scroll h-full min-h-0 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5"
               role="log"
               aria-live="polite"
               aria-busy={isBusy}
@@ -495,8 +494,7 @@ export const ReservationAssistantPage = () => {
             >
               {!messages.length && !assistantMutation.isPending ? (
                 <EmptyState
-                  intro={roleCopy.intro(userDisplayName)}
-                  prompts={helperPromptSuggestions}
+                  prompts={composerPromptSuggestions}
                   onPrompt={sendMessage}
                 />
               ) : null}
@@ -553,11 +551,11 @@ export const ReservationAssistantPage = () => {
                 Jump to latest
               </button>
             ) : null}
-          </div>
+        </div>
 
-          <div className="border-t border-slate-200 bg-white/95 px-3 py-3 backdrop-blur sm:px-5 sm:py-4">
+        <footer className="shrink-0 border-t border-slate-200 bg-white/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-5 sm:py-4">
             {assistantError ? (
-              <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+              <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span>{assistantError}</span>
                   {lastSubmittedMessage ? (
@@ -574,7 +572,7 @@ export const ReservationAssistantPage = () => {
               </div>
             ) : null}
 
-            <div className="mb-3 flex flex-wrap gap-2">
+            <div className="comport-assistant-prompt-scroll mb-2 flex gap-2 overflow-x-auto pb-1">
               {activePendingAction ? (
                 <PromptChip
                   label="Cancel current action"
@@ -597,12 +595,13 @@ export const ReservationAssistantPage = () => {
               ))}
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 sm:p-3">
+            <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-1.5 transition focus-within:border-brand-300 focus-within:bg-white focus-within:shadow-soft sm:p-2">
               <Textarea
                 id="assistant-composer"
                 value={draft}
-                placeholder="Ask ComPort GPT about schedules, reservations, labs, or system actions..."
-                className="min-h-[3.5rem] resize-none border-0 bg-transparent px-2 py-2 text-sm shadow-none focus:border-0 focus:shadow-none"
+                aria-label="Message ComPort GPT"
+                placeholder="Ask ComPort GPT..."
+                className="min-h-[2.75rem] max-h-32 resize-none border-0 bg-transparent px-2 py-2 text-sm leading-6 shadow-none focus:border-0 focus:shadow-none"
                 rows={2}
                 disabled={isBusy}
                 onChange={(event) => setDraft(event.target.value)}
@@ -616,122 +615,48 @@ export const ReservationAssistantPage = () => {
                 }}
               />
 
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-2 pt-3">
-                <p className="text-xs text-slate-500">Enter to send. Shift + Enter for a new line.</p>
-                <Button
-                  type="button"
-                  className="gap-2"
-                  disabled={!canSend}
-                  onClick={() => sendMessage(draft)}
-                >
-                  <SendHorizonal className="h-4 w-4" />
-                  {isBusy ? "Working..." : "Send"}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <aside className="hidden min-h-0 lg:flex lg:flex-col">
-          <Card className="flex h-full min-h-0 flex-col gap-4 overflow-hidden p-4 shadow-soft">
-            <div className="flex items-start gap-3">
-              <div className="rounded-2xl bg-brand-50 p-2.5 text-brand-700">
-                <Sparkles className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-900">Assistant tools</p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">
-                  Compact shortcuts and safety guidance for your current role.
-                </p>
-              </div>
-            </div>
-
-            <div className="comport-assistant-helper-scroll min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
-              <HelperSection
-                title="Suggested prompts"
-                eyebrow="Quick start"
-                icon={<MessageSquareText className="h-4 w-4" />}
+              <Button
+                type="button"
+                aria-label={isBusy ? "ComPort GPT is working" : "Send message"}
+                className="h-10 min-h-10 w-10 shrink-0 rounded-xl p-0"
+                disabled={!canSend}
+                onClick={() => sendMessage(draft)}
               >
-                <div className="flex flex-wrap gap-2">
-                  {helperPromptSuggestions.map((prompt) => (
-                    <PromptChip
-                      key={prompt}
-                      label={prompt}
-                      onClick={() => sendMessage(prompt)}
-                      disabled={isBusy}
-                    />
-                  ))}
-                </div>
-              </HelperSection>
-
-              <HelperSection
-                title="Safety flow"
-                eyebrow="Protected actions"
-                icon={<ShieldCheck className="h-4 w-4" />}
-              >
-                <div className="space-y-2">
-                  {safetyFlowItems.map((item) => (
-                    <CompactInfoRow key={item} text={item} />
-                  ))}
-                </div>
-              </HelperSection>
-
-              <HelperSection title="Capabilities" eyebrow="Current scope" icon={<Bot className="h-4 w-4" />}>
-                <div className="space-y-2">
-                  {roleCopy.capabilities.map((item) => (
-                    <CompactInfoRow key={item} text={item} />
-                  ))}
-                </div>
-              </HelperSection>
+                <SendHorizonal className="h-4 w-4" />
+              </Button>
             </div>
-          </Card>
-        </aside>
-      </div>
-
-      <div className="space-y-3 lg:hidden">
-        <MobileHelperPanel
-          promptSuggestions={helperPromptSuggestions}
-          safetyFlowItems={safetyFlowItems}
-          capabilities={roleCopy.capabilities}
-          onPrompt={sendMessage}
-          isBusy={isBusy}
-        />
-      </div>
+        </footer>
+      </section>
     </div>
   );
 };
 
 const EmptyState = ({
-  intro,
   prompts,
   onPrompt
 }: {
-  intro: string;
   prompts: string[];
   onPrompt: (prompt: string) => void;
 }) => (
-  <div className="mx-auto flex max-w-2xl flex-col gap-4 rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-soft">
-    <div className="flex items-start gap-3">
-      <div className="rounded-2xl bg-brand-50 p-3 text-brand-700">
+  <div className="flex min-h-full items-center justify-center py-8">
+    <div className="flex max-w-md flex-col items-center text-center">
+      <div className="mb-4 rounded-2xl border border-brand-100 bg-brand-50 p-3 text-brand-700">
         <MessageSquareText className="h-5 w-5" />
       </div>
-      <div className="min-w-0">
-        <p className="text-lg font-semibold text-slate-900">Welcome to ComPort GPT</p>
-        <p className="mt-1 text-sm leading-6 text-slate-600">{intro}</p>
-      </div>
-    </div>
-
-    <div className="grid gap-2 sm:grid-cols-2">
+      <p className="font-display text-xl font-bold text-slate-900">ComPort GPT</p>
+      <p className="mt-1 text-sm text-slate-500">How can I help you?</p>
+      <div className="mt-5 flex flex-wrap justify-center gap-2">
       {prompts.map((prompt) => (
         <button
           key={prompt}
           type="button"
-          className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700"
+          className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-300"
           onClick={() => onPrompt(prompt)}
         >
           {prompt}
         </button>
       ))}
+      </div>
     </div>
   </div>
 );
@@ -757,8 +682,8 @@ const ChatMessage = ({
     <div
       className={
         message.role === "user"
-          ? "max-w-[88%] rounded-[1.45rem] rounded-br-md bg-brand-700 px-4 py-3 text-sm leading-6 text-white shadow-soft lg:max-w-[72%]"
-          : "max-w-[95%] rounded-[1.45rem] rounded-bl-md border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-700 shadow-soft lg:max-w-[84%]"
+          ? "max-w-[88%] rounded-[1.35rem] rounded-br-md bg-brand-700 px-4 py-3 text-sm leading-6 text-white shadow-soft lg:max-w-[60%]"
+          : "max-w-3xl px-1 py-1 text-sm leading-6 text-slate-700"
       }
     >
       <p
@@ -809,7 +734,7 @@ const ChatMessage = ({
 
 const LoadingBubble = () => (
   <div className="flex justify-start">
-    <div className="max-w-[95%] rounded-[1.45rem] rounded-bl-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-soft lg:max-w-[84%]">
+    <div className="max-w-3xl px-1 py-1 text-sm text-slate-700">
       <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
         ComPort GPT
       </p>
@@ -825,97 +750,56 @@ const LoadingBubble = () => (
   </div>
 );
 
-const MobileHelperPanel = ({
-  promptSuggestions,
-  safetyFlowItems,
+const AssistantToolsPopover = ({
   capabilities,
-  onPrompt,
-  isBusy
+  onClose
 }: {
-  promptSuggestions: string[];
-  safetyFlowItems: string[];
   capabilities: string[];
-  onPrompt: (prompt: string) => void;
-  isBusy: boolean;
+  onClose: () => void;
 }) => (
-  <>
-    <details open className="rounded-2xl border border-slate-200 bg-white shadow-soft">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-900">
-        Suggested prompts
-        <ChevronDown className="h-4 w-4 text-slate-400" />
-      </summary>
-      <div className="border-t border-slate-100 px-4 py-4">
-        <div className="flex flex-wrap gap-2">
-          {promptSuggestions.map((prompt) => (
-            <PromptChip
-              key={prompt}
-              label={prompt}
-              onClick={() => onPrompt(prompt)}
-              disabled={isBusy}
-            />
-          ))}
-        </div>
+  <div
+    className="absolute right-0 top-[calc(100%+0.5rem)] z-30 w-[min(21rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_20px_50px_-20px_rgba(27,52,86,0.42)]"
+    role="dialog"
+    aria-label="Assistant information"
+  >
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <p className="text-sm font-semibold text-slate-900">Assistant information</p>
+        <p className="mt-1 text-xs leading-5 text-slate-500">Actions remain protected until confirmed.</p>
       </div>
-    </details>
-
-    <details className="rounded-2xl border border-slate-200 bg-white shadow-soft">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-900">
-        Safety flow
-        <ChevronDown className="h-4 w-4 text-slate-400" />
-      </summary>
-      <div className="space-y-2 border-t border-slate-100 px-4 py-4">
-        {safetyFlowItems.map((item) => (
-          <CompactInfoRow key={item} text={item} />
-        ))}
-      </div>
-    </details>
-
-    <details className="rounded-2xl border border-slate-200 bg-white shadow-soft">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-900">
-        Capabilities
-        <ChevronDown className="h-4 w-4 text-slate-400" />
-      </summary>
-      <div className="space-y-2 border-t border-slate-100 px-4 py-4">
-        {capabilities.map((item) => (
-          <CompactInfoRow key={item} text={item} />
-        ))}
-      </div>
-    </details>
-  </>
-);
-
-const HeaderBadge = ({ label }: { label: string }) => (
-  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-    {label}
-  </span>
-);
-
-const HelperSection = ({
-  title,
-  eyebrow,
-  icon,
-  children
-}: {
-  title: string;
-  eyebrow: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-}) => (
-  <section className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-    <div className="mb-3 flex items-start gap-3">
-      <div className="rounded-xl bg-white p-2 text-brand-700 shadow-soft">{icon}</div>
-      <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{eyebrow}</p>
-        <p className="mt-1 text-sm font-semibold text-slate-900">{title}</p>
-      </div>
+      <button
+        type="button"
+        aria-label="Close assistant information"
+        className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-300"
+        onClick={onClose}
+      >
+        <X className="h-4 w-4" />
+      </button>
     </div>
-    {children}
-  </section>
-);
-
-const CompactInfoRow = ({ text }: { text: string }) => (
-  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm leading-5 text-slate-600">
-    {text}
+    <div className="mt-4 space-y-4">
+      <section aria-labelledby="assistant-safety-title">
+        <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+          <ShieldCheck className="h-4 w-4 text-brand-600" />
+          <h2 id="assistant-safety-title">Safety flow</h2>
+        </div>
+        <ul className="mt-2 space-y-1.5 text-xs leading-5 text-slate-600">
+          {safetyFlowItems.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </section>
+      <section aria-labelledby="assistant-capabilities-title">
+        <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+          <Bot className="h-4 w-4 text-brand-600" />
+          <h2 id="assistant-capabilities-title">Your scope</h2>
+        </div>
+        <ul className="mt-2 space-y-1.5 text-xs leading-5 text-slate-600">
+          {capabilities.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </section>
+    </div>
   </div>
 );
 
